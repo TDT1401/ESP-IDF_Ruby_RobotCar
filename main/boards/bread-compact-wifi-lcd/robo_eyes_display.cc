@@ -16,7 +16,7 @@ constexpr int kEyeHeight = 46;
 constexpr int kEyeGap = 18;
 constexpr int kEyeTop = 15;
 constexpr int kClosedEyeHeight = 4;
-constexpr int kEyeTimerPeriodMs = 80;
+constexpr int kEyeTimerPeriodMs = 60;
 }  // namespace
 
 RoboEyesDisplay::RoboEyesDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel,
@@ -136,7 +136,7 @@ void RoboEyesDisplay::EyeTimerCallback(lv_timer_t* timer) {
     } else if (display->blink_frame_ > 0) {
         if (++display->blink_frame_ > 6) {
             display->blink_frame_ = 0;
-            display->blink_countdown_ = 48 + static_cast<int>(esp_random() % 48);
+            display->blink_countdown_ = 30 + static_cast<int>(esp_random() % 24);
         }
     } else if (--display->blink_countdown_ <= 0) {
         display->blink_frame_ = 1;
@@ -151,7 +151,7 @@ void RoboEyesDisplay::EyeTimerCallback(lv_timer_t* timer) {
             kGazeTargets[esp_random() % (sizeof(kGazeTargets) / sizeof(kGazeTargets[0]))];
         display->gaze_target_x_ = target[0];
         display->gaze_target_y_ = target[1];
-        display->gaze_hold_ticks_ = 10 + static_cast<int>(esp_random() % 16);
+        display->gaze_hold_ticks_ = 7 + static_cast<int>(esp_random() % 10);
     }
 
     if (display->gaze_x_ < display->gaze_target_x_) {

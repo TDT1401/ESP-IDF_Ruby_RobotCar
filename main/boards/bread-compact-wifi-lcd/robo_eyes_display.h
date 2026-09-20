@@ -33,10 +33,10 @@ private:
     lv_timer_t* eye_timer_ = nullptr;
     Expression expression_ = Expression::kNeutral;
     int blink_frame_ = 0;
-    int blink_countdown_ = 48;
+    int blink_countdown_ = 30;
     int gaze_x_ = 0;
     int gaze_y_ = 0;
     int gaze_target_x_ = 0;
     int gaze_target_y_ = 0;
-    int gaze_hold_ticks_ = 8;
+    int gaze_hold_ticks_ = 6;
 };
