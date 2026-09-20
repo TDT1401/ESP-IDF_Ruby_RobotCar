@@ -44,18 +44,20 @@
 #define LCD_TYPE_ST7735_SERIAL
 #define DISPLAY_WIDTH 160
 #define DISPLAY_HEIGHT 80
-#define DISPLAY_MIRROR_X false
+#define DISPLAY_MIRROR_X true
 #define DISPLAY_MIRROR_Y false
 #define DISPLAY_SWAP_XY true
-#define DISPLAY_INVERT_COLOR true
+#define DISPLAY_INVERT_COLOR false
 #define DISPLAY_RGB_ORDER LCD_RGB_ELEMENT_ORDER_BGR
 #define DISPLAY_OFFSET_X 0
 #define DISPLAY_OFFSET_Y 0
-#define DISPLAY_PANEL_GAP_X 1
+// Landscape columns must stay in 0..159 on 160-row ST7735 modules.
+// Starting at 1 makes the inclusive CASET end 160, outside that range.
+#define DISPLAY_PANEL_GAP_X 0
 #define DISPLAY_PANEL_GAP_Y 26
 #define DISPLAY_BACKLIGHT_OUTPUT_INVERT false
 #define DISPLAY_SPI_MODE 0
-#define DISPLAY_SPI_CLOCK_HZ (10 * 1000 * 1000)
+#define DISPLAY_SPI_CLOCK_HZ (4 * 1000 * 1000)
 #endif
 
 #ifdef CONFIG_LCD_ST7789_240X320

@@ -7,6 +7,7 @@
 #include "lamp_controller.h"
 #include "led/single_led.h"
 #include "mcp_server.h"
+#include "robo_eyes_display.h"
 #include "system_reset.h"
 #include "wifi_board.h"
 
@@ -17,12 +18,43 @@
 #include <esp_lcd_panel_vendor.h>
 #include <esp_log.h>
 #include <freertos/task.h>
+#include <vector>
 
 #if defined(LCD_TYPE_ILI9341_SERIAL) || defined(LCD_TYPE_ST7735_SERIAL)
 #include "esp_lcd_ili9341.h"
 #endif
 
 #if defined(LCD_TYPE_ST7735_SERIAL)
+// Draw before LVGL/audio startup, with the same panel rotation and address window.
+// Straight grid lines and a round disk distinguish panel addressing from UI rendering.
+static void ShowSt7735AddressTest(esp_lcd_panel_io_handle_t io, esp_lcd_panel_handle_t panel) {
+    constexpr int width = DISPLAY_WIDTH;
+    constexpr int height = DISPLAY_HEIGHT;
+    std::vector<uint16_t> pixels(width * height, 0);
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            const int dx = x - width / 2;
+            const int dy = y - height / 2;
+            uint16_t color = 0;
+            if (dx * dx + dy * dy <= 20 * 20) {
+                color = 0x07FF;  // Cyan RGB565.
+            }
+            if (x == 0 || y == 0 || x == width - 1 || y == height - 1 || x == width / 4 ||
+                x == width * 3 / 4) {
+                color = 0xFFFF;
+            }
+            // esp_lcd expects the high byte first on the SPI wire.
+            pixels[y * width + x] = static_cast<uint16_t>((color << 8) | (color >> 8));
+        }
+    }
+    ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel, true));
+    ESP_ERROR_CHECK(esp_lcd_panel_draw_bitmap(panel, 0, 0, width, height, pixels.data()));
+    // A parameter transaction drains queued color DMA before pixels is released.
+    ESP_ERROR_CHECK(esp_lcd_panel_io_tx_param(io, 0x00, nullptr, 0));
+    ESP_LOGI("CompactWifiBoardLCD", "ST7735 address test: border, two vertical lines, cyan circle");
+    vTaskDelay(pdMS_TO_TICKS(1500));
+}
+
 // ST7735R/S "green tab" initialization used by common 0.96-inch 80x160 panels.
 static const uint8_t st7735_cmd_b1[] = {0x01, 0x2C, 0x2D};
 static const uint8_t st7735_cmd_b2[] = {0x01, 0x2C, 0x2D};
@@ -172,13 +204,23 @@ private:
         ESP_ERROR_CHECK(esp_lcd_panel_set_gap(panel, DISPLAY_PANEL_GAP_X, DISPLAY_PANEL_GAP_Y));
         ESP_LOGI(TAG, "ST7735S 80x160 panel initialized (gap=%d,%d)", DISPLAY_PANEL_GAP_X,
                  DISPLAY_PANEL_GAP_Y);
+        if (auto* backlight = GetBacklight()) {
+            backlight->SetBrightness(100, false);
+        }
+        ShowSt7735AddressTest(panel_io, panel);
 #endif
 #ifdef LCD_TYPE_GC9A01_SERIAL
         panel_config.vendor_config = &gc9107_vendor_config;
 #endif
+#if defined(CONFIG_BREAD_COMPACT_WIFI_LCD_ST7735_80X160)
+        display_ = new RoboEyesDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
+                                       DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
+                                       DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
+#else
         display_ = new SpiLcdDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
                                      DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
                                      DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
+#endif
     }
 
     void InitializeButtons() {

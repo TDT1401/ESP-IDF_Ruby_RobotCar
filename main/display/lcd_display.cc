@@ -99,7 +99,7 @@ LcdDisplay::LcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_
 
 SpiLcdDisplay::SpiLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel,
                              int width, int height, int offset_x, int offset_y, bool mirror_x,
-                             bool mirror_y, bool swap_xy)
+                             bool mirror_y, bool swap_xy, bool full_refresh)
     : LcdDisplay(panel_io, panel, width, height) {
     // draw white
     std::vector<uint16_t> buffer(width_, 0xFFFF);
@@ -171,13 +171,13 @@ SpiLcdDisplay::SpiLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_h
 
     ESP_LOGI(TAG, "Adding LCD display");
     // SPI LCD still needs an internal DMA bounce buffer for PSRAM sources.
-    // A full-frame transfer (~150KB) cannot allocate that bounce buffer, so
-    // keep a small DMA strip in internal SRAM and partial refresh.
+    // Larger panels keep a small DMA strip and partial refresh. Small panels can opt into a
+    // full frame buffer to avoid visible seams between partial updates.
     const lvgl_port_display_cfg_t display_cfg = {
         .io_handle = panel_io_,
         .panel_handle = panel_,
         .control_handle = nullptr,
-        .buffer_size = static_cast<uint32_t>(width_ * 20),
+        .buffer_size = static_cast<uint32_t>(full_refresh ? width_ * height_ : width_ * 20),
         .double_buffer = false,
         .trans_size = 0,
         .hres = static_cast<uint32_t>(width_),
@@ -196,7 +196,7 @@ SpiLcdDisplay::SpiLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_h
                 .buff_spiram = 0,
                 .sw_rotate = 0,
                 .swap_bytes = 1,
-                .full_refresh = 0,
+                .full_refresh = full_refresh,
                 .direct_mode = 0,
             },
     };
@@ -206,6 +206,10 @@ SpiLcdDisplay::SpiLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_h
         ESP_LOGE(TAG, "Failed to add display");
         return;
     }
+
+    ESP_LOGI(TAG, "SPI render: %dx%d RGB565, %s, buffer=%u bytes", width_, height_,
+             full_refresh ? "full refresh" : "partial refresh",
+             static_cast<unsigned>(display_cfg.buffer_size * sizeof(uint16_t)));
 
     if (offset_x != 0 || offset_y != 0) {
         lv_display_set_offset(display_, offset_x, offset_y);
