@@ -776,6 +776,11 @@ choice DISPLAY_LCD_TYPE
         bool "Custom LCD (自定义屏幕参数)"
 endchoice
 
+config BREAD_COMPACT_WIFI_LCD_ST7735_80X160
+    bool
+    depends on BOARD_TYPE_BREAD_COMPACT_WIFI_LCD
+    default y if LCD_CUSTOM
+
 choice WK_BOARD_TYPE
     depends on BOARD_TYPE_WK_ESP32S3_DEV
     prompt "BOARD_TYPE_WK_ESP32S3_DEV"
