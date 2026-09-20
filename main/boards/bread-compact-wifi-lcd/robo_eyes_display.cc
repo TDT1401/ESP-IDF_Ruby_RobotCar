@@ -16,6 +16,7 @@ constexpr int kEyeHeight = 46;
 constexpr int kEyeGap = 18;
 constexpr int kEyeTop = 15;
 constexpr int kClosedEyeHeight = 4;
+constexpr int kEyeTimerPeriodMs = 80;
 }  // namespace
 
 RoboEyesDisplay::RoboEyesDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel,
@@ -91,7 +92,7 @@ void RoboEyesDisplay::SetupUI() {
 
     ApplyExpressionColor();
     UpdateEyes();
-    eye_timer_ = lv_timer_create(EyeTimerCallback, 50, this);
+    eye_timer_ = lv_timer_create(EyeTimerCallback, kEyeTimerPeriodMs, this);
     ESP_LOGI(TAG, "Robo eyes ready");
 }
 
@@ -141,6 +142,29 @@ void RoboEyesDisplay::EyeTimerCallback(lv_timer_t* timer) {
         display->blink_frame_ = 1;
     }
 
+    if (display->gaze_x_ == display->gaze_target_x_ &&
+        display->gaze_y_ == display->gaze_target_y_ && --display->gaze_hold_ticks_ <= 0) {
+        static constexpr int kGazeTargets[][2] = {
+            {0, 0}, {12, 0}, {-12, 0}, {0, -8}, {0, 8}, {10, -6}, {-10, -6}, {10, 6}, {-10, 6},
+        };
+        const auto& target =
+            kGazeTargets[esp_random() % (sizeof(kGazeTargets) / sizeof(kGazeTargets[0]))];
+        display->gaze_target_x_ = target[0];
+        display->gaze_target_y_ = target[1];
+        display->gaze_hold_ticks_ = 10 + static_cast<int>(esp_random() % 16);
+    }
+
+    if (display->gaze_x_ < display->gaze_target_x_) {
+        ++display->gaze_x_;
+    } else if (display->gaze_x_ > display->gaze_target_x_) {
+        --display->gaze_x_;
+    }
+    if (display->gaze_y_ < display->gaze_target_y_) {
+        ++display->gaze_y_;
+    } else if (display->gaze_y_ > display->gaze_target_y_) {
+        --display->gaze_y_;
+    }
+
     display->UpdateEyes();
 }
 
@@ -169,7 +193,6 @@ void RoboEyesDisplay::UpdateEyes() {
 
     lv_obj_set_size(left_eye_, kEyeWidth, eye_height);
     lv_obj_set_size(right_eye_, kEyeWidth, eye_height);
-    lv_obj_set_pos(left_eye_, left_x, eye_y);
-    lv_obj_set_pos(right_eye_, right_x, eye_y);
-
+    lv_obj_set_pos(left_eye_, left_x + gaze_x_, eye_y + gaze_y_);
+    lv_obj_set_pos(right_eye_, right_x + gaze_x_, eye_y + gaze_y_);
 }
