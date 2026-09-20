@@ -272,23 +272,20 @@ public:
     virtual void StartNetwork() override {
 #if defined(CONFIG_BREAD_COMPACT_WIFI_LCD_ST7735_80X160)
         ESP_LOGI(TAG, "BOOT DIAGNOSTIC: ST7735S 80x160 firmware is running");
-        GetDisplay()->SetChatMessage("system", "ST7735 80x160 BOOT OK");
         xTaskCreate(
             [](void*) {
-                vTaskDelay(pdMS_TO_TICKS(5000));
+                // The audio service is initialized shortly before networking.  Waiting here
+                // lets the amplifier settle, while keeping the greeting independent of Wi-Fi.
+                vTaskDelay(pdMS_TO_TICKS(1500));
                 Application::GetInstance().Schedule([]() {
-                    auto& app = Application::GetInstance();
-                    auto codec = Board::GetInstance().GetAudioCodec();
-                    ESP_LOGI(TAG, "BOOT AUDIO TEST: playing chime at volume %d",
-                             codec->output_volume());
-                    Board::GetInstance().GetDisplay()->ShowNotification("BOOT AUDIO TEST", 4000);
-                    app.PlaySound(Lang::Sounds::OGG_POPUP);
-                    app.PlaySound(Lang::Sounds::OGG_POPUP);
-                    app.PlaySound(Lang::Sounds::OGG_SUCCESS);
+                    ESP_LOGI(TAG, "Playing localized startup greeting");
+                    static_cast<RoboEyesDisplay*>(Board::GetInstance().GetDisplay())
+                        ->ShowHappyFor(3500);
+                    Application::GetInstance().PlaySound(Lang::Sounds::OGG_WELCOME);
                 });
                 vTaskDelete(nullptr);
             },
-            "boot_audio_test", 3072, nullptr, 2, nullptr);
+            "boot_greeting", 3072, nullptr, 2, nullptr);
 #endif
         WifiBoard::StartNetwork();
     }

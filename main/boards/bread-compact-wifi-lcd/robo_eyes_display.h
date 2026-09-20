@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 #include "display/lcd_display.h"
 
 class RoboEyesDisplay : public SpiLcdDisplay {
@@ -11,6 +13,7 @@ public:
 
     void SetupUI() override;
     void SetEmotion(const char* emotion) override;
+    void ShowHappyFor(uint32_t duration_ms);
     void SetChatMessage(const char* role, const char* content) override;
     void ClearChatMessages() override;
     void SetPreviewImage(std::unique_ptr<LvglImage> image) override;
@@ -39,4 +42,5 @@ private:
     int gaze_target_x_ = 0;
     int gaze_target_y_ = 0;
     int gaze_hold_ticks_ = 6;
+    uint32_t happy_ticks_remaining_ = 0;
 };

@@ -109,9 +109,34 @@ void RoboEyesDisplay::SetEmotion(const char* emotion) {
     }
 
     DisplayLockGuard lock(this);
+    // The state machine sets "neutral" during network startup.  Do not let it
+    // interrupt the boot greeting expression before its timer has elapsed.
+    if (happy_ticks_remaining_ > 0 && next_expression != Expression::kHappy) {
+        return;
+    }
     expression_ = next_expression;
     if (left_eye_ != nullptr) {
         ApplyExpressionColor();
+        UpdateEyes();
+    }
+}
+
+void RoboEyesDisplay::ShowHappyFor(uint32_t duration_ms) {
+    DisplayLockGuard lock(this);
+    if (!lock) {
+        return;
+    }
+
+    expression_ = Expression::kHappy;
+    happy_ticks_remaining_ =
+        std::max<uint32_t>(1, (duration_ms + kEyeTimerPeriodMs - 1) / kEyeTimerPeriodMs);
+    // Keep the greeting expression centered and still.  Normal gaze motion
+    // resumes automatically once the happy timer expires.
+    gaze_x_ = 0;
+    gaze_y_ = 0;
+    gaze_target_x_ = 0;
+    gaze_target_y_ = 0;
+    if (left_eye_ != nullptr) {
         UpdateEyes();
     }
 }
@@ -131,6 +156,10 @@ void RoboEyesDisplay::EyeTimerCallback(lv_timer_t* timer) {
         return;
     }
 
+    if (display->happy_ticks_remaining_ > 0 && --display->happy_ticks_remaining_ == 0) {
+        display->expression_ = Expression::kNeutral;
+    }
+
     if (display->expression_ == Expression::kSleepy) {
         display->blink_frame_ = 3;
     } else if (display->blink_frame_ > 0) {
@@ -142,7 +171,7 @@ void RoboEyesDisplay::EyeTimerCallback(lv_timer_t* timer) {
         display->blink_frame_ = 1;
     }
 
-    if (display->gaze_x_ == display->gaze_target_x_ &&
+    if (display->expression_ != Expression::kHappy && display->gaze_x_ == display->gaze_target_x_ &&
         display->gaze_y_ == display->gaze_target_y_ && --display->gaze_hold_ticks_ <= 0) {
         static constexpr int kGazeTargets[][2] = {
             {0, 0}, {12, 0}, {-12, 0}, {0, -8}, {0, 8}, {10, -6}, {-10, -6}, {10, 6}, {-10, 6},
@@ -178,21 +207,32 @@ void RoboEyesDisplay::ApplyExpressionColor() {
 }
 
 void RoboEyesDisplay::UpdateEyes() {
-    int eye_height = kEyeHeight;
+    int open_eye_height = kEyeHeight;
+    int eye_width = kEyeWidth;
+    int eye_top = kEyeTop;
     if (expression_ == Expression::kSleepy) {
-        eye_height = kClosedEyeHeight;
-    } else if (blink_frame_ > 0) {
-        const int closing = blink_frame_ <= 3 ? blink_frame_ : 6 - blink_frame_;
-        eye_height = std::max(kClosedEyeHeight, kEyeHeight - closing * (kEyeHeight / 3));
+        open_eye_height = kClosedEyeHeight;
+    } else if (expression_ == Expression::kHappy) {
+        // Two wide, thin capsules create an unmistakable cheerful squint rather
+        // than the 32x32 circular eyes used by the neutral animation.
+        open_eye_height = 14;
+        eye_width = 38;
+        eye_top = kEyeTop + 16;
     }
 
-    const int total_width = 2 * kEyeWidth + kEyeGap;
-    const int left_x = (width_ - total_width) / 2;
-    const int right_x = left_x + kEyeWidth + kEyeGap;
-    const int eye_y = kEyeTop + (kEyeHeight - eye_height) / 2;
+    int eye_height = open_eye_height;
+    if (expression_ != Expression::kSleepy && blink_frame_ > 0) {
+        const int closing = blink_frame_ <= 3 ? blink_frame_ : 6 - blink_frame_;
+        eye_height = std::max(kClosedEyeHeight, open_eye_height - closing * (open_eye_height / 3));
+    }
 
-    lv_obj_set_size(left_eye_, kEyeWidth, eye_height);
-    lv_obj_set_size(right_eye_, kEyeWidth, eye_height);
+    const int total_width = 2 * eye_width + kEyeGap;
+    const int left_x = (width_ - total_width) / 2;
+    const int right_x = left_x + eye_width + kEyeGap;
+    const int eye_y = eye_top + (open_eye_height - eye_height) / 2;
+
+    lv_obj_set_size(left_eye_, eye_width, eye_height);
+    lv_obj_set_size(right_eye_, eye_width, eye_height);
     lv_obj_set_pos(left_eye_, left_x + gaze_x_, eye_y + gaze_y_);
     lv_obj_set_pos(right_eye_, right_x + gaze_x_, eye_y + gaze_y_);
 }
