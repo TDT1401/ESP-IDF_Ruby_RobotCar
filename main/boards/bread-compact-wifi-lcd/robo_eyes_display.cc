@@ -11,6 +11,8 @@
 #define TAG "RoboEyesDisplay"
 
 namespace {
+constexpr int kReferenceHeight = 80;
+constexpr int kMaxFullRefreshPixels = 160 * kReferenceHeight;
 constexpr int kEyeWidth = 28;
 constexpr int kEyeHeight = 46;
 constexpr int kEyeGap = 18;
@@ -23,7 +25,7 @@ RoboEyesDisplay::RoboEyesDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_pan
                                  int width, int height, int offset_x, int offset_y, bool mirror_x,
                                  bool mirror_y, bool swap_xy)
     : SpiLcdDisplay(panel_io, panel, width, height, offset_x, offset_y, mirror_x, mirror_y, swap_xy,
-                    true) {}
+                    width * height <= kMaxFullRefreshPixels) {}
 
 RoboEyesDisplay::~RoboEyesDisplay() {
     if (eye_timer_ != nullptr) {
@@ -209,7 +211,7 @@ void RoboEyesDisplay::ApplyExpressionColor() {
 void RoboEyesDisplay::UpdateEyes() {
     int open_eye_height = kEyeHeight;
     int eye_width = kEyeWidth;
-    int eye_top = kEyeTop;
+    int eye_top = kEyeTop + (height_ - kReferenceHeight) / 2;
     if (expression_ == Expression::kSleepy) {
         open_eye_height = kClosedEyeHeight;
     } else if (expression_ == Expression::kHappy) {

@@ -1,8 +1,13 @@
 # Bread Compact Wi-Fi LCD
 
-The `bread-compact-wifi-lcd-st7735-80x160` variant targets an ESP32-S3-N16R8
-module with a generic 0.96-inch ST7735S 80x160 SPI display, an I2S microphone,
-and a MAX98357A I2S amplifier.
+This board targets an ESP32-S3-N16R8 module, an I2S microphone, and a
+MAX98357A I2S amplifier. Select the build variant for the connected TFT:
+
+| Variant | TFT |
+| --- | --- |
+| `bread-compact-wifi-lcd` | ST7789 240x320 |
+| `bread-compact-wifi-lcd-st7789-240x240` | 1.54-inch ST7789 240x240 |
+| `bread-compact-wifi-lcd-st7735-80x160` | 0.96-inch ST7735S 80x160 |
 
 ## Wiring
 
@@ -37,17 +42,35 @@ goes to ground.
 ## Build
 
 ```sh
+python scripts/build.py bread-compact-wifi-lcd --name bread-compact-wifi-lcd-st7789-240x240
+```
+
+The 1.54-inch panel uses the normal 4-wire SPI mode and has no address-window
+offset. Use the TFT wiring listed above. This variant keeps the RoboEyes display
+and startup welcome sound; it uses partial refresh to avoid allocating a
+240x240 DMA frame buffer.
+
+To build the retained 0.96-inch ST7735S alternative:
+
+```sh
 python scripts/build.py bread-compact-wifi-lcd --name bread-compact-wifi-lcd-st7735-80x160
 ```
 
-At startup this variant prints
-`BOOT DIAGNOSTIC: ST7735S 80x160 firmware is running`, displays
-`ST7735 80x160 BOOT OK`, and plays two popup sounds followed by the success
-sound after five seconds. Monitor also prints `BOOT AUDIO TEST` with the
-configured volume. These signals confirm that the ST7735 80x160 board profile
-is present in the flashed firmware and exercise the I2S speaker path.
+Both RoboEyes variants log `BOOT DIAGNOSTIC` and play the startup welcome sound.
+These signals exercise the I2S speaker path independently of the network
+connection. The 240x240 variant should report
+`SPI render: 240x240 RGB565, partial refresh, buffer=9600 bytes`.
 
-## Display refresh verification
+## Change saved Wi-Fi
+
+After flashing this firmware, hold the BOOT button for 3 seconds while the
+device is running, then release it. The device removes only saved Wi-Fi
+networks and restarts in configuration mode. Connect another phone or computer
+to `Xiaozhi-XXXX`, open `http://192.168.4.1`, and enter the new hotspot name
+and password. Do not hold BOOT while powering on or resetting the ESP32-S3;
+that would enter its firmware download mode.
+
+## ST7735 display refresh verification
 
 The landscape panel window starts at column 0, so a 160-pixel row ends at
 159 (inclusive). A column offset of 1 requests end address 160, which is

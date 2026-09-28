@@ -10,6 +10,7 @@
 #include "robo_eyes_display.h"
 #include "system_reset.h"
 #include "wifi_board.h"
+#include "wifi_manager.h"
 
 #include <driver/i2c_master.h>
 #include <driver/spi_common.h>
@@ -17,7 +18,9 @@
 #include <esp_lcd_panel_ops.h>
 #include <esp_lcd_panel_vendor.h>
 #include <esp_log.h>
+#include <esp_system.h>
 #include <freertos/task.h>
+#include <ssid_manager.h>
 #include <vector>
 
 #if defined(LCD_TYPE_ILI9341_SERIAL) || defined(LCD_TYPE_ST7735_SERIAL)
@@ -143,6 +146,7 @@ class CompactWifiBoardLCD : public WifiBoard {
 private:
     Button boot_button_;
     LcdDisplay* display_;
+    bool wifi_reset_pending_ = false;
 
     void InitializeSpi() {
         spi_bus_config_t buscfg = {};
@@ -212,7 +216,8 @@ private:
 #ifdef LCD_TYPE_GC9A01_SERIAL
         panel_config.vendor_config = &gc9107_vendor_config;
 #endif
-#if defined(CONFIG_BREAD_COMPACT_WIFI_LCD_ST7735_80X160)
+#if defined(CONFIG_BREAD_COMPACT_WIFI_LCD_ST7735_80X160) || \
+    defined(CONFIG_LCD_ST7789_240X240)
         display_ = new RoboEyesDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
                                        DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
                                        DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
@@ -224,6 +229,22 @@ private:
     }
 
     void InitializeButtons() {
+        boot_button_.OnLongPress([this]() {
+            wifi_reset_pending_ = true;
+            ESP_LOGI(TAG, "Release BOOT to clear saved Wi-Fi networks");
+        });
+        boot_button_.OnPressUp([this]() {
+            if (!wifi_reset_pending_) {
+                return;
+            }
+            wifi_reset_pending_ = false;
+            Application::GetInstance().Schedule([]() {
+                ESP_LOGI(TAG, "Clearing saved Wi-Fi networks and restarting");
+                WifiManager::GetInstance().StopStation();
+                SsidManager::GetInstance().Clear();
+                esp_restart();
+            });
+        });
         boot_button_.OnClick([this]() {
             auto& app = Application::GetInstance();
             if (app.GetDeviceState() == kDeviceStateStarting) {
@@ -238,7 +259,7 @@ private:
     void InitializeTools() { static LampController lamp(LAMP_GPIO); }
 
 public:
-    CompactWifiBoardLCD() : boot_button_(BOOT_BUTTON_GPIO) {
+    CompactWifiBoardLCD() : boot_button_(BOOT_BUTTON_GPIO, false, 3000) {
         InitializeSpi();
         InitializeLcdDisplay();
         InitializeButtons();
@@ -270,8 +291,14 @@ public:
     virtual Display* GetDisplay() override { return display_; }
 
     virtual void StartNetwork() override {
+#if defined(CONFIG_BREAD_COMPACT_WIFI_LCD_ST7735_80X160) || \
+    defined(CONFIG_LCD_ST7789_240X240)
 #if defined(CONFIG_BREAD_COMPACT_WIFI_LCD_ST7735_80X160)
         ESP_LOGI(TAG, "BOOT DIAGNOSTIC: ST7735S 80x160 firmware is running");
+#else
+        ESP_LOGI(TAG, "BOOT DIAGNOSTIC: %dx%d RoboEyes firmware is running", DISPLAY_WIDTH,
+                 DISPLAY_HEIGHT);
+#endif
         xTaskCreate(
             [](void*) {
                 // The audio service is initialized shortly before networking.  Waiting here

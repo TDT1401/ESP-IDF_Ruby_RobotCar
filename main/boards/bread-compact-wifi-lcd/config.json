@@ -9,6 +9,12 @@
             ]
         },
         {
+            "name": "bread-compact-wifi-lcd-st7789-240x240",
+            "sdkconfig_append": [
+                "CONFIG_LCD_ST7789_240X240=y"
+            ]
+        },
+        {
             "name": "bread-compact-wifi-lcd-st7735-80x160",
             "sdkconfig_append": [
                 "CONFIG_LCD_CUSTOM=y",
