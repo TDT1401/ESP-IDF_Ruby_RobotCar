@@ -6,6 +6,10 @@
 #define AUDIO_INPUT_SAMPLE_RATE 16000
 #define AUDIO_OUTPUT_SAMPLE_RATE 24000
 
+// Set to 1 to log microphone levels every 2 seconds, then rebuild and flash.
+// Startup configuration and I2S read errors are logged even when this is 0.
+#define MIC_DEBUG 0
+
 // 如果使用 Duplex I2S 模式，请注释下面一行
 #define AUDIO_I2S_METHOD_SIMPLEX
 

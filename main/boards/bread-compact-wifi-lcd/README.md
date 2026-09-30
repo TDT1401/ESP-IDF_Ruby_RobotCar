@@ -61,6 +61,44 @@ These signals exercise the I2S speaker path independently of the network
 connection. The 240x240 variant should report
 `SPI render: 240x240 RGB565, partial refresh, buffer=9600 bytes`.
 
+## Microphone diagnostic
+
+Set `MIC_DEBUG` in this board's `config.h`, then rebuild and flash:
+
+```cpp
+#define MIC_DEBUG 0  // Normal use (default).
+// Change the value to 1 to enable microphone level logs.
+```
+
+With `MIC_DEBUG=0`, the per-sample statistics and periodic level logs are
+disabled. The `MIC I2S` startup configuration and rate-limited I2S read error
+warnings remain enabled. Both settings preserve the working `>>16` sample
+conversion. This flag applies to the board's default simplex I2S codec.
+
+With `MIC_DEBUG=1`, open the serial monitor after flashing. During capture,
+the board logs `MIC RX` levels about every two seconds. Speak close to
+the microphone, then compare the readings with a quiet interval. To start
+capture without a server connection, enter Wi-Fi configuration mode and click
+BOOT once to start audio testing; click it again to stop.
+
+- `samples` near 32000 per two seconds and `read_errors=0` mean I2S is returning
+  data. `pcm_peak` and `pcm_mean_abs` should rise when you speak.
+- Increasing `read_errors` points to I2S receive failures;
+  `last_error` gives the ESP-IDF error name.
+- `raw_min=raw_max` or `nonzero=0` while speaking means the receive data is
+  stuck or silent. Check microphone power and its L/R channel selection against
+  the configured left slot, even if the wires are seated correctly.
+- Changing raw values with `pcm_peak=0` points to a sample format or bit shift
+  mismatch. Changing PCM levels with no recognition points further down the
+  audio or network pipeline.
+
+This board converts the 32-bit I2S sample to 16-bit PCM by shifting 16 bits.
+Earlier firmware shifted 12 bits and clipped the large raw values seen in mic
+logs. A full two-second window of `raw_min=raw_max=0` still indicates that the
+I2S data itself is zero; changing the PCM shift cannot repair that condition.
+
+The startup welcome sound tests only speaker output; it does not test the mic.
+
 ## Change saved Wi-Fi
 
 After flashing this firmware, hold the BOOT button for 3 seconds while the
