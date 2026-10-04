@@ -4,6 +4,7 @@
 #include <driver/ledc.h>
 #include <esp_err.h>
 #include <esp_pm.h>
+#include <esp_random.h>
 #include <esp_system.h>
 #include <esp_timer.h>
 
@@ -31,6 +32,7 @@ constexpr int64_t kDirectionDelayUs = 50000;
 constexpr int64_t kTickUs = 10000;
 constexpr int64_t kGestureMaxUs = 2000000;
 constexpr int64_t kGestureCooldownUs = 3000000;
+constexpr int kWebTimeoutMs = 600;
 
 enum class Motion { kStop, kForward, kBackward, kLeft, kRight };
 enum class Emotion { kNone, kHappy, kSad, kAngry, kSurprised, kThinking, kWinking };
@@ -117,7 +119,109 @@ public:
         emotion_enabled_ = false;
         pending_emotion_ = Emotion::kNone;
         manual_override_ = true;
+        web_session_ = 0;  // A spoken stop also invalidates in-flight browser commands.
         StopLocked();
+    }
+
+    void SetWebConnected(bool connected) {
+        std::lock_guard lock(mutex_);
+        web_connected_ = connected;
+        if (!connected && web_manual_) {
+            web_session_ = 0;
+            pending_emotion_ = Emotion::kNone;
+            StopLocked();
+        }
+    }
+
+    esp_err_t BeginWebControl(uint32_t* session) {
+        if (session == nullptr)
+            return ESP_ERR_INVALID_ARG;
+        std::lock_guard lock(mutex_);
+        const int64_t now = esp_timer_get_time();
+        if (!web_connected_ || !MotionAllowed() || (web_session_ != 0 && now < web_deadline_us_))
+            return ESP_ERR_INVALID_STATE;
+        if (fault_ != ESP_OK)
+            return fault_;
+        StopLocked();
+        if (fault_ != ESP_OK)
+            return fault_;
+        pending_emotion_ = Emotion::kNone;
+        web_manual_ = true;
+        web_sequence_ = 0;
+        // Zero is reserved for an expired/released session.
+        web_session_ = esp_random();
+        if (web_session_ == 0)
+            web_session_ = 1;
+        web_deadline_us_ = now + kWebTimeoutMs * 1000LL;
+        *session = web_session_;
+        return ESP_OK;
+    }
+
+    esp_err_t WebCommand(uint32_t session, uint32_t sequence, L298nWebCommand command, int speed) {
+        if (speed < 0 || speed > 100)
+            return ESP_ERR_INVALID_ARG;
+        Motion motion;
+        switch (command) {
+            case L298nWebCommand::kForward:
+                motion = Motion::kForward;
+                break;
+            case L298nWebCommand::kBackward:
+                motion = Motion::kBackward;
+                break;
+            case L298nWebCommand::kLeft:
+                motion = Motion::kLeft;
+                break;
+            case L298nWebCommand::kRight:
+                motion = Motion::kRight;
+                break;
+            case L298nWebCommand::kStop:
+            case L298nWebCommand::kRelease:
+                motion = Motion::kStop;
+                break;
+            default:
+                return ESP_ERR_INVALID_ARG;
+        }
+        std::lock_guard lock(mutex_);
+        const int64_t now = esp_timer_get_time();
+        if (!web_connected_ || session == 0 || session != web_session_ ||
+            sequence <= web_sequence_ || now >= web_deadline_us_)
+            return ESP_ERR_INVALID_STATE;
+        web_sequence_ = sequence;
+        pending_emotion_ = Emotion::kNone;
+        if (command == L298nWebCommand::kRelease) {
+            StopLocked();
+            web_session_ = 0;
+            web_manual_ = false;
+            // Do not replay a gesture from the current spoken response.
+            manual_override_ = response_active_;
+            return ESP_OK;
+        }
+        if (!MotionAllowed() || fault_ != ESP_OK) {
+            StopLocked();
+            web_session_ = 0;
+            return ESP_ERR_INVALID_STATE;
+        }
+        web_deadline_us_ = now + kWebTimeoutMs * 1000LL;
+        web_speed_percent_ = speed;
+        if (motion == Motion::kStop || speed == 0) {
+            StopLocked();
+        } else {
+            // Heartbeats refresh the deadline without interrupting PWM or the direction delay.
+            if (motion_ != motion) {
+                StopLocked();
+                if (fault_ != ESP_OK || !PrepareMotionLocked(motion, kWebTimeoutMs)) {
+                    web_session_ = 0;
+                    return ESP_FAIL;
+                }
+            }
+            deadline_us_ = web_deadline_us_;
+            if (moving_ && !ApplySpeedLocked()) {
+                StopLocked();
+                web_session_ = 0;
+                return ESP_FAIL;
+            }
+        }
+        return fault_;
     }
 
     void UpdateEmotion(const char* emotion, bool speaking) {
@@ -142,14 +246,14 @@ public:
         // A changed/neutral expression cancels an old gesture, never a manual command.
         if (gesture_steps_ != nullptr)
             StopLocked();
-        if (emotion_enabled_ && !manual_override_ && motion_ == Motion::kStop &&
+        if (emotion_enabled_ && !manual_override_ && !web_manual_ && motion_ == Motion::kStop &&
             speed_percent_ > 0 && fault_ == ESP_OK && esp_timer_get_time() >= next_gesture_at_us_) {
             pending_emotion_ = next;
         }
     }
 
 private:
-    // MCP runs on the application task; the timer also accesses this controller.
+    // MCP, HTTP and network callbacks and the timer share this controller.
     // Only short state/GPIO operations hold the mutex: no sleeps, JSON, logging,
     // networking or Application::Schedule calls inside it.
     std::mutex mutex_;
@@ -168,6 +272,12 @@ private:
     bool emotion_enabled_ = true;
     bool response_active_ = false;
     bool manual_override_ = false;
+    bool web_connected_ = false;
+    bool web_manual_ = false;
+    uint32_t web_session_ = 0;
+    uint32_t web_sequence_ = 0;
+    int64_t web_deadline_us_ = 0;
+    int web_speed_percent_ = kDefaultSpeedPercent;
     Emotion last_emotion_ = Emotion::kNone;
     Emotion pending_emotion_ = Emotion::kNone;  // One mailbox; no motion queue.
     const GestureStep* gesture_steps_ = nullptr;
@@ -275,6 +385,8 @@ private:
     }
 
     int ActiveSpeedLocked() const {
+        if (web_manual_)
+            return web_speed_percent_;
         return gesture_steps_ == nullptr
                    ? speed_percent_
                    : std::min(speed_percent_, gesture_steps_[gesture_index_].speed_percent);
@@ -326,12 +438,23 @@ private:
                Check(gpio_set_level(MOTOR_RIGHT_IN2_PIN, !right_forward));
     }
 
+    static bool MotionAllowed() {
+        const auto state = Application::GetInstance().GetDeviceState();
+        return state != kDeviceStateUpgrading && state != kDeviceStateFatalError &&
+               state != kDeviceStateWifiConfiguring;
+    }
+
     void Tick() {
         std::lock_guard lock(mutex_);
+        const int64_t now = esp_timer_get_time();
+        if (web_session_ != 0 && (now >= web_deadline_us_ || !MotionAllowed())) {
+            web_session_ = 0;
+            pending_emotion_ = Emotion::kNone;
+            StopLocked();
+        }
         if (motion_ == Motion::kStop && pending_emotion_ == Emotion::kNone)
             return;
         const auto state = Application::GetInstance().GetDeviceState();
-        const int64_t now = esp_timer_get_time();
         if (state == kDeviceStateUpgrading || state == kDeviceStateFatalError ||
             state == kDeviceStateWifiConfiguring) {
             pending_emotion_ = Emotion::kNone;
@@ -348,7 +471,7 @@ private:
         if (motion_ == Motion::kStop) {
             const auto emotion = pending_emotion_;
             pending_emotion_ = Emotion::kNone;
-            if (!emotion_enabled_ || manual_override_ || !response_active_ ||
+            if (!emotion_enabled_ || manual_override_ || web_manual_ || !response_active_ ||
                 state != kDeviceStateSpeaking || speed_percent_ == 0 || fault_ != ESP_OK ||
                 now < next_gesture_at_us_)
                 return;
@@ -389,7 +512,9 @@ private:
             moving_ = true;
             // Count the requested duration from enabling the motors. A delayed
             // timer must never start a command that has already expired above.
-            deadline_us_ = esp_timer_get_time() + static_cast<int64_t>(duration_ms_) * 1000;
+            // Web deadlines are measured from reception, never from motor start.
+            if (!web_manual_)
+                deadline_us_ = esp_timer_get_time() + static_cast<int64_t>(duration_ms_) * 1000;
         }
     }
 
@@ -402,6 +527,9 @@ private:
         }
         {
             std::lock_guard lock(mutex_);
+            if (web_manual_)
+                return std::unexpected(
+                    "Web manual control is active; release it on the web page first.");
             manual_override_ = true;
             pending_emotion_ = Emotion::kNone;
             StopLocked();  // A new movement replaces the previous one, never queues it.
@@ -431,6 +559,9 @@ private:
         }
         {
             std::lock_guard lock(mutex_);
+            if (web_manual_)
+                return std::unexpected(
+                    "Web manual control is active; release it on the web page first.");
             manual_override_ = true;
             pending_emotion_ = Emotion::kNone;
             if (gesture_steps_ != nullptr)
@@ -470,6 +601,7 @@ private:
         bool moving;
         bool emotion_enabled;
         bool gesture_active;
+        bool web_manual;
         int64_t remaining_ms;
         esp_err_t fault;
         {
@@ -480,11 +612,13 @@ private:
             active_speed = moving_ ? ActiveSpeedLocked() : 0;
             emotion_enabled = emotion_enabled_;
             gesture_active = gesture_steps_ != nullptr;
+            web_manual = web_manual_;
             fault = fault_;
             remaining_ms =
                 motion == Motion::kStop ? 0
-                : moving ? std::max<int64_t>(0, (deadline_us_ - esp_timer_get_time() + 999) / 1000)
-                         : duration_ms_;
+                : (moving || web_manual)
+                    ? std::max<int64_t>(0, (deadline_us_ - esp_timer_get_time() + 999) / 1000)
+                    : duration_ms_;
         }
         CJsonUniquePtr json(cJSON_CreateObject());
         if (!json || !cJSON_AddStringToObject(json.get(), "motion", MotionName(motion)) ||
@@ -492,6 +626,7 @@ private:
             !cJSON_AddNumberToObject(json.get(), "active_speed_percent", active_speed) ||
             !cJSON_AddBoolToObject(json.get(), "emotion_motion_enabled", emotion_enabled) ||
             !cJSON_AddBoolToObject(json.get(), "emotion_motion_active", gesture_active) ||
+            !cJSON_AddBoolToObject(json.get(), "web_manual_active", web_manual) ||
             !cJSON_AddBoolToObject(json.get(), "moving", moving) ||
             !cJSON_AddBoolToObject(json.get(), "pending", motion != Motion::kStop && !moving) ||
             !cJSON_AddNumberToObject(json.get(), "remaining_ms", remaining_ms) ||
@@ -585,4 +720,17 @@ void InitializeL298nController() {
 
 void UpdateL298nEmotion(const char* emotion, bool speaking) {
     L298nController::Instance().UpdateEmotion(emotion, speaking);
+}
+
+esp_err_t BeginL298nWebControl(uint32_t* session) {
+    return L298nController::Instance().BeginWebControl(session);
+}
+
+esp_err_t CommandL298nWebControl(uint32_t session, uint32_t sequence, L298nWebCommand command,
+                                 int speed_percent) {
+    return L298nController::Instance().WebCommand(session, sequence, command, speed_percent);
+}
+
+void SetL298nWebConnected(bool connected) {
+    L298nController::Instance().SetWebConnected(connected);
 }

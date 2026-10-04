@@ -14,6 +14,7 @@
 
 #ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N
 #include "l298n/l298n_controller.h"
+#include "l298n/l298n_web_server.h"
 #endif
 
 #include <driver/i2c_master.h>
@@ -28,6 +29,7 @@
 #include <freertos/task.h>
 #include <ssid_manager.h>
 #include <cstdint>
+#include <utility>
 #include <vector>
 
 #if defined(LCD_TYPE_ILI9341_SERIAL) || defined(LCD_TYPE_ST7735_SERIAL)
@@ -404,6 +406,21 @@ public:
     }
 
     virtual Display* GetDisplay() override { return display_; }
+
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N
+    void SetNetworkEventCallback(NetworkEventCallback callback) override {
+        WifiBoard::SetNetworkEventCallback(
+            [callback = std::move(callback)](NetworkEvent event, const std::string& data) {
+                if (event == NetworkEvent::Connected)
+                    UpdateL298nWebNetwork(true);
+                else if (event == NetworkEvent::Disconnected ||
+                         event == NetworkEvent::WifiConfigModeEnter)
+                    UpdateL298nWebNetwork(false);
+                if (callback)
+                    callback(event, data);
+            });
+    }
+#endif
 
     virtual void StartNetwork() override {
 #if defined(CONFIG_BREAD_COMPACT_WIFI_LCD_ST7735_80X160) || defined(CONFIG_LCD_ST7789_240X240)

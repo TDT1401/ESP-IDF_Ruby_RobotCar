@@ -14,6 +14,12 @@ Optional L298N motor variants append `-l298n` to each name above. See
 disabled in the original variants; the motor variants keep the same audio,
 display, flash and partition configuration.
 
+Các bản `-l298n` có thêm trang web điều khiển xe 4 hướng tại
+`http://<IP-robot>:8080`. Kết nối điện thoại/máy tính cùng mạng Wi-Fi, mở địa chỉ
+`Motor control:` trong log rồi bấm **Bắt đầu**. Giữ nút để chạy, thả để dừng;
+bấm **Trả về giọng nói** khi xong. Xem [hướng dẫn web](L298N.md#web-control)
+về tự dừng khi mất kết nối và cách kiểm tra sau khi flash.
+
 ## Wiring
 
 All modules must share ground.

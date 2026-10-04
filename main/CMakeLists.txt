@@ -896,6 +896,7 @@ list(APPEND SOURCES ${BOARD_SOURCES})
 
 if(CONFIG_BREAD_COMPACT_WIFI_LCD_L298N)
     list(APPEND SOURCES "boards/bread-compact-wifi-lcd/l298n/l298n_controller.cc")
+    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/l298n/l298n_web_server.cc")
 endif()
 
 # Select one audio engine for each chip family
@@ -1057,6 +1058,9 @@ if(CONFIG_IDF_TARGET_ESP32S3)
 endif()
 
 set(MAIN_PRIV_REQUIRES_EXTRA "")
+if(CONFIG_BREAD_COMPACT_WIFI_LCD_L298N)
+    list(APPEND MAIN_PRIV_REQUIRES_EXTRA esp_http_server)
+endif()
 if(BOARD_TYPE STREQUAL "m5stack-stick-s3")
     list(APPEND MAIN_PRIV_REQUIRES_EXTRA
         m5stack__m5pm1
