@@ -143,13 +143,16 @@
 #define LCD_TYPE_ST7789_SERIAL
 #define DISPLAY_WIDTH 240
 #define DISPLAY_HEIGHT 240
-#define DISPLAY_MIRROR_X false
-#define DISPLAY_MIRROR_Y false
+#define DISPLAY_MIRROR_X true
+#define DISPLAY_MIRROR_Y true
 #define DISPLAY_SWAP_XY false
 #define DISPLAY_INVERT_COLOR true
 #define DISPLAY_RGB_ORDER LCD_RGB_ELEMENT_ORDER_RGB
 #define DISPLAY_OFFSET_X 0
 #define DISPLAY_OFFSET_Y 0
+// Apply the ST7789 RAM window offset in the panel driver before LVGL starts.
+#define DISPLAY_PANEL_GAP_X 0
+#define DISPLAY_PANEL_GAP_Y (DISPLAY_MIRROR_Y ? (320 - DISPLAY_HEIGHT) : 0)
 #define DISPLAY_BACKLIGHT_OUTPUT_INVERT false
 #define DISPLAY_SPI_MODE 0
 #endif

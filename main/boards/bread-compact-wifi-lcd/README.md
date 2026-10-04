@@ -113,10 +113,23 @@ python scripts/build.py bread-compact-wifi-lcd --name bread-compact-wifi-lcd-st7
 python scripts/build.py bread-compact-wifi-lcd --name bread-compact-wifi-lcd-st7789-240x240
 ```
 
-The 1.54-inch panel uses the normal 4-wire SPI mode and has no address-window
-offset. Use the TFT wiring listed above. This variant keeps the RoboEyes display
+The 1.54-inch panel uses the normal 4-wire SPI mode. Its ST7789 controller has
+320 RAM rows for the 240 visible rows: with `DISPLAY_SWAP_XY=false`, the vertical
+panel gap is 80 when `DISPLAY_MIRROR_Y=true`, and 0 otherwise. `DISPLAY_PANEL_GAP_Y`
+selects this automatically. Leaving it at 0 while mirroring vertically can clip
+one edge and leave the opposite edge unreachable. See the matching 240x240
+rotation offsets in the [Adafruit ST7789 driver](https://github.com/adafruit/Adafruit-ST7735-Library/blob/master/Adafruit_ST7789.cpp).
+Use the TFT wiring listed above. This variant keeps the RoboEyes display
 and startup welcome sound; it uses partial refresh to avoid allocating a
 240x240 DMA frame buffer.
+
+The board applies this gap through `esp_lcd_panel_set_gap()` before creating the
+display and starting LVGL. Keep `DISPLAY_OFFSET_X` and `DISPLAY_OFFSET_Y` at zero
+for this variant: the physical offset is already applied by the panel driver.
+This avoids both applying the offset twice and the unlocked
+`lv_display_set_offset()` call in the shared display constructor, which can hit
+LVGL's “Invalidate area is not allowed during rendering” assertion and then the
+task watchdog during startup.
 
 To build the retained 0.96-inch ST7735S alternative:
 
@@ -128,6 +141,48 @@ Both RoboEyes variants log `BOOT DIAGNOSTIC` and play the startup welcome sound.
 These signals exercise the I2S speaker path independently of the network
 connection. The 240x240 variant should report
 `SPI render: 240x240 RGB565, partial refresh, buffer=9600 bytes`.
+
+### RoboEyes movement and emotions
+
+The eyes update every 30 ms and ease toward targets across the available panel
+area, leaving a 4-pixel margin. Movement bounds include both eyes and eyebrows
+and adapt to each expression on the 240x240 and 160x80 layouts. Blinking takes
+about 180 ms, with a 2–3.5 second pause between blinks. While speaking or showing
+any non-neutral expression (including the startup greeting), both eyes stay
+centered and blinking continues. Random gaze movement resumes only after the
+display leaves the speaking state and returns to neutral. A short pause before
+the next gaze target keeps the transition to silence from looking abrupt.
+
+On the matching `-l298n` variants, response expressions also trigger short wheel
+gestures while speaking. Startup and idle do not trigger wheel motion. Manual
+motor commands take priority, and `self.motor.stop` disables automatic gestures
+until explicitly re-enabled (or rebooted). See [L298N.md](L298N.md#bánh-xe-chuyển-động-theo-cảm-xúc)
+for the gesture timings, speed caps, and enable/disable command.
+
+The server's existing `llm.emotion` messages select neutral, happy, sad/crying,
+angry, surprised/shocked, thinking/confused, winking, or sleepy eye shapes.
+Related tags such as `loving`, `laughing`, and `funny` share the happy shape.
+Unknown tags preserve the current expression. A recognized server emotion,
+including neutral, takes priority for the response until another tag or a
+conversation reset arrives.
+
+When the server supplies no recognized emotion, `tts.sentence_start` text uses
+a small Vietnamese/English phrase fallback: apologies/condolences look sad,
+congratulations look happy, explicit surprise phrases open the eyes wider,
+good-night wishes look sleepy, and “let me think” looks thoughtful. Other
+sentences look neutral. This is a phrase heuristic, not full language understanding;
+quotes, negation, or sarcasm can still be misclassified. The fallback uses the
+assistant's sentence, never the user's words. A new user utterance displays
+thinking eyes while waiting for the answer.
+
+Emotion tags take effect when received; fallback changes occur at sentence
+notifications. The current protocol has no sentence identifier or audio playback
+timestamp for emotion tags, so accurate per-sentence timing still requires the
+server to send appropriate tags alongside speech. Network/audio buffering can
+leave a timing offset. Check on hardware with happy, apologetic, surprised, and
+multi-sentence answers, then interrupt/reconnect and confirm stale expressions
+clear. Also check gaze at all edges on both display sizes and listen for audio
+stutter while the eyes move.
 
 ## Microphone diagnostic
 

@@ -315,12 +315,18 @@ private:
             backlight->SetBrightness(100, false);
         }
         ShowSt7735AddressTest(panel_io, panel);
+#elif defined(CONFIG_LCD_ST7789_240X240)
+        // Set the physical RAM window before SpiLcdDisplay starts the LVGL task.
+        // Keep DISPLAY_OFFSET_X/Y at zero so its constructor does not mutate LVGL
+        // display offsets while rendering is already running.
+        ESP_ERROR_CHECK(esp_lcd_panel_set_gap(panel, DISPLAY_PANEL_GAP_X, DISPLAY_PANEL_GAP_Y));
+        ESP_LOGI(TAG, "ST7789 240x240 panel initialized (gap=%d,%d)", DISPLAY_PANEL_GAP_X,
+                 DISPLAY_PANEL_GAP_Y);
 #endif
 #ifdef LCD_TYPE_GC9A01_SERIAL
         panel_config.vendor_config = &gc9107_vendor_config;
 #endif
-#if defined(CONFIG_BREAD_COMPACT_WIFI_LCD_ST7735_80X160) || \
-    defined(CONFIG_LCD_ST7789_240X240)
+#if defined(CONFIG_BREAD_COMPACT_WIFI_LCD_ST7735_80X160) || defined(CONFIG_LCD_ST7789_240X240)
         display_ = new RoboEyesDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
                                        DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
                                        DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
@@ -372,6 +378,9 @@ public:
         }
 #ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N
         InitializeL298nController();
+#if defined(CONFIG_BREAD_COMPACT_WIFI_LCD_ST7735_80X160) || defined(CONFIG_LCD_ST7789_240X240)
+        static_cast<RoboEyesDisplay*>(display_)->SetEmotionMotionCallback(UpdateL298nEmotion);
+#endif
 #endif
     }
 
@@ -397,8 +406,7 @@ public:
     virtual Display* GetDisplay() override { return display_; }
 
     virtual void StartNetwork() override {
-#if defined(CONFIG_BREAD_COMPACT_WIFI_LCD_ST7735_80X160) || \
-    defined(CONFIG_LCD_ST7789_240X240)
+#if defined(CONFIG_BREAD_COMPACT_WIFI_LCD_ST7735_80X160) || defined(CONFIG_LCD_ST7789_240X240)
 #if defined(CONFIG_BREAD_COMPACT_WIFI_LCD_ST7735_80X160)
         ESP_LOGI(TAG, "BOOT DIAGNOSTIC: ST7735S 80x160 firmware is running");
 #else

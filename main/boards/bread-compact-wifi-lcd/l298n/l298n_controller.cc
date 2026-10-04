@@ -8,7 +8,9 @@
 #include <esp_timer.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <mutex>
 
 #include "../config.h"
@@ -27,8 +29,65 @@ constexpr int kDefaultTurnDurationMs = 400;
 constexpr int kMaxDurationMs = 10000;
 constexpr int64_t kDirectionDelayUs = 50000;
 constexpr int64_t kTickUs = 10000;
+constexpr int64_t kGestureMaxUs = 2000000;
+constexpr int64_t kGestureCooldownUs = 3000000;
 
 enum class Motion { kStop, kForward, kBackward, kLeft, kRight };
+enum class Emotion { kNone, kHappy, kSad, kAngry, kSurprised, kThinking, kWinking };
+
+struct GestureStep {
+    Motion motion;
+    int duration_ms;
+    int speed_percent;
+};
+
+// Timed gestures, not position-controlled moves. Each direction change includes a 50 ms stop.
+constexpr GestureStep kHappyGesture[] = {{Motion::kForward, 180, 55},
+                                         {Motion::kBackward, 180, 55},
+                                         {Motion::kLeft, 140, 55},
+                                         {Motion::kRight, 280, 55},
+                                         {Motion::kLeft, 140, 55}};
+constexpr GestureStep kSadGesture[] = {{Motion::kBackward, 180, 40}};
+constexpr GestureStep kSurprisedGesture[] = {{Motion::kBackward, 140, 50}};
+constexpr GestureStep kAngryGesture[] = {
+    {Motion::kLeft, 100, 50}, {Motion::kRight, 200, 50}, {Motion::kLeft, 100, 50}};
+constexpr GestureStep kThinkingGesture[] = {
+    {Motion::kLeft, 120, 45}, {Motion::kRight, 240, 45}, {Motion::kLeft, 120, 45}};
+constexpr GestureStep kWinkingGesture[] = {
+    {Motion::kLeft, 160, 55}, {Motion::kRight, 320, 55}, {Motion::kLeft, 160, 55}};
+
+template <size_t N>
+constexpr bool IsValidGesture(const GestureStep (&steps)[N]) {
+    int64_t total_us = 0;
+    for (const auto& step : steps) {
+        if (step.motion == Motion::kStop || step.duration_ms < 100 || step.duration_ms > 400 ||
+            step.speed_percent <= 0 || step.speed_percent > 60)
+            return false;
+        total_us += static_cast<int64_t>(step.duration_ms) * 1000 + kDirectionDelayUs;
+    }
+    return N > 0 && N <= 5 && total_us < kGestureMaxUs;
+}
+static_assert(IsValidGesture(kHappyGesture) && IsValidGesture(kSadGesture) &&
+              IsValidGesture(kSurprisedGesture) && IsValidGesture(kAngryGesture) &&
+              IsValidGesture(kThinkingGesture) && IsValidGesture(kWinkingGesture));
+
+Emotion ParseEmotion(const char* emotion) {
+    if (emotion == nullptr)
+        return Emotion::kNone;
+    if (strcmp(emotion, "happy") == 0)
+        return Emotion::kHappy;
+    if (strcmp(emotion, "sad") == 0)
+        return Emotion::kSad;
+    if (strcmp(emotion, "angry") == 0)
+        return Emotion::kAngry;
+    if (strcmp(emotion, "surprised") == 0)
+        return Emotion::kSurprised;
+    if (strcmp(emotion, "thinking") == 0)
+        return Emotion::kThinking;
+    if (strcmp(emotion, "winking") == 0)
+        return Emotion::kWinking;
+    return Emotion::kNone;  // Neutral and sleepy remain still.
+}
 
 const char* MotionName(Motion motion) {
     switch (motion) {
@@ -54,7 +113,39 @@ public:
 
     void Stop() {
         std::lock_guard lock(mutex_);
+        // A spoken stop must not be undone by an emotion in the acknowledgement.
+        emotion_enabled_ = false;
+        pending_emotion_ = Emotion::kNone;
+        manual_override_ = true;
         StopLocked();
+    }
+
+    void UpdateEmotion(const char* emotion, bool speaking) {
+        const auto next = ParseEmotion(emotion);
+        std::lock_guard lock(mutex_);
+        if (!speaking) {
+            if (response_active_) {
+                manual_override_ = false;
+            }
+            response_active_ = false;
+            last_emotion_ = Emotion::kNone;
+            pending_emotion_ = Emotion::kNone;
+            if (gesture_steps_ != nullptr)
+                StopLocked();
+            return;
+        }
+        response_active_ = true;
+        if (next == last_emotion_)
+            return;
+        last_emotion_ = next;
+        pending_emotion_ = Emotion::kNone;
+        // A changed/neutral expression cancels an old gesture, never a manual command.
+        if (gesture_steps_ != nullptr)
+            StopLocked();
+        if (emotion_enabled_ && !manual_override_ && motion_ == Motion::kStop &&
+            speed_percent_ > 0 && fault_ == ESP_OK && esp_timer_get_time() >= next_gesture_at_us_) {
+            pending_emotion_ = next;
+        }
     }
 
 private:
@@ -74,6 +165,16 @@ private:
     int64_t deadline_us_ = 0;
     bool moving_ = false;
     esp_err_t fault_ = ESP_OK;
+    bool emotion_enabled_ = true;
+    bool response_active_ = false;
+    bool manual_override_ = false;
+    Emotion last_emotion_ = Emotion::kNone;
+    Emotion pending_emotion_ = Emotion::kNone;  // One mailbox; no motion queue.
+    const GestureStep* gesture_steps_ = nullptr;
+    size_t gesture_count_ = 0;
+    size_t gesture_index_ = 0;
+    int64_t gesture_deadline_us_ = 0;
+    int64_t next_gesture_at_us_ = 0;
 
     L298nController() {
         constexpr uint64_t pins = (1ULL << MOTOR_LEFT_EN_PIN) | (1ULL << MOTOR_LEFT_IN1_PIN) |
@@ -136,6 +237,14 @@ private:
     }
 
     void StopLocked() {
+        gesture_steps_ = nullptr;
+        gesture_count_ = 0;
+        gesture_index_ = 0;
+        gesture_deadline_us_ = 0;
+        StopOutputsLocked();
+    }
+
+    void StopOutputsLocked() {
         // Disable both bridges before touching any direction pin. Attempt every
         // output even if an earlier operation fails. Stop means coast, not brake.
         Check(ledc_stop(kMode, kLeftChannel, 0));
@@ -157,12 +266,49 @@ private:
     }
 
     bool ApplySpeedLocked() {
-        const uint32_t duty = speed_percent_ * 1023 / 100;
+        const uint32_t duty = ActiveSpeedLocked() * 1023 / 100;
         // These channels have no fade users and all accesses are serialized.
         return Check(ledc_set_duty(kMode, kLeftChannel, duty)) &&
                Check(ledc_update_duty(kMode, kLeftChannel)) &&
                Check(ledc_set_duty(kMode, kRightChannel, duty)) &&
                Check(ledc_update_duty(kMode, kRightChannel));
+    }
+
+    int ActiveSpeedLocked() const {
+        return gesture_steps_ == nullptr
+                   ? speed_percent_
+                   : std::min(speed_percent_, gesture_steps_[gesture_index_].speed_percent);
+    }
+
+    bool PrepareMotionLocked(Motion motion, int duration) {
+#ifdef CONFIG_PM_ENABLE
+        if (!Check(esp_pm_lock_acquire(sleep_lock_)))
+            return false;
+        sleep_lock_held_ = true;
+#endif
+        motion_ = motion;
+        duration_ms_ = duration;
+        start_at_us_ = esp_timer_get_time() + kDirectionDelayUs;
+        deadline_us_ = start_at_us_ + static_cast<int64_t>(duration) * 1000;
+        return true;
+    }
+
+    void StartGestureStepLocked() {
+        StopOutputsLocked();  // Disable PWM before setting up the next direction.
+        const auto& step = gesture_steps_[gesture_index_];
+        if (fault_ != ESP_OK || !PrepareMotionLocked(step.motion, step.duration_ms)) {
+            StopLocked();
+        }
+    }
+
+    template <size_t N>
+    void StartGestureLocked(const GestureStep (&steps)[N], int64_t now) {
+        gesture_steps_ = steps;
+        gesture_count_ = N;
+        gesture_index_ = 0;
+        gesture_deadline_us_ = now + kGestureMaxUs;
+        next_gesture_at_us_ = now + kGestureCooldownUs;
+        StartGestureStepLocked();
     }
 
     bool ApplyDirectionLocked() {
@@ -182,14 +328,59 @@ private:
 
     void Tick() {
         std::lock_guard lock(mutex_);
-        if (motion_ == Motion::kStop) {
+        if (motion_ == Motion::kStop && pending_emotion_ == Emotion::kNone)
             return;
-        }
         const auto state = Application::GetInstance().GetDeviceState();
         const int64_t now = esp_timer_get_time();
-        if (now >= deadline_us_ || state == kDeviceStateUpgrading ||
-            state == kDeviceStateFatalError || state == kDeviceStateWifiConfiguring) {
+        if (state == kDeviceStateUpgrading || state == kDeviceStateFatalError ||
+            state == kDeviceStateWifiConfiguring) {
+            pending_emotion_ = Emotion::kNone;
+            if (motion_ != Motion::kStop)
+                StopLocked();
+            return;
+        }
+        if (gesture_steps_ != nullptr && (!response_active_ || state != kDeviceStateSpeaking ||
+                                          !emotion_enabled_ || now >= gesture_deadline_us_)) {
+            pending_emotion_ = Emotion::kNone;
             StopLocked();
+            return;
+        }
+        if (motion_ == Motion::kStop) {
+            const auto emotion = pending_emotion_;
+            pending_emotion_ = Emotion::kNone;
+            if (!emotion_enabled_ || manual_override_ || !response_active_ ||
+                state != kDeviceStateSpeaking || speed_percent_ == 0 || fault_ != ESP_OK ||
+                now < next_gesture_at_us_)
+                return;
+            switch (emotion) {
+                case Emotion::kHappy:
+                    StartGestureLocked(kHappyGesture, now);
+                    break;
+                case Emotion::kSad:
+                    StartGestureLocked(kSadGesture, now);
+                    break;
+                case Emotion::kAngry:
+                    StartGestureLocked(kAngryGesture, now);
+                    break;
+                case Emotion::kSurprised:
+                    StartGestureLocked(kSurprisedGesture, now);
+                    break;
+                case Emotion::kThinking:
+                    StartGestureLocked(kThinkingGesture, now);
+                    break;
+                case Emotion::kWinking:
+                    StartGestureLocked(kWinkingGesture, now);
+                    break;
+                default:
+                    break;
+            }
+        } else if (now >= deadline_us_) {
+            if (gesture_steps_ != nullptr && moving_ && gesture_index_ + 1 < gesture_count_) {
+                ++gesture_index_;
+                StartGestureStepLocked();
+            } else {
+                StopLocked();
+            }
         } else if (!moving_ && now >= start_at_us_) {
             if (!ApplyDirectionLocked() || !ApplySpeedLocked()) {
                 StopLocked();
@@ -211,6 +402,8 @@ private:
         }
         {
             std::lock_guard lock(mutex_);
+            manual_override_ = true;
+            pending_emotion_ = Emotion::kNone;
             StopLocked();  // A new movement replaces the previous one, never queues it.
             if (fault_ != ESP_OK) {
                 return std::unexpected("Motor hardware error; inspect wiring and restart.");
@@ -224,16 +417,9 @@ private:
                 speed_percent_ = speed;
             }
             if (speed_percent_ > 0) {
-#ifdef CONFIG_PM_ENABLE
-                if (!Check(esp_pm_lock_acquire(sleep_lock_))) {
+                if (!PrepareMotionLocked(motion, duration)) {
                     return std::unexpected("Could not keep the motor deadline timer awake.");
                 }
-                sleep_lock_held_ = true;
-#endif
-                motion_ = motion;
-                duration_ms_ = duration;
-                start_at_us_ = esp_timer_get_time() + kDirectionDelayUs;
-                deadline_us_ = start_at_us_ + static_cast<int64_t>(duration) * 1000;
             }
         }
         return GetState();
@@ -245,6 +431,10 @@ private:
         }
         {
             std::lock_guard lock(mutex_);
+            manual_override_ = true;
+            pending_emotion_ = Emotion::kNone;
+            if (gesture_steps_ != nullptr)
+                StopLocked();
             speed_percent_ = speed;
             if (speed == 0 || (motion_ != Motion::kStop && esp_timer_get_time() >= deadline_us_)) {
                 StopLocked();
@@ -259,10 +449,27 @@ private:
         return GetState();
     }
 
+    ToolResult SetEmotionEnabled(bool enabled) {
+        {
+            std::lock_guard lock(mutex_);
+            emotion_enabled_ = enabled;
+            pending_emotion_ = Emotion::kNone;
+            if (gesture_steps_ != nullptr)
+                StopLocked();
+            // Enabling never starts the last gesture again; wait for a fresh emotion event.
+            if (enabled)
+                manual_override_ = false;
+        }
+        return GetState();
+    }
+
     ToolResult GetState() {
         Motion motion;
         int speed;
+        int active_speed;
         bool moving;
+        bool emotion_enabled;
+        bool gesture_active;
         int64_t remaining_ms;
         esp_err_t fault;
         {
@@ -270,6 +477,9 @@ private:
             motion = motion_;
             speed = speed_percent_;
             moving = moving_;
+            active_speed = moving_ ? ActiveSpeedLocked() : 0;
+            emotion_enabled = emotion_enabled_;
+            gesture_active = gesture_steps_ != nullptr;
             fault = fault_;
             remaining_ms =
                 motion == Motion::kStop ? 0
@@ -279,6 +489,9 @@ private:
         CJsonUniquePtr json(cJSON_CreateObject());
         if (!json || !cJSON_AddStringToObject(json.get(), "motion", MotionName(motion)) ||
             !cJSON_AddNumberToObject(json.get(), "speed_percent", speed) ||
+            !cJSON_AddNumberToObject(json.get(), "active_speed_percent", active_speed) ||
+            !cJSON_AddBoolToObject(json.get(), "emotion_motion_enabled", emotion_enabled) ||
+            !cJSON_AddBoolToObject(json.get(), "emotion_motion_active", gesture_active) ||
             !cJSON_AddBoolToObject(json.get(), "moving", moving) ||
             !cJSON_AddBoolToObject(json.get(), "pending", motion != Motion::kStop && !moving) ||
             !cJSON_AddNumberToObject(json.get(), "remaining_ms", remaining_ms) ||
@@ -328,7 +541,8 @@ private:
                  Motion::kRight);
         server.AddTool("self.motor.stop",
                        "Stop robot (dừng lại) now and cancel pending movement. Motors coast; speed "
-                       "setting is retained.",
+                       "setting is retained. Also disables automatic emotion motion until "
+                       "self.motor.set_emotion_motion is explicitly enabled again.",
                        PropertyList(), [this](const PropertyList&) -> ToolResult {
                            Stop();
                            return GetState();
@@ -336,7 +550,8 @@ private:
         server.AddTool(
             "self.motor.set_speed",
             "Set motor PWM speed 0..100 percent (tốc độ). 0 stops. While moving, applies "
-            "immediately without extending duration. While stopped, only saves speed for the next "
+            "immediately to manual moves without extending duration; cancels an emotion gesture. "
+            "While stopped, only saves speed for the next "
             "movement; never starts motion. This is not measured wheel speed.",
             PropertyList({Property("speed_percent", kPropertyTypeInteger, 0, 100)}),
             [this](const PropertyList& properties) -> ToolResult {
@@ -347,6 +562,16 @@ private:
                        "remaining time and hardware error. No encoder feedback.",
                        PropertyList(),
                        [this](const PropertyList&) -> ToolResult { return GetState(); });
+        server.AddTool(
+            "self.motor.set_emotion_motion",
+            "Enable/disable short automatic wheel gestures while the robot speaks "
+            "(bật/tắt chuyển động theo cảm xúc). Enabling waits for a fresh expression; "
+            "does not start motors immediately. Stop disables this feature. Defaults to enabled "
+            "after reboot; not persisted. Requires a RoboEyes display variant.",
+            PropertyList({Property("enabled", kPropertyTypeBoolean)}),
+            [this](const PropertyList& properties) -> ToolResult {
+                return SetEmotionEnabled(properties["enabled"].value<bool>());
+            });
     }
 };
 
@@ -356,4 +581,8 @@ void InitializeL298nController() {
     // Singleton and tool callbacks live for the entire firmware lifetime.
     L298nController::Instance();
     ESP_ERROR_CHECK(esp_register_shutdown_handler([]() { L298nController::Instance().Stop(); }));
+}
+
+void UpdateL298nEmotion(const char* emotion, bool speaking) {
+    L298nController::Instance().UpdateEmotion(emotion, speaking);
 }
