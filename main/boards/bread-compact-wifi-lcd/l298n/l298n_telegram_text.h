@@ -8,7 +8,7 @@ namespace L298nTelegramText {
 
 inline constexpr char kDivider[] = "━━━━━━━━━━━━━━━━";
 
-inline constexpr char kStatusHeader[] = "<b>🤖 XIAOZHI ROBOT</b>";
+inline constexpr char kStatusHeader[] = "<b>🤖 XiaoMin ROBOT</b>";
 inline constexpr char kSystemSection[] = "<b>🧠 HỆ THỐNG</b>";
 inline constexpr char kMotorSection[] = "<b>🚗 ĐỘNG CƠ</b>";
 inline constexpr char kNetworkSection[] = "<b>📶 KẾT NỐI</b>";
@@ -81,28 +81,28 @@ inline constexpr char kMotionRight[] = "↪️ Xoay phải";
 inline constexpr char kMotionStopped[] = "⏹️ Đứng yên";
 
 inline constexpr char kMenu[] =
-    "<b>🤖 XIAOZHI ROBOT</b>\n"
+    "<b>🤖 XiaoMin ROBOT</b>\n"
     "━━━━━━━━━━━━━━━━\n"
     "<b>📋 DANH SÁCH LỆNH</b>\n\n"
-    "🎙️ /wake — Đánh thức robot để trò chuyện\n"
+    "🎙️ /wake — Đánh thức XiaoMin để trò chuyện\n"
     "⚙️ /speed — Xem tốc độ; /speed 50 — Đặt PWM 50%\n"
-    "🔎 /status — Xem trạng thái robot\n"
+    "🔎 /status — Xem trạng thái XiaoMin\n"
     "🌐 /web — Mở trang điều khiển xe\n"
     "📖 /menu — Hiển thị menu này\n\n"
-    "<i>Sau khi đánh thức, hãy nói vào mic trên robot. Điều khiển xe thực hiện trên trang web "
+    "<i>Sau khi đánh thức, hãy nói vào mic trên XiaoMin. Điều khiển xe thực hiện trên trang web "
     "hoặc bằng giọng nói.</i>";
 
 inline constexpr char kWakeRequested[] =
-    "🎙️ Đã gửi yêu cầu đánh thức. Chờ robot chuyển sang lắng nghe rồi nói vào mic trên robot.\n"
-    "Gửi /status để kiểm tra nếu robot chưa phản hồi.";
+    "🎙️ Đã gửi yêu cầu đánh thức. Chờ XiaoMin chuyển sang lắng nghe rồi nói vào mic trên XiaoMin.\n"
+    "Gửi /status để kiểm tra nếu XiaoMin chưa phản hồi.";
 inline constexpr char kWakeAlreadyListening[] =
-    "👂 Robot đang lắng nghe. Bạn có thể nói vào mic trên robot.";
+    "👂 XiaoMin đang lắng nghe. Bạn có thể nói vào mic trên XiaoMin.";
 inline constexpr char kWakeConnecting[] =
-    "⏳ Robot đang kết nối máy chủ. Hãy chờ robot chuyển sang lắng nghe.";
+    "⏳ XiaoMin đang kết nối máy chủ. Hãy chờ XiaoMin chuyển sang lắng nghe.";
 inline constexpr char kWakeSpeaking[] =
-    "🗣️ Robot đang nói. Hãy chờ robot nói xong và chuyển sang lắng nghe.";
+    "🗣️ XiaoMin đang nói. Hãy chờ XiaoMin nói xong và chuyển sang lắng nghe.";
 inline constexpr char kWakeUnavailable[] =
-    "⚠️ Robot chưa sẵn sàng để đánh thức. Gửi /status để xem trạng thái và thử lại khi robot sẵn "
+    "⚠️ XiaoMin chưa sẵn sàng để đánh thức. Gửi /status để xem trạng thái và thử lại khi XiaoMin sẵn "
     "sàng.";
 
 inline constexpr char kSpeedCurrentPrefix[] = "⚙️ Tốc độ đã đặt: ";
@@ -128,12 +128,12 @@ inline constexpr char kWebReadyHeader[] =
     "━━━━━━━━━━━━━━━━\n"
     "✅ Trang điều khiển đã sẵn sàng.\n\n";
 inline constexpr char kWebReadyFooter[] =
-    "\n\n<i>Thiết bị mở link cần truy cập được cùng mạng Wi-Fi hoặc hotspot với robot.</i>";
+    "\n\n<i>Thiết bị mở link cần truy cập được cùng mạng Wi-Fi hoặc hotspot với XiaoMin.</i>";
 inline constexpr char kWebWifiDisconnected[] =
     "<b>🌐 ĐIỀU KHIỂN XE</b>\n"
     "━━━━━━━━━━━━━━━━\n"
-    "❌ Robot đã mất kết nối Wi-Fi.\n\n"
-    "Hãy chờ robot kết nối lại rồi gửi /web lần nữa.";
+    "❌ XiaoMin đã mất kết nối Wi-Fi.\n\n"
+    "Hãy chờ XiaoMin kết nối lại rồi gửi /web lần nữa.";
 inline constexpr char kWebServerUnavailable[] =
     "<b>🌐 ĐIỀU KHIỂN XE</b>\n"
     "━━━━━━━━━━━━━━━━\n"
@@ -141,15 +141,15 @@ inline constexpr char kWebServerUnavailable[] =
     "Vui lòng thử lại sau vài giây hoặc kiểm tra log <code>L298nWeb</code>.";
 
 inline constexpr char kBootHeader[] =
-    "<b>🚀 XIAOZHI ĐÃ SẴN SÀNG</b>\n"
+    "<b>🚀 XiaoMin ĐÃ SẴN SÀNG</b>\n"
     "━━━━━━━━━━━━━━━━\n"
-    "✅ Robot đã khởi động và kết nối Wi-Fi.\n";
+    "✅ XiaoMin đã khởi động và kết nối Wi-Fi.\n";
 inline constexpr char kIpChangedHeader[] =
-    "<b>🔄 ĐỊA CHỈ ROBOT ĐÃ THAY ĐỔI</b>\n"
+    "<b>🔄 ĐỊA CHỈ XiaoMin ROBOT ĐÃ THAY ĐỔI</b>\n"
     "━━━━━━━━━━━━━━━━\n"
-    "✅ Robot đã kết nối lại mạng với địa chỉ mới.\n";
+    "✅ XiaoMin Robot đã kết nối lại mạng với địa chỉ mới.\n";
 inline constexpr char kBootFooter[] =
-    "\n\nGửi /status để xem tình trạng robot hoặc /menu để xem các lệnh.";
+    "\n\nGửi /status để xem tình trạng XiaoMin hoặc /menu để xem các lệnh.";
 
 inline constexpr char kUnknownCommand[] =
     "<b>❓ LỆNH CHƯA ĐƯỢC HỖ TRỢ</b>\n"
