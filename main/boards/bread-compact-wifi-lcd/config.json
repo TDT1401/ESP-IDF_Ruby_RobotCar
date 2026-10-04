@@ -20,6 +20,28 @@
                 "CONFIG_LCD_CUSTOM=y",
                 "CONFIG_BREAD_COMPACT_WIFI_LCD_ST7735_80X160=y"
             ]
+        },
+        {
+            "name": "bread-compact-wifi-lcd-l298n",
+            "sdkconfig_append": [
+                "CONFIG_LCD_ST7789_240X320=y",
+                "CONFIG_BREAD_COMPACT_WIFI_LCD_L298N=y"
+            ]
+        },
+        {
+            "name": "bread-compact-wifi-lcd-st7789-240x240-l298n",
+            "sdkconfig_append": [
+                "CONFIG_LCD_ST7789_240X240=y",
+                "CONFIG_BREAD_COMPACT_WIFI_LCD_L298N=y"
+            ]
+        },
+        {
+            "name": "bread-compact-wifi-lcd-st7735-80x160-l298n",
+            "sdkconfig_append": [
+                "CONFIG_LCD_CUSTOM=y",
+                "CONFIG_BREAD_COMPACT_WIFI_LCD_ST7735_80X160=y",
+                "CONFIG_BREAD_COMPACT_WIFI_LCD_L298N=y"
+            ]
         }
     ]
 }

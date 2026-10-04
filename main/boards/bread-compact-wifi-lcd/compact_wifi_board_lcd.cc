@@ -12,6 +12,10 @@
 #include "wifi_board.h"
 #include "wifi_manager.h"
 
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N
+#include "l298n/l298n_controller.h"
+#endif
+
 #include <driver/i2c_master.h>
 #include <driver/spi_common.h>
 #include <esp_err.h>
@@ -366,6 +370,9 @@ public:
         if (DISPLAY_BACKLIGHT_PIN != GPIO_NUM_NC) {
             GetBacklight()->RestoreBrightness();
         }
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N
+        InitializeL298nController();
+#endif
     }
 
     virtual Led* GetLed() override {

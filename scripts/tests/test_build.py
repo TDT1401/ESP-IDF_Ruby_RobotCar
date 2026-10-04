@@ -1201,6 +1201,44 @@ class BuildOptionTests(unittest.TestCase):
             {choice["value"] for choice in display["choices"]},
         )
 
+    def test_l298n_variants_preserve_display_and_resolve_board(self):
+        board = "bread-compact-wifi-lcd"
+        config = json.loads(
+            (ROOT / "main/boards" / board / "config.json").read_text(encoding="utf-8")
+        )
+        variants = {item["name"]: item for item in config["builds"]}
+        flag = "CONFIG_BREAD_COMPACT_WIFI_LCD_L298N=y"
+        motor_names = {name for name in variants if name.endswith("-l298n")}
+        self.assertEqual(motor_names, {
+            "bread-compact-wifi-lcd-l298n",
+            "bread-compact-wifi-lcd-st7789-240x240-l298n",
+            "bread-compact-wifi-lcd-st7735-80x160-l298n",
+        })
+        discovered = {
+            item["name"] for item in build._collect_variants(idf_version=(6, 1, 0))
+            if item["board"] == board
+        }
+        self.assertTrue(motor_names <= discovered)
+        for name in motor_names:
+            with self.subTest(name=name):
+                motor = variants[name]
+                original = variants[name.removesuffix("-l298n")]
+                self.assertEqual(
+                    set(motor["sdkconfig_append"]),
+                    set(original["sdkconfig_append"]) | {flag},
+                )
+                self.assertNotIn(flag, original["sdkconfig_append"])
+                self.assertEqual(
+                    build._resolve_board_config(
+                        board, config["target"], motor["sdkconfig_append"], variant_name=name
+                    ),
+                    "CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI_LCD",
+                )
+                with self.assertRaises(ValueError):
+                    build._resolve_board_config(
+                        board, "esp32c3", motor["sdkconfig_append"], variant_name=name
+                    )
+
     def test_bread_compact_nt26_supports_sh1106(self):
         board_dir = ROOT / "main/boards/bread-compact-nt26"
         config_header = (board_dir / "config.h").read_text(encoding="utf-8")

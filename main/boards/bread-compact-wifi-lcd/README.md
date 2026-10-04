@@ -9,6 +9,11 @@ MAX98357A I2S amplifier. Select the build variant for the connected TFT:
 | `bread-compact-wifi-lcd-st7789-240x240` | 1.54-inch ST7789 240x240 |
 | `bread-compact-wifi-lcd-st7735-80x160` | 0.96-inch ST7735S 80x160 |
 
+Optional L298N motor variants append `-l298n` to each name above. See
+[L298N wiring, voice commands and validation](L298N.md). Motor control is
+disabled in the original variants; the motor variants keep the same audio,
+display, flash and partition configuration.
+
 ## Wiring
 
 All modules must share ground.
@@ -38,6 +43,33 @@ All modules must share ground.
 Leave the MAX98357A `SD` and `GAIN` pins unconnected initially. Connect the
 speaker only across the amplifier `+` and `-` outputs; neither speaker terminal
 goes to ground.
+
+### Chân kết nối L298N (motor trái/phải)
+
+Áp dụng cho các biến thể firmware có hậu tố `-l298n`. Số GPIO dưới đây là
+số tín hiệu trên ESP32-S3, không phải số thứ tự chân trên hàng cắm.
+
+| Kênh | Chân L298N | Chân ESP32-S3 | Chức năng |
+| --- | --- | --- | --- |
+| Trái | ENA | GPIO8 | PWM điều chỉnh tốc độ motor trái |
+| Trái | IN1 | GPIO9 | Điều khiển chiều motor trái |
+| Trái | IN2 | GPIO10 | Điều khiển chiều motor trái |
+| Phải | IN3 | GPIO11 | Điều khiển chiều motor phải |
+| Phải | IN4 | GPIO12 | Điều khiển chiều motor phải |
+| Phải | ENB | GPIO13 | PWM điều chỉnh tốc độ motor phải |
+| Chung | GND | GND | Nối chung với âm nguồn motor |
+
+- **OUT1/OUT2** nối hai dây motor trái; **OUT3/OUT4** nối hai dây motor phải.
+- **Tháo jumper ENA và ENB trước khi nối GPIO** để điều khiển tốc độ bằng PWM.
+  Không nhầm với jumper nguồn `5V-EN`; cấu hình jumper nguồn theo module đang dùng.
+- Cấp nguồn motor phù hợp vào đầu nguồn công suất L298N, không lấy từ chân
+  3V3 ESP32. Không đưa 5V vào GPIO.
+- Nên kéo ENA và ENB xuống GND bằng điện trở **10 kΩ cho mỗi chân** để giữ
+  motor tắt trong lúc khởi động/reset.
+- Nếu một motor quay ngược chiều mong muốn, ngắt nguồn rồi đổi hai dây motor
+  đó, hoặc dùng tùy chọn đảo chiều trái/phải trong menuconfig.
+
+Chi tiết lệnh giọng nói và cách kiểm tra: [L298N.md](L298N.md).
 
 ## Build
 

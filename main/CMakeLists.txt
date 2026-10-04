@@ -894,6 +894,10 @@ file(GLOB BOARD_SOURCES
 )
 list(APPEND SOURCES ${BOARD_SOURCES})
 
+if(CONFIG_BREAD_COMPACT_WIFI_LCD_L298N)
+    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/l298n/l298n_controller.cc")
+endif()
+
 # Select one audio engine for each chip family
 if(CONFIG_IDF_TARGET_ESP32S3 OR CONFIG_IDF_TARGET_ESP32P4 OR CONFIG_IDF_TARGET_ESP32S31)
     list(APPEND SOURCES "audio/engines/afe_audio_engine.cc")
@@ -1109,6 +1113,12 @@ idf_component_register(SRCS ${SOURCES}
 # If BOARD_NAME is empty, use BOARD_TYPE
 if(NOT BOARD_NAME)
     set(BOARD_NAME ${BOARD_TYPE})
+endif()
+# Keep the motor hardware variant distinct even when enabled through menuconfig.
+if(CONFIG_BREAD_COMPACT_WIFI_LCD_L298N AND NOT BOARD_NAME MATCHES "-l298n$")
+    set(BOARD_NAME "${BOARD_NAME}-l298n")
+elseif(NOT CMAKE_BUILD_EARLY_EXPANSION AND NOT CONFIG_BREAD_COMPACT_WIFI_LCD_L298N AND BOARD_NAME MATCHES "-l298n$")
+    message(FATAL_ERROR "A -l298n BOARD_NAME requires CONFIG_BREAD_COMPACT_WIFI_LCD_L298N")
 endif()
 if(NOT CMAKE_BUILD_EARLY_EXPANSION AND NOT BOARD_NAME MATCHES "^[a-z0-9.-]+$")
     message(FATAL_ERROR

@@ -781,6 +781,24 @@ config BREAD_COMPACT_WIFI_LCD_ST7735_80X160
     depends on BOARD_TYPE_BREAD_COMPACT_WIFI_LCD
     default y if LCD_CUSTOM
 
+config BREAD_COMPACT_WIFI_LCD_L298N
+    bool "L298N differential-drive motors on GPIO8-13"
+    depends on BOARD_TYPE_BREAD_COMPACT_WIFI_LCD && IDF_TARGET_ESP32S3
+    default n
+    help
+        Adds timed movement, speed and stop MCP tools. Select a release
+        variant ending in -l298n. Remove the ENA/ENB jumpers before wiring.
+
+config BREAD_COMPACT_WIFI_LCD_L298N_INVERT_LEFT
+    bool "Invert left motor direction"
+    depends on BREAD_COMPACT_WIFI_LCD_L298N
+    default n
+
+config BREAD_COMPACT_WIFI_LCD_L298N_INVERT_RIGHT
+    bool "Invert right motor direction"
+    depends on BREAD_COMPACT_WIFI_LCD_L298N
+    default n
+
 choice WK_BOARD_TYPE
     depends on BOARD_TYPE_WK_ESP32S3_DEV
     prompt "BOARD_TYPE_WK_ESP32S3_DEV"
