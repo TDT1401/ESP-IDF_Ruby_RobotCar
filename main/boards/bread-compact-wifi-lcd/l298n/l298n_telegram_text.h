@@ -84,11 +84,44 @@ inline constexpr char kMenu[] =
     "<b>🤖 XIAOZHI ROBOT</b>\n"
     "━━━━━━━━━━━━━━━━\n"
     "<b>📋 DANH SÁCH LỆNH</b>\n\n"
+    "🎙️ /wake — Đánh thức robot để trò chuyện\n"
+    "⚙️ /speed — Xem tốc độ; /speed 50 — Đặt PWM 50%\n"
     "🔎 /status — Xem trạng thái robot\n"
     "🌐 /web — Mở trang điều khiển xe\n"
     "📖 /menu — Hiển thị menu này\n\n"
-    "<i>Telegram chỉ dùng để xem thông tin. Điều khiển xe thực hiện trên trang web hoặc bằng "
-    "giọng nói.</i>";
+    "<i>Sau khi đánh thức, hãy nói vào mic trên robot. Điều khiển xe thực hiện trên trang web "
+    "hoặc bằng giọng nói.</i>";
+
+inline constexpr char kWakeRequested[] =
+    "🎙️ Đã gửi yêu cầu đánh thức. Chờ robot chuyển sang lắng nghe rồi nói vào mic trên robot.\n"
+    "Gửi /status để kiểm tra nếu robot chưa phản hồi.";
+inline constexpr char kWakeAlreadyListening[] =
+    "👂 Robot đang lắng nghe. Bạn có thể nói vào mic trên robot.";
+inline constexpr char kWakeConnecting[] =
+    "⏳ Robot đang kết nối máy chủ. Hãy chờ robot chuyển sang lắng nghe.";
+inline constexpr char kWakeSpeaking[] =
+    "🗣️ Robot đang nói. Hãy chờ robot nói xong và chuyển sang lắng nghe.";
+inline constexpr char kWakeUnavailable[] =
+    "⚠️ Robot chưa sẵn sàng để đánh thức. Gửi /status để xem trạng thái và thử lại khi robot sẵn "
+    "sàng.";
+
+inline constexpr char kSpeedCurrentPrefix[] = "⚙️ Tốc độ đã đặt: ";
+inline constexpr char kSpeedUsage[] =
+    "Dùng <code>/speed N</code> với N là số nguyên từ 0 đến 100, ví dụ <code>/speed 50</code>.\n"
+    "0 dừng motor khi ở chế độ giọng nói. Khi web đang giữ quyền, hãy bấm “Trả về giọng nói” "
+    "trước.\n"
+    "Đây là mức PWM, không phải tốc độ đo từ bánh xe. Cài đặt chỉ giữ đến khi khởi động lại.";
+inline constexpr char kSpeedSetPrefix[] = "✅ Đã đặt tốc độ motor (PWM): ";
+inline constexpr char kSpeedSetFooter[] =
+    "Áp dụng ngay cho chuyển động giọng nói đang chạy, không kéo dài thời gian chạy. "
+    "Motor đang dừng sẽ không tự chạy; mức 0 dừng motor.\n"
+    "Cài đặt chỉ giữ đến khi khởi động lại.";
+inline constexpr char kSpeedWebBusy[] =
+    "🎮 Web đang giữ quyền điều khiển motor. Hãy bấm “Trả về giọng nói” trên web rồi gửi lại "
+    "/speed.";
+inline constexpr char kSpeedHardwareError[] =
+    "❌ Có lỗi phần cứng motor khi đặt tốc độ. Gửi /status để kiểm tra, kiểm tra dây nối và khởi "
+    "động lại.";
 
 inline constexpr char kWebReadyHeader[] =
     "<b>🌐 ĐIỀU KHIỂN XE</b>\n"
@@ -125,6 +158,6 @@ inline constexpr char kUnknownCommand[] =
 
 // Telegram reply keyboard. Keep this as valid JSON.
 inline constexpr char kKeyboardJson[] =
-    R"({"keyboard":[["/status","/web"],["/menu"]],"resize_keyboard":true})";
+    R"({"keyboard":[["/wake","/speed"],["/speed 25","/speed 50","/speed 75"],["/status","/web"],["/menu"]],"resize_keyboard":true})";
 
 }  // namespace L298nTelegramText

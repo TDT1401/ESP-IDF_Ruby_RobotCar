@@ -399,12 +399,73 @@ private:
         return body && Request("sendMessage", body.get()) != nullptr;
     }
 
+    void HandleWake() {
+        auto& app = Application::GetInstance();
+        switch (app.GetDeviceState()) {
+            case kDeviceStateIdle:
+                app.Schedule([]() {
+                    auto& app = Application::GetInstance();
+                    // Recheck on the main task: repeated requests must never toggle listening off.
+                    // WakeWordInvoke also rechecks idle before executing the deferred wake-up.
+                    if (app.GetDeviceState() == kDeviceStateIdle)
+                        app.WakeWordInvoke("Hi ESP");
+                });
+                Send(L298nTelegramText::kWakeRequested, true);
+                break;
+            case kDeviceStateListening:
+                Send(L298nTelegramText::kWakeAlreadyListening, true);
+                break;
+            case kDeviceStateConnecting:
+                Send(L298nTelegramText::kWakeConnecting, true);
+                break;
+            case kDeviceStateSpeaking:
+                Send(L298nTelegramText::kWakeSpeaking, true);
+                break;
+            default:
+                Send(L298nTelegramText::kWakeUnavailable, true);
+                break;
+        }
+    }
+
+    void HandleSpeed(const std::string& argument) {
+        if (argument.empty()) {
+            const auto motor = GetL298nMotorStatus();
+            Send(std::string(L298nTelegramText::kSpeedCurrentPrefix) + "<b>" +
+                     std::to_string(motor.speed_percent) + "%</b>\n" +
+                     L298nTelegramText::kActivePwmLabel + "<b>" +
+                     std::to_string(motor.active_speed_percent) + "%</b>\n\n" +
+                     L298nTelegramText::kSpeedUsage,
+                 true);
+            return;
+        }
+        // Accept one integer only; reject signs, decimals, extra arguments and overflow.
+        if (argument.size() > 3 || argument.find_first_not_of("0123456789") != std::string::npos) {
+            Send(L298nTelegramText::kSpeedUsage, true);
+            return;
+        }
+        const int speed = std::atoi(argument.c_str());
+        if (speed > 100) {
+            Send(L298nTelegramText::kSpeedUsage, true);
+            return;
+        }
+        const auto error = SetL298nMotorSpeed(speed);
+        if (error == ESP_ERR_INVALID_STATE) {
+            Send(L298nTelegramText::kSpeedWebBusy, true);
+        } else if (error != ESP_OK) {
+            Send(L298nTelegramText::kSpeedHardwareError, true);
+        } else {
+            Send(std::string(L298nTelegramText::kSpeedSetPrefix) + "<b>" + std::to_string(speed) +
+                     "%</b>\n" + L298nTelegramText::kSpeedSetFooter,
+                 true);
+        }
+    }
+
     void Handle(const cJSON* update) {
         const auto* message = cJSON_GetObjectItemCaseSensitive(update, "message");
         int64_t chat;
         if (!ReadId(cJSON_GetObjectItemCaseSensitive(message, "chat"), "id", chat) ||
             chat != chat_id_)
-            return;  // Only the configured private chat/group can request robot status.
+            return;  // Only the configured private chat/group can send robot commands.
         const auto* text = cJSON_GetObjectItemCaseSensitive(message, "text");
         if (!cJSON_IsString(text) || strlen(text->valuestring) > 128)
             return;
@@ -414,8 +475,14 @@ private:
             return;
         command.erase(0, begin);
         const auto end = command.find_first_of(" \r\n\t");
-        if (end != std::string::npos)
+        std::string argument;
+        if (end != std::string::npos) {
+            const auto argument_begin = command.find_first_not_of(" \r\n\t", end);
+            if (argument_begin != std::string::npos)
+                argument = command.substr(argument_begin,
+                                          command.find_last_not_of(" \r\n\t") - argument_begin + 1);
             command.resize(end);
+        }
         command = LowerAscii(command);
         const auto at = command.find('@');
         if (at != std::string::npos) {
@@ -427,11 +494,15 @@ private:
             Send(StatusMessage(), true);
         else if (command == "/web")
             Send(WebMessage(), true);
+        else if (command == "/wake")
+            HandleWake();
+        else if (command == "/speed")
+            HandleSpeed(argument);
         else if (command == "/start" || command == "/menu" || command == "/help")
             Send(L298nTelegramText::kMenu, true);
         else if (!command.empty() && command.front() == '/')
             Send(L298nTelegramText::kUnknownCommand, true);
-        // Other chat messages and unsupported commands are ignored; Telegram never drives motors.
+        // Plain chat messages are ignored; setting speed never starts motor movement.
     }
 
     bool Poll(bool discard) {

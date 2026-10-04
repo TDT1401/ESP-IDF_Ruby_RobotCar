@@ -14,15 +14,24 @@ chạy song song với trợ lý giọng nói và trang web điều khiển xe.
   Wi-Fi/RSSI, heap trống, chế độ motor web/giọng nói, hướng lệnh, chạy/chờ/dừng,
   PWM đang đặt, tốc độ giọng nói, bật/tắt chuyển động cảm xúc và lỗi GPIO/PWM.
 - `/web`: lấy link web hiện tại.
-- `/start`, `/menu`, `/help`: trợ giúp và bàn phím Telegram có nút `/status`,
-  `/web`, `/menu`.
+- `/wake`: đánh thức robot đang chờ để trò chuyện qua mic trên robot. Nếu đang
+  nghe/nói/kết nối, chỉ báo trạng thái, không tắt cuộc trò chuyện.
+- `/speed`: xem tốc độ đã đặt và PWM đang chạy; `/speed 50`: đặt PWM 50%.
+  Nhận đúng một số nguyên 0–100, có nút chọn nhanh 25%, 50%, 75%.
+  Dùng chung tốc độ với lệnh giọng nói: áp dụng ngay khi chạy, không kéo dài
+  thời gian chạy và không tự khởi động motor đang dừng. `/speed 0` dừng motor.
+  Việc đặt tốc độ hủy chuyển động cảm xúc hiện tại như lệnh đặt tốc độ bằng giọng nói.
+  Nếu web đang giữ quyền, lệnh bị từ chối (kể cả mức 0); bấm **Trả về giọng nói**
+  trên web trước. Không thay đổi thanh tốc độ riêng của web.
+  Cài đặt chỉ giữ trong RAM, khởi động lại trở về mức mặc định 75%.
+- `/start`, `/menu`, `/help`: trợ giúp và bàn phím Telegram chứa các lệnh trên.
 - Nhận lệnh trong chat riêng hoặc nhóm có đúng Chat ID cấu hình. Lệnh gửi kèm
   tên bot, ví dụ `/status@TenBotCuaBan`, chỉ được xử lý nếu đúng bot này.
 
 Trạng thái motor là **lệnh/PWM của firmware**, không phải phản hồi encoder.
 Robot này chưa có cảm biến khoảng cách, theo người hay tránh vật cản, nên
-không báo các mục đó như mẫu Kylio. Đợt tích hợp này chỉ có thông báo và đọc
-trạng thái; các lệnh Telegram không chạy/dừng motor hoặc giành quyền điều khiển web.
+không báo các mục đó như mẫu Kylio. Telegram có thể đặt tốc độ và dừng bằng mức 0
+ở chế độ giọng nói; không ra lệnh tiến/lùi/xoay hoặc giành quyền điều khiển web.
 
 Telegram cần Internet trên mạng/hotspot cấp cho robot. Link web là **IP nội bộ**,
 không phải đường hầm truy cập từ xa. Người mở link cần truy cập được cùng mạng
@@ -91,7 +100,8 @@ nhận bot, `sendMessage` gửi thông báo, `getUpdates` long polling 10 giây 
 lệnh. Mỗi lần chỉ đọc một update, giới hạn response 8 KiB; update quá lớn được
 bỏ qua khi đọc được ID ở phần đầu. Chỉ đọc trường `message.text` trong chat
 được phép, không nhận lệnh qua caption, tin đã sửa hoặc chat khác. Trong một
-nhóm được cấu hình, mọi thành viên gửi lệnh cho bot đều có thể xem trạng thái.
+nhóm được cấu hình, mọi thành viên gửi lệnh cho bot đều có thể xem trạng thái,
+đánh thức và đặt tốc độ motor.
 
 Task riêng có độ ưu tiên thấp và HTTP timeout 15 giây. Không gọi HTTPS trong
 callback Wi-Fi, task audio, main loop hoặc timer motor. Kết nối HTTPS được tái
@@ -126,6 +136,13 @@ hoạt động khi bot đã cấu hình webhook; module không tự xóa webhook
    giả khi chỉ nối lại cùng IP.
 6. Khởi động lại: nhận một thông báo boot mới, không trả lời hàng loạt tin cũ.
    Kiểm tra âm thanh/mắt/web khi Telegram nhận liên tiếp vài lệnh.
+7. Gửi `/speed`, `/speed 50`, `/speed@TenBotCuaBan 75`: tốc độ đã đặt cập nhật
+   trên `/status`, motor đang dừng không tự chạy. Thử `0`, `100`, `-1`, `101`,
+   `50.5`, `50 abc` và một chuỗi số rất dài; chỉ số nguyên trong 0–100 được nhận.
+8. Khi chạy bằng giọng nói, đổi tốc độ: PWM đổi, thời hạn dừng không kéo dài;
+   `/speed 0` dừng và không khởi động lại chuyển động cũ khi đặt tốc độ khác.
+   Khi web giữ quyền, `/speed 50` và `/speed 0` đều bị từ chối, không đổi PWM web.
+   Trả quyền trên web rồi thử lại. Khởi động lại và kiểm tra tốc độ mặc định 75%.
 
 Log lỗi có tag `L298nTelegram` và chỉ ghi tên phương thức, HTTP status, mã lỗi;
 không ghi Token hoặc nội dung tin nhắn:

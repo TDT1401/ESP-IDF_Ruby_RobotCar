@@ -123,6 +123,27 @@ public:
         StopLocked();
     }
 
+    esp_err_t SetSpeedPercent(int speed) {
+        if (speed < 0 || speed > 100)
+            return ESP_ERR_INVALID_ARG;
+        std::lock_guard lock(mutex_);
+        if (web_manual_)
+            return ESP_ERR_INVALID_STATE;
+        manual_override_ = true;
+        pending_emotion_ = Emotion::kNone;
+        if (gesture_steps_ != nullptr)
+            StopLocked();
+        speed_percent_ = speed;
+        if (speed == 0 || (motion_ != Motion::kStop && esp_timer_get_time() >= deadline_us_)) {
+            StopLocked();
+        } else if (moving_ && !ApplySpeedLocked()) {
+            StopLocked();
+        }
+        // Changing speed never extends the deadline or restarts stopped motors.
+        // Keep hardware faults distinct from argument/ownership errors; Snapshot retains details.
+        return fault_ == ESP_OK ? ESP_OK : ESP_FAIL;
+    }
+
     L298nMotorStatus Snapshot() {
         std::lock_guard lock(mutex_);
         return {MotionName(motion_),
@@ -567,28 +588,16 @@ private:
     }
 
     ToolResult SetSpeed(int speed) {
-        if (speed < 0 || speed > 100) {
+        const auto error = SetSpeedPercent(speed);
+        if (error == ESP_ERR_INVALID_ARG) {
             return std::unexpected("Use speed_percent 0..100.");
         }
-        {
-            std::lock_guard lock(mutex_);
-            if (web_manual_)
-                return std::unexpected(
-                    "Web manual control is active; release it on the web page first.");
-            manual_override_ = true;
-            pending_emotion_ = Emotion::kNone;
-            if (gesture_steps_ != nullptr)
-                StopLocked();
-            speed_percent_ = speed;
-            if (speed == 0 || (motion_ != Motion::kStop && esp_timer_get_time() >= deadline_us_)) {
-                StopLocked();
-            } else if (moving_ && !ApplySpeedLocked()) {
-                StopLocked();
-            }
-            // Changing speed never extends the deadline or restarts stopped motors.
-            if (fault_ != ESP_OK) {
-                return std::unexpected("Motor hardware error; inspect wiring and restart.");
-            }
+        if (error == ESP_ERR_INVALID_STATE) {
+            return std::unexpected(
+                "Web manual control is active; release it on the web page first.");
+        }
+        if (error != ESP_OK) {
+            return std::unexpected("Motor hardware error; inspect wiring and restart.");
         }
         return GetState();
     }
@@ -749,3 +758,7 @@ void SetL298nWebConnected(bool connected) {
 }
 
 L298nMotorStatus GetL298nMotorStatus() { return L298nController::Instance().Snapshot(); }
+
+esp_err_t SetL298nMotorSpeed(int speed_percent) {
+    return L298nController::Instance().SetSpeedPercent(speed_percent);
+}
