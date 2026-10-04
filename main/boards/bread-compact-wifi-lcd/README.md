@@ -69,9 +69,45 @@ số tín hiệu trên ESP32-S3, không phải số thứ tự chân trên hàng
 - Nếu một motor quay ngược chiều mong muốn, ngắt nguồn rồi đổi hai dây motor
   đó, hoặc dùng tùy chọn đảo chiều trái/phải trong menuconfig.
 
+Mặc định khi chưa thay đổi tốc độ bằng giọng nói:
+
+| Lệnh | Tốc độ PWM | Thời gian chạy |
+| --- | --- | --- |
+| Tiến / lùi | 75% | 1 giây |
+| Xoay trái / xoay phải | 75% | 0,4 giây (400 ms) |
+
+Chỉ cần nói “xoay phải”, “xoay trái”, “tiến lên” hoặc “lùi lại”; không cần đọc
+tốc độ và thời gian. Khi nói rõ thông số, firmware ưu tiên thông số đó.
+Tốc độ đã đổi bằng giọng nói được dùng chung cho các lệnh tiếp theo đến khi
+đổi lại hoặc khởi động lại; khởi động lại trở về 75%. Thời gian chỉ định chỉ
+áp dụng cho lệnh đó; lệnh sau không nêu thời gian sẽ dùng mặc định trong bảng.
+
 Chi tiết lệnh giọng nói và cách kiểm tra: [L298N.md](L298N.md).
 
 ## Build
+
+### Câu đánh thức “Hi ESP” cho robot L298N
+
+Sau khi mở môi trường ESP-IDF, tự chạy lệnh sau từ thư mục gốc dự án để build
+bản ST7789 240x240 + L298N với câu đánh thức **“Hi ESP”**:
+
+```sh
+python main/boards/bread-compact-wifi-lcd/build_hi_esp.py
+```
+
+Script chuyển tiếp sang `scripts/build.py` với biến thể
+`bread-compact-wifi-lcd-st7789-240x240-l298n` và `--wake-word wn9_hiesp`.
+Tham số này chọn mô hình “Hi ESP” thay cho “Ni hao XiaoZhi”. Câu đánh thức
+chỉ thay đổi trên robot sau khi bạn build và flash firmware/assets mới;
+`idf.py build` với cấu hình cũ không tự chọn mô hình mới.
+
+Để tự gọi lệnh build chuẩn, dùng:
+
+```sh
+python scripts/build.py bread-compact-wifi-lcd --name bread-compact-wifi-lcd-st7789-240x240-l298n --wake-word wn9_hiesp
+```
+
+### Original display variants (without motors)
 
 ```sh
 python scripts/build.py bread-compact-wifi-lcd --name bread-compact-wifi-lcd-st7789-240x240

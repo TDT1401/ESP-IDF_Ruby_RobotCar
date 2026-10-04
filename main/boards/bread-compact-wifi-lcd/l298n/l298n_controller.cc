@@ -21,7 +21,9 @@ constexpr auto kMode = LEDC_LOW_SPEED_MODE;
 constexpr auto kTimer = LEDC_TIMER_1;  // LCD backlight owns timer/channel 0.
 constexpr auto kLeftChannel = LEDC_CHANNEL_1;
 constexpr auto kRightChannel = LEDC_CHANNEL_2;
+constexpr int kDefaultSpeedPercent = 75;
 constexpr int kDefaultDurationMs = 1000;
+constexpr int kDefaultTurnDurationMs = 400;
 constexpr int kMaxDurationMs = 10000;
 constexpr int64_t kDirectionDelayUs = 50000;
 constexpr int64_t kTickUs = 10000;
@@ -66,7 +68,7 @@ private:
     bool sleep_lock_held_ = false;
 #endif
     Motion motion_ = Motion::kStop;
-    int speed_percent_ = 50;
+    int speed_percent_ = kDefaultSpeedPercent;
     int duration_ms_ = kDefaultDurationMs;
     int64_t start_at_us_ = 0;
     int64_t deadline_us_ = 0;
@@ -290,15 +292,23 @@ private:
         auto& server = McpServer::GetInstance();
         const auto add_move = [this, &server](const char* name, const char* description,
                                               Motion motion) {
+            const int default_duration_ms = motion == Motion::kLeft || motion == Motion::kRight
+                                                ? kDefaultTurnDurationMs
+                                                : kDefaultDurationMs;
             server.AddTool(
                 name,
-                std::string(description) +
-                    " duration_ms: 100..10000 milliseconds, default 1000; 2 seconds = 2000. "
-                    "speed_percent: 0..100 PWM duty, -1 keeps current speed (initially 50). "
+                std::string(description) + " duration_ms: 100..10000 milliseconds, default " +
+                    std::to_string(default_duration_ms) +
+                    "; 2 seconds = 2000. "
+                    "speed_percent: 0..100 PWM duty, -1 keeps current speed (initially " +
+                    std::to_string(kDefaultSpeedPercent) +
+                    "). "
+                    "Omit duration_ms and speed_percent unless the user specifies them; "
+                    "use the firmware defaults instead of asking for these values. "
                     "Automatically stops locally. Replaces previous movement; does not queue. "
                     "Result confirms acceptance, not completion. Do not repeat unless asked.",
-                PropertyList({Property("duration_ms", kPropertyTypeInteger, kDefaultDurationMs, 100,
-                                       kMaxDurationMs),
+                PropertyList({Property("duration_ms", kPropertyTypeInteger, default_duration_ms,
+                                       100, kMaxDurationMs),
                               Property("speed_percent", kPropertyTypeInteger, -1, -1, 100)}),
                 [this, motion](const PropertyList& properties) -> ToolResult {
                     return Move(motion, properties);
