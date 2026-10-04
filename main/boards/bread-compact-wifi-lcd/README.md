@@ -20,6 +20,10 @@ Các bản `-l298n` có thêm trang web điều khiển xe 4 hướng tại
 bấm **Trả về giọng nói** khi xong. Xem [hướng dẫn web](L298N.md#web-control)
 về tự dừng khi mất kết nối và cách kiểm tra sau khi flash.
 
+Telegram tùy chọn cho các bản `-l298n`: báo khởi động kèm link web, nhận
+`/status`, `/web`, `/menu`. Xem [cấu hình Telegram](TELEGRAM.md); mặc định chưa
+bật cho đến khi bạn tạo file cấu hình riêng với Token bot và Chat ID.
+
 ## Wiring
 
 All modules must share ground.

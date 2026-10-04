@@ -14,6 +14,7 @@
 
 #ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N
 #include "l298n/l298n_controller.h"
+#include "l298n/l298n_telegram.h"
 #include "l298n/l298n_web_server.h"
 #endif
 
@@ -380,6 +381,7 @@ public:
         }
 #ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N
         InitializeL298nController();
+        InitializeL298nTelegram();
 #if defined(CONFIG_BREAD_COMPACT_WIFI_LCD_ST7735_80X160) || defined(CONFIG_LCD_ST7789_240X240)
         static_cast<RoboEyesDisplay*>(display_)->SetEmotionMotionCallback(UpdateL298nEmotion);
 #endif
@@ -411,11 +413,14 @@ public:
     void SetNetworkEventCallback(NetworkEventCallback callback) override {
         WifiBoard::SetNetworkEventCallback(
             [callback = std::move(callback)](NetworkEvent event, const std::string& data) {
-                if (event == NetworkEvent::Connected)
+                if (event == NetworkEvent::Connected) {
                     UpdateL298nWebNetwork(true);
-                else if (event == NetworkEvent::Disconnected ||
-                         event == NetworkEvent::WifiConfigModeEnter)
+                    UpdateL298nTelegramNetwork(true);
+                } else if (event == NetworkEvent::Disconnected ||
+                           event == NetworkEvent::WifiConfigModeEnter) {
                     UpdateL298nWebNetwork(false);
+                    UpdateL298nTelegramNetwork(false);
+                }
                 if (callback)
                     callback(event, data);
             });

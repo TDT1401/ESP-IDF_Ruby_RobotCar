@@ -18,3 +18,17 @@ esp_err_t BeginL298nWebControl(uint32_t* session);
 esp_err_t CommandL298nWebControl(uint32_t session, uint32_t sequence, L298nWebCommand command,
                                  int speed_percent);
 void SetL298nWebConnected(bool connected);
+
+// Read-only snapshot of commanded outputs, not encoder feedback.
+struct L298nMotorStatus {
+    const char* motion;
+    int speed_percent;
+    int active_speed_percent;
+    bool moving;
+    bool pending;
+    bool web_manual;
+    bool emotion_enabled;
+    bool gesture_active;
+    esp_err_t hardware_error;
+};
+L298nMotorStatus GetL298nMotorStatus();

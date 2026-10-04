@@ -897,6 +897,7 @@ list(APPEND SOURCES ${BOARD_SOURCES})
 if(CONFIG_BREAD_COMPACT_WIFI_LCD_L298N)
     list(APPEND SOURCES "boards/bread-compact-wifi-lcd/l298n/l298n_controller.cc")
     list(APPEND SOURCES "boards/bread-compact-wifi-lcd/l298n/l298n_web_server.cc")
+    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/l298n/l298n_telegram.cc")
 endif()
 
 # Select one audio engine for each chip family
@@ -1058,9 +1059,6 @@ if(CONFIG_IDF_TARGET_ESP32S3)
 endif()
 
 set(MAIN_PRIV_REQUIRES_EXTRA "")
-if(CONFIG_BREAD_COMPACT_WIFI_LCD_L298N)
-    list(APPEND MAIN_PRIV_REQUIRES_EXTRA esp_http_server)
-endif()
 if(BOARD_TYPE STREQUAL "m5stack-stick-s3")
     list(APPEND MAIN_PRIV_REQUIRES_EXTRA
         m5stack__m5pm1
@@ -1083,6 +1081,8 @@ if(CONFIG_BOARD_TYPE_ESP32_P4_FUNCTION_EV_BOARD)
         sdmmc
     )
 endif()
+# HTTP dependencies must be visible during early requirement expansion, before
+# CONFIG_* values are loaded. Keep only the board sources conditional above.
 idf_component_register(SRCS ${SOURCES}
                     EMBED_FILES ${LANG_SOUNDS} ${COMMON_SOUNDS}
                     INCLUDE_DIRS ${INCLUDE_DIRS}
@@ -1092,6 +1092,8 @@ idf_component_register(SRCS ${SOURCES}
                         esp_psram
                         esp_netif
                         esp_eth
+                        esp_http_server
+                        esp_http_client
                         esp_driver_gpio
                         esp_driver_uart
                         esp_driver_spi

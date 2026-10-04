@@ -123,6 +123,19 @@ public:
         StopLocked();
     }
 
+    L298nMotorStatus Snapshot() {
+        std::lock_guard lock(mutex_);
+        return {MotionName(motion_),
+                speed_percent_,
+                moving_ ? ActiveSpeedLocked() : 0,
+                moving_,
+                motion_ != Motion::kStop && !moving_,
+                web_manual_,
+                emotion_enabled_,
+                gesture_steps_ != nullptr,
+                fault_};
+    }
+
     void SetWebConnected(bool connected) {
         std::lock_guard lock(mutex_);
         web_connected_ = connected;
@@ -734,3 +747,5 @@ esp_err_t CommandL298nWebControl(uint32_t session, uint32_t sequence, L298nWebCo
 void SetL298nWebConnected(bool connected) {
     L298nController::Instance().SetWebConnected(connected);
 }
+
+L298nMotorStatus GetL298nMotorStatus() { return L298nController::Instance().Snapshot(); }
