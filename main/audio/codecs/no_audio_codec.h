@@ -6,10 +6,14 @@
 #include <driver/gpio.h>
 #include <driver/i2s_pdm.h>
 #include <mutex>
+#include <vector>
 
 class NoAudioCodec : public AudioCodec {
 protected:
     std::mutex data_if_mutex_;
+    // Input and output run on separate tasks, so keep independent reusable buffers.
+    std::vector<int32_t> read_buffer_;
+    std::vector<int32_t> write_buffer_;
 
     virtual int Write(const int16_t* data, int samples) override;
     virtual int Read(int16_t* dest, int samples) override;

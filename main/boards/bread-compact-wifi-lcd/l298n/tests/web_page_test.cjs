@@ -102,14 +102,14 @@ test('slow requests coalesce heartbeats; release is sent next', async () => {
   assert.equal(ui.requests.length,count+1);
 });
 
-test('backgrounding sends a newer stop; late response cannot resume control', async () => {
+test('backgrounding sends a newer release; late response cannot resume control', async () => {
   const ui = setup(); await claim(ui);
   let finish;
   ui.replyNext(() => new Promise(resolve => { finish = resolve; }));
   await ui.directions.f.emit('pointerdown');
   const oldSequence = lastCommand(ui).sequence;
   await ui.window.emit('blur');
-  assert.equal(lastCommand(ui).direction,'s');
+  assert.equal(lastCommand(ui).direction,'release');
   assert.ok(lastCommand(ui).sequence > oldSequence);
   assert.equal(ui.directions.f.disabled,true);
   finish({ok:true,json:async () => ({ok:true})}); await settle();
@@ -160,7 +160,7 @@ test('expired or failed requests disable driving and never auto-reclaim', async 
     if (response === 'timeout') for (const timer of ui.timers.values()) timer();
     await settle();
     assert.equal(ui.directions.f.disabled,true);
-    assert.equal(lastCommand(ui).direction,'s');
+    assert.equal(lastCommand(ui).direction,'release');
     const count = ui.requests.length;
     ui.heartbeat(); await settle();
     assert.equal(ui.requests.length,count);

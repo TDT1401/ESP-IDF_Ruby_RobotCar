@@ -13,43 +13,43 @@ Board ESP32-S3-N16R8, microphone I2S, MAX98357A và màn hình TFT SPI.
 
 Tất cả module phải dùng chung GND.
 
-| Chân module | Chân ESP32-S3 |
-| --- | --- |
-| Microphone VDD | 3V3 |
-| Microphone GND | GND |
-| Microphone WS | GPIO4 |
-| Microphone SCK | GPIO5 |
-| Microphone SD | GPIO6 |
-| Microphone L/R | GND |
-| MAX98357A VIN | 5V |
-| MAX98357A GND | GND |
-| MAX98357A DIN | GPIO7 |
-| MAX98357A BCLK | GPIO15 |
-| MAX98357A LRC | GPIO16 |
-| TFT GND | GND |
-| TFT VCC | 3V3 |
-| TFT SCL | GPIO21 |
-| TFT SDA | GPIO47 |
-| TFT RES | GPIO45 |
-| TFT DC | GPIO40 |
-| TFT CS | GPIO41 |
-| TFT BLK | GPIO42 |
+| Chân module    | Chân ESP32-S3 |
+| -------------- | ------------- |
+| Microphone VDD | 3V3           |
+| Microphone GND | GND           |
+| Microphone WS  | GPIO4         |
+| Microphone SCK | GPIO5         |
+| Microphone SD  | GPIO6         |
+| Microphone L/R | GND           |
+| MAX98357A VIN  | 5V            |
+| MAX98357A GND  | GND           |
+| MAX98357A DIN  | GPIO7         |
+| MAX98357A BCLK | GPIO15        |
+| MAX98357A LRC  | GPIO16        |
+| TFT GND        | GND           |
+| TFT VCC        | 3V3           |
+| TFT SCL        | GPIO21        |
+| TFT SDA        | GPIO47        |
+| TFT RES        | GPIO45        |
+| TFT DC         | GPIO40        |
+| TFT CS         | GPIO41        |
+| TFT BLK        | GPIO42        |
 
 Loa chỉ nối vào hai cực `+`/`-` của MAX98357A. Để hở `SD` và `GAIN` của MAX98357A.
 
 Với biến thể `-l298n`:
 
-| Kênh | Chân L298N | Chân ESP32-S3 | Chức năng |
-| --- | --- | --- | --- |
-| Trái | ENA | GPIO8 | PWM motor trái |
-| Trái | IN1 | GPIO9 | Chiều motor trái |
-| Trái | IN2 | GPIO10 | Chiều motor trái |
-| Phải | IN3 | GPIO11 | Chiều motor phải |
-| Phải | IN4 | GPIO12 | Chiều motor phải |
-| Phải | ENB | GPIO13 | PWM motor phải |
-| Chung | GND | GND | Mass nguồn motor |
-| Trái | OUT1, OUT2 | Hai dây motor trái | - |
-| Phải | OUT3, OUT4 | Hai dây motor phải | - |
+| Kênh  | Chân L298N | Chân ESP32-S3      | Chức năng        |
+| ----- | ---------- | ------------------ | ---------------- |
+| Trái  | ENA        | GPIO8              | PWM motor trái   |
+| Trái  | IN1        | GPIO9              | Chiều motor trái |
+| Trái  | IN2        | GPIO10             | Chiều motor trái |
+| Phải  | IN3        | GPIO11             | Chiều motor phải |
+| Phải  | IN4        | GPIO12             | Chiều motor phải |
+| Phải  | ENB        | GPIO13             | PWM motor phải   |
+| Chung | GND        | GND                | Mass nguồn motor |
+| Trái  | OUT1, OUT2 | Hai dây motor trái | -                |
+| Phải  | OUT3, OUT4 | Hai dây motor phải | -                |
 
 - Tháo jumper `ENA`/`ENB`; không đưa 5 V vào GPIO.
 - Cấp nguồn motor riêng qua L298N và nối chung GND.
@@ -74,15 +74,15 @@ idf.py -p <CONG_SERIAL> flash monitor
 - Đặt `MIC_DEBUG` thành `1` trong `config.h` nếu cần log microphone, rồi build và flash lại.
 - Lệnh Telegram:
 
-| Lệnh | Mô tả |
-| --- | --- |
-| `/status` | Xem trạng thái robot và motor. |
-| `/web` | Lấy link trang điều khiển web hiện tại. |
-| `/wake` | Đánh thức robot khi robot đang chờ. |
-| `/speed [0-100]` | Xem hoặc đặt tốc độ PWM; `0` dừng motor. |
-| `/start` | Khởi động bot và hiển thị hướng dẫn cơ bản. |
-| `/menu` | Mở menu lệnh Telegram. |
-| `/help` | Hiển thị danh sách lệnh trợ giúp. |
+| Lệnh             | Mô tả                                       |
+| ---------------- | ------------------------------------------- |
+| `/status`        | Xem trạng thái robot và motor.              |
+| `/web`           | Lấy link trang điều khiển web hiện tại.     |
+| `/wake`          | Đánh thức robot khi robot đang chờ.         |
+| `/speed [0-100]` | Xem hoặc đặt tốc độ PWM; `0` dừng motor.    |
+| `/start`         | Khởi động bot và hiển thị hướng dẫn cơ bản. |
+| `/menu`          | Mở menu lệnh Telegram.                      |
+| `/help`          | Hiển thị danh sách lệnh trợ giúp.           |
 
 ## Motor L298N
 
@@ -90,13 +90,13 @@ idf.py -p <CONG_SERIAL> flash monitor
 
 ### Tham số
 
-| Tham số | Giá trị |
-| --- | --- |
-| `duration_ms` | 100–10000 ms |
-| `speed_percent` | 0–100 |
-| Tốc độ mặc định | 75% |
-| Thời gian mặc định tiến/lùi | 1000 ms |
-| Thời gian mặc định xoay | 400 ms |
+| Tham số                     | Giá trị      |
+| --------------------------- | ------------ |
+| `duration_ms`               | 100–10000 ms |
+| `speed_percent`             | 0–100        |
+| Tốc độ mặc định             | 75%          |
+| Thời gian mặc định tiến/lùi | 1000 ms      |
+| Thời gian mặc định xoay     | 400 ms       |
 
 Robot không có encoder, cảm biến tránh vật cản hoặc đo quãng đường.
 
@@ -107,15 +107,7 @@ Robot không có encoder, cảm biến tránh vật cản hoặc đo quãng đư
 3. Bấm **Bắt đầu**, giữ nút điều hướng để chạy và thả để dừng.
 4. Bấm **Trả về giọng nói** khi hoàn tất.
 
-Chỉ dùng trong mạng nội bộ; trang web không có đăng nhập. Khi thử lần đầu, kê bánh xe khỏi mặt đất. Lệnh **Dừng**, mất kết nối hoặc đóng trang phải làm motor dừng.
-
-### Kiểm tra web
-
-```sh
-node main/boards/bread-compact-wifi-lcd/l298n/tests/web_page_test.cjs
-```
-
-Sau khi flash, kiểm tra tiến/lùi/xoay đúng chiều, dừng đúng thời hạn và không tự chạy khi reset. Nếu một motor quay ngược, ngắt nguồn rồi đổi hai dây motor đó hoặc bật tùy chọn đảo chiều trong menuconfig.
+Chỉ dùng trong mạng nội bộ; trang web không có đăng nhập. Khi thử lần đầu, kê bánh xe khỏi mặt đất. Lệnh **Dừng**, mất kết nối hoặc đóng trang phải làm motor dừng; hết phiên hoặc đóng trang sẽ trả quyền điều khiển về giọng nói.
 
 ## Telegram cho L298N
 

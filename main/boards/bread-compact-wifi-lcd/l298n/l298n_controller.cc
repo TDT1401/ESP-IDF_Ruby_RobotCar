@@ -120,6 +120,9 @@ public:
         pending_emotion_ = Emotion::kNone;
         manual_override_ = true;
         web_session_ = 0;  // A spoken stop also invalidates in-flight browser commands.
+        web_sequence_ = 0;
+        web_deadline_us_ = 0;
+        web_manual_ = false;
         StopLocked();
     }
 
@@ -161,9 +164,7 @@ public:
         std::lock_guard lock(mutex_);
         web_connected_ = connected;
         if (!connected && web_manual_) {
-            web_session_ = 0;
-            pending_emotion_ = Emotion::kNone;
-            StopLocked();
+            EndWebControlLocked();
         }
     }
 
@@ -172,8 +173,12 @@ public:
             return ESP_ERR_INVALID_ARG;
         std::lock_guard lock(mutex_);
         const int64_t now = esp_timer_get_time();
-        if (!web_connected_ || !MotionAllowed() || (web_session_ != 0 && now < web_deadline_us_))
+        if (!web_connected_ || !MotionAllowed())
             return ESP_ERR_INVALID_STATE;
+        if (web_session_ != 0 && now < web_deadline_us_)
+            return ESP_ERR_INVALID_STATE;
+        if (web_manual_)
+            EndWebControlLocked();
         if (fault_ != ESP_OK)
             return fault_;
         StopLocked();
@@ -223,16 +228,11 @@ public:
         web_sequence_ = sequence;
         pending_emotion_ = Emotion::kNone;
         if (command == L298nWebCommand::kRelease) {
-            StopLocked();
-            web_session_ = 0;
-            web_manual_ = false;
-            // Do not replay a gesture from the current spoken response.
-            manual_override_ = response_active_;
+            EndWebControlLocked();
             return ESP_OK;
         }
         if (!MotionAllowed() || fault_ != ESP_OK) {
-            StopLocked();
-            web_session_ = 0;
+            EndWebControlLocked();
             return ESP_ERR_INVALID_STATE;
         }
         web_deadline_us_ = now + kWebTimeoutMs * 1000LL;
@@ -244,14 +244,13 @@ public:
             if (motion_ != motion) {
                 StopLocked();
                 if (fault_ != ESP_OK || !PrepareMotionLocked(motion, kWebTimeoutMs)) {
-                    web_session_ = 0;
+                    EndWebControlLocked();
                     return ESP_FAIL;
                 }
             }
             deadline_us_ = web_deadline_us_;
             if (moving_ && !ApplySpeedLocked()) {
-                StopLocked();
-                web_session_ = 0;
+                EndWebControlLocked();
                 return ESP_FAIL;
             }
         }
@@ -388,6 +387,17 @@ private:
         StopOutputsLocked();
     }
 
+    void EndWebControlLocked() {
+        web_session_ = 0;
+        web_sequence_ = 0;
+        web_deadline_us_ = 0;
+        web_manual_ = false;
+        pending_emotion_ = Emotion::kNone;
+        // Do not replay a gesture from the response that was active while the browser owned it.
+        manual_override_ = response_active_;
+        StopLocked();
+    }
+
     void StopOutputsLocked() {
         // Disable both bridges before touching any direction pin. Attempt every
         // output even if an earlier operation fails. Stop means coast, not brake.
@@ -482,9 +492,7 @@ private:
         std::lock_guard lock(mutex_);
         const int64_t now = esp_timer_get_time();
         if (web_session_ != 0 && (now >= web_deadline_us_ || !MotionAllowed())) {
-            web_session_ = 0;
-            pending_emotion_ = Emotion::kNone;
-            StopLocked();
+            EndWebControlLocked();
         }
         if (motion_ == Motion::kStop && pending_emotion_ == Emotion::kNone)
             return;

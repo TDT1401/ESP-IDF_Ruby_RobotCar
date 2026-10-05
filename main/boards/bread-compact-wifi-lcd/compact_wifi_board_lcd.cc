@@ -169,25 +169,25 @@ protected:
         // Read here so the diagnostic can distinguish I2S errors from silent
         // sample data. The board's raw samples reach the full 32-bit range;
         // shifting by 12 (as in the generic codec) clips the observed input.
-        std::vector<int32_t> raw(samples);
+        read_buffer_.resize(samples);
         size_t bytes_read = 0;
-        esp_err_t err = i2s_channel_read(rx_handle_, raw.data(), raw.size() * sizeof(int32_t),
-                                         &bytes_read, 200);
+        esp_err_t err = i2s_channel_read(rx_handle_, read_buffer_.data(),
+                                         read_buffer_.size() * sizeof(int32_t), &bytes_read, 200);
         if (err != ESP_OK) {
             ++read_errors_;
             last_error_ = err;
         } else {
             int count = bytes_read / sizeof(int32_t);
             for (int i = 0; i < count; ++i) {
-                dest[i] = static_cast<int16_t>(raw[i] >> 16);
+                dest[i] = static_cast<int16_t>(read_buffer_[i] >> 16);
 #if MIC_DEBUG
                 if (raw_samples_ == 0 && i == 0) {
-                    raw_min_ = raw_max_ = raw[i];
+                    raw_min_ = raw_max_ = read_buffer_[i];
                 }
-                if (raw[i] < raw_min_)
-                    raw_min_ = raw[i];
-                if (raw[i] > raw_max_)
-                    raw_max_ = raw[i];
+                if (read_buffer_[i] < raw_min_)
+                    raw_min_ = read_buffer_[i];
+                if (read_buffer_[i] > raw_max_)
+                    raw_max_ = read_buffer_[i];
                 int32_t magnitude = dest[i] < 0 ? -static_cast<int32_t>(dest[i]) : dest[i];
                 if (magnitude > peak_)
                     peak_ = magnitude;

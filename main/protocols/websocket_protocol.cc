@@ -7,10 +7,24 @@
 #include <esp_log.h>
 #include <arpa/inet.h>
 #include <cJSON.h>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <limits>
 #include "assets/lang_config.h"
 
 #define TAG "WS"
+
+namespace {
+constexpr size_t kMaxIncomingAudioPayloadSize = std::numeric_limits<uint16_t>::max();
+
+template <typename T>
+T ReadWireValue(const char* data, size_t offset) {
+    T value;
+    memcpy(&value, data + offset, sizeof(value));
+    return value;
+}
+}  // namespace
 
 WebsocketProtocol::WebsocketProtocol() { event_group_handle_ = xEventGroupCreate(); }
 
@@ -27,6 +41,12 @@ bool WebsocketProtocol::SendAudio(std::unique_ptr<AudioStreamPacket> packet) {
     }
 
     if (version_ == 2) {
+        if (packet->payload.size() >
+            std::numeric_limits<uint32_t>::max() - sizeof(BinaryProtocol2)) {
+            ESP_LOGE(TAG, "Audio payload is too large for WebSocket protocol v2: %zu",
+                     packet->payload.size());
+            return false;
+        }
         std::string serialized;
         serialized.resize(sizeof(BinaryProtocol2) + packet->payload.size());
         auto bp2 = (BinaryProtocol2*)serialized.data();
@@ -39,6 +59,11 @@ bool WebsocketProtocol::SendAudio(std::unique_ptr<AudioStreamPacket> packet) {
 
         return websocket_->Send(serialized.data(), serialized.size(), true);
     } else if (version_ == 3) {
+        if (packet->payload.size() > std::numeric_limits<uint16_t>::max()) {
+            ESP_LOGE(TAG, "Audio payload is too large for WebSocket protocol v3: %zu",
+                     packet->payload.size());
+            return false;
+        }
         std::string serialized;
         serialized.resize(sizeof(BinaryProtocol3) + packet->payload.size());
         auto bp3 = (BinaryProtocol3*)serialized.data();
@@ -109,27 +134,62 @@ bool WebsocketProtocol::OpenAudioChannel() {
         if (binary) {
             if (on_incoming_audio_ != nullptr) {
                 if (version_ == 2) {
-                    BinaryProtocol2* bp2 = (BinaryProtocol2*)data;
-                    bp2->version = ntohs(bp2->version);
-                    bp2->type = ntohs(bp2->type);
-                    bp2->timestamp = ntohl(bp2->timestamp);
-                    bp2->payload_size = ntohl(bp2->payload_size);
-                    auto payload = (uint8_t*)bp2->payload;
+                    if (len < sizeof(BinaryProtocol2)) {
+                        ESP_LOGW(TAG, "WebSocket v2 frame is shorter than its header: %zu", len);
+                        return;
+                    }
+                    const uint16_t frame_version =
+                        ntohs(ReadWireValue<uint16_t>(data, offsetof(BinaryProtocol2, version)));
+                    const uint16_t frame_type =
+                        ntohs(ReadWireValue<uint16_t>(data, offsetof(BinaryProtocol2, type)));
+                    const uint32_t timestamp =
+                        ntohl(ReadWireValue<uint32_t>(data, offsetof(BinaryProtocol2, timestamp)));
+                    const uint32_t payload_size =
+                        ntohl(ReadWireValue<uint32_t>(data, offsetof(BinaryProtocol2, payload_size)));
+                    const size_t available_payload = len - sizeof(BinaryProtocol2);
+                    if (frame_version != 2 || frame_type != 0 ||
+                        payload_size != available_payload ||
+                        payload_size > kMaxIncomingAudioPayloadSize) {
+                        ESP_LOGW(TAG,
+                                 "Invalid WebSocket v2 audio frame: version=%u, type=%u, "
+                                 "payload=%lu, available=%zu",
+                                 static_cast<unsigned>(frame_version),
+                                 static_cast<unsigned>(frame_type),
+                                 static_cast<unsigned long>(payload_size), available_payload);
+                        return;
+                    }
+                    const auto* payload = reinterpret_cast<const uint8_t*>(
+                        data + sizeof(BinaryProtocol2));
                     on_incoming_audio_(std::make_unique<AudioStreamPacket>(AudioStreamPacket{
                         .sample_rate = server_sample_rate_,
                         .frame_duration = server_frame_duration_,
-                        .timestamp = bp2->timestamp,
-                        .payload = std::vector<uint8_t>(payload, payload + bp2->payload_size)}));
+                        .timestamp = timestamp,
+                        .payload = std::vector<uint8_t>(payload, payload + payload_size)}));
                 } else if (version_ == 3) {
-                    BinaryProtocol3* bp3 = (BinaryProtocol3*)data;
-                    bp3->type = bp3->type;
-                    bp3->payload_size = ntohs(bp3->payload_size);
-                    auto payload = (uint8_t*)bp3->payload;
+                    if (len < sizeof(BinaryProtocol3)) {
+                        ESP_LOGW(TAG, "WebSocket v3 frame is shorter than its header: %zu", len);
+                        return;
+                    }
+                    const uint8_t frame_type =
+                        ReadWireValue<uint8_t>(data, offsetof(BinaryProtocol3, type));
+                    const uint16_t payload_size =
+                        ntohs(ReadWireValue<uint16_t>(data, offsetof(BinaryProtocol3, payload_size)));
+                    const size_t available_payload = len - sizeof(BinaryProtocol3);
+                    if (frame_type != 0 || payload_size != available_payload) {
+                        ESP_LOGW(TAG,
+                                 "Invalid WebSocket v3 audio frame: type=%u, payload=%u, "
+                                 "available=%zu",
+                                 static_cast<unsigned>(frame_type),
+                                 static_cast<unsigned>(payload_size), available_payload);
+                        return;
+                    }
+                    const auto* payload = reinterpret_cast<const uint8_t*>(
+                        data + sizeof(BinaryProtocol3));
                     on_incoming_audio_(std::make_unique<AudioStreamPacket>(AudioStreamPacket{
                         .sample_rate = server_sample_rate_,
                         .frame_duration = server_frame_duration_,
                         .timestamp = 0,
-                        .payload = std::vector<uint8_t>(payload, payload + bp3->payload_size)}));
+                        .payload = std::vector<uint8_t>(payload, payload + payload_size)}));
                 } else {
                     on_incoming_audio_(std::make_unique<AudioStreamPacket>(AudioStreamPacket{
                         .sample_rate = server_sample_rate_,
@@ -224,8 +284,8 @@ std::string WebsocketProtocol::GetHelloMessage() {
 
 void WebsocketProtocol::ParseServerHello(const cJSON* root) {
     auto transport = cJSON_GetObjectItem(root, "transport");
-    if (transport == nullptr || strcmp(transport->valuestring, "websocket") != 0) {
-        ESP_LOGE(TAG, "Unsupported transport: %s", transport->valuestring);
+    if (!cJSON_IsString(transport) || strcmp(transport->valuestring, "websocket") != 0) {
+        ESP_LOGE(TAG, "Unsupported or missing transport");
         return;
     }
 

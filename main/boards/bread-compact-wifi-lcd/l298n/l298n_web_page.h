@@ -92,13 +92,13 @@ inline constexpr char kL298nWebPage[] = R"html(
       } finally { clearTimeout(timeout); }
     }
 
-    // Best-effort stop on page loss. The firmware's deadline remains authoritative.
-    // A newer sequence prevents an older in-flight movement from undoing this stop.
+    // Best-effort stop and release on page loss. The firmware's deadline remains authoritative.
+    // A newer sequence prevents an older in-flight movement from restoring control.
     function park(message) {
       if (session) {
         fetch('/api/command', {
           method:'POST',headers:{'X-Robot-Control':'1','Content-Type':'application/json'},
-          body:commandBody(session,'s'),keepalive:true
+          body:commandBody(session,'release'),keepalive:true
         }).catch(() => {});
       }
       ++epoch;
@@ -207,7 +207,7 @@ inline constexpr char kL298nWebPage[] = R"html(
       const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
       if (key === heldKey) stop();
     });
-    const pageLost = () => park('Đã ngắt điều khiển và yêu cầu dừng. Bấm “Bắt đầu” để kết nối lại.');
+    const pageLost = () => park('Đã dừng xe và trả quyền điều khiển về giọng nói.');
     window.addEventListener('blur', pageLost);
     window.addEventListener('pagehide', pageLost);
     document.addEventListener('visibilitychange', () => { if (document.hidden) pageLost(); });

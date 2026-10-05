@@ -13,7 +13,7 @@ void UpdateL298nEmotion(const char* emotion, bool speaking);
 enum class L298nWebCommand { kStop, kForward, kBackward, kLeft, kRight, kRelease };
 
 // Thread-safe board-local API. A single browser owns a renewable 600 ms session.
-// Expiry stops motors and invalidates the session; manual mode stays latched until release.
+// Expiry or network loss stops motors, invalidates the session and returns control to voice.
 esp_err_t BeginL298nWebControl(uint32_t* session);
 esp_err_t CommandL298nWebControl(uint32_t session, uint32_t sequence, L298nWebCommand command,
                                  int speed_percent);
