@@ -68,6 +68,9 @@ private:
     std::vector<std::pair<int, StateCallback>> listeners_;
     int next_listener_id_{0};
     std::mutex mutex_;
+    // Keep validation, state publication and listener notification ordered across tasks.
+    // Recursive locking allows a listener to request a follow-up transition without deadlocking.
+    mutable std::recursive_mutex transition_mutex_;
 
     /**
      * Check if transition from source to target is valid

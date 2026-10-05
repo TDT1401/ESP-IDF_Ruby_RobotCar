@@ -107,10 +107,14 @@ bool DeviceStateMachine::IsValidTransition(DeviceState from, DeviceState to) con
 }
 
 bool DeviceStateMachine::CanTransitionTo(DeviceState target) const {
+    std::lock_guard<std::recursive_mutex> lock(transition_mutex_);
     return IsValidTransition(current_state_.load(), target);
 }
 
 bool DeviceStateMachine::TransitionTo(DeviceState new_state) {
+    // Serialize the complete transition. A load/validate/store sequence using only
+    // atomic current_state_ would still allow two tasks to validate against the same old state.
+    std::lock_guard<std::recursive_mutex> lock(transition_mutex_);
     DeviceState old_state = current_state_.load();
     
     // No-op if already in the target state
