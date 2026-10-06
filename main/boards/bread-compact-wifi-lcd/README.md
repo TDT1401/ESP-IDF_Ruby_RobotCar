@@ -5,6 +5,11 @@ Board ESP32-S3-N16R8, microphone I2S, MAX98357A và màn hình TFT SPI.
 ## Chức năng
 
 - Trợ lý giọng nói.
+- Mắt robot vector dùng engine [RobotEye](https://github.com/fonzu/RobotEye), với morph,
+  chớp mắt và chuyển hướng nhìn không chặn luồng chính. Bản tích hợp dùng backend LVGL cho TFT
+  thay cho backend Arduino/U8g2 của thư viện gốc.
+- Giao diện nhiều màn hình tự nhận biết câu hỏi: pin, đồng hồ, trạng thái Wi-Fi và nhiệt độ;
+  trang thông tin tự quay lại mắt robot sau 15 giây.
 - Điều khiển motor bằng giọng nói/MCP, trang web nội bộ.
 - Telegram.
 - Điều khiển web tại `http://<IP-robot>:8080`: tiến, lùi, trái, phải, dừng và tốc độ PWM.
@@ -70,6 +75,13 @@ idf.py -p <CONG_SERIAL> flash monitor
 ## Hướng dẫn sử dụng
 
 - Câu đánh thức: `Hi ESP`.
+- Có thể hỏi `Pin còn bao nhiêu?`, `Mấy giờ rồi?`, `Wi-Fi đang kết nối không?`,
+  `Nhiệt độ bao nhiêu?` hoặc `Thời tiết hôm nay thế nào?` để mở trang tương ứng. Giờ và Wi-Fi
+  lấy từ thiết bị. Pin/nhiệt độ ưu tiên cảm biến của board; nếu board không có cảm biến, màn hình
+  lấy số từ câu trả lời của trợ lý (`78%`, `78 phần trăm`, `28°C`, `28 độ C`) và hiển thị `--`
+  khi câu trả lời không có dữ liệu. Trang `WEATHER` tự nhận biết nội dung trợ lý đang đọc và vẽ
+  cảnh nắng, mây, mưa, giông, sương mù hoặc tuyết. Mưa, tuyết và sương mù có chuyển động; phần
+  này được vẽ trực tiếp bằng LVGL nên không cần thư viện thời tiết bổ sung.
 - Giữ `BOOT` 3 giây khi thiết bị đang chạy để xóa Wi-Fi đã lưu, sau đó vào `http://192.168.4.1` để cấu hình lại.
 - Đặt `MIC_DEBUG` thành `1` trong `config.h` nếu cần log microphone, rồi build và flash lại.
 - Lệnh Telegram:

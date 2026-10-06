@@ -732,7 +732,7 @@ private:
             "Enable/disable short automatic wheel gestures while the robot speaks "
             "(bật/tắt chuyển động theo cảm xúc). Enabling waits for a fresh expression; "
             "does not start motors immediately. Stop disables this feature. Defaults to enabled "
-            "after reboot; not persisted. Requires a RoboEyes display variant.",
+            "after reboot; not persisted. Requires a RobotEye display variant.",
             PropertyList({Property("enabled", kPropertyTypeBoolean)}),
             [this](const PropertyList& properties) -> ToolResult {
                 return SetEmotionEnabled(properties["enabled"].value<bool>());

@@ -7,7 +7,7 @@
 #include "lamp_controller.h"
 #include "led/single_led.h"
 #include "mcp_server.h"
-#include "robo_eyes_display.h"
+#include "robot_eye_display.h"
 #include "system_reset.h"
 #include "wifi_board.h"
 #include "wifi_manager.h"
@@ -330,7 +330,7 @@ private:
         panel_config.vendor_config = &gc9107_vendor_config;
 #endif
 #if defined(CONFIG_BREAD_COMPACT_WIFI_LCD_ST7735_80X160) || defined(CONFIG_LCD_ST7789_240X240)
-        display_ = new RoboEyesDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
+        display_ = new RobotEyeDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
                                        DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
                                        DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
 #else
@@ -383,7 +383,7 @@ public:
         InitializeL298nController();
         InitializeL298nTelegram();
 #if defined(CONFIG_BREAD_COMPACT_WIFI_LCD_ST7735_80X160) || defined(CONFIG_LCD_ST7789_240X240)
-        static_cast<RoboEyesDisplay*>(display_)->SetEmotionMotionCallback(UpdateL298nEmotion);
+        static_cast<RobotEyeDisplay*>(display_)->SetEmotionMotionCallback(UpdateL298nEmotion);
 #endif
 #endif
     }
@@ -432,7 +432,7 @@ public:
 #if defined(CONFIG_BREAD_COMPACT_WIFI_LCD_ST7735_80X160)
         ESP_LOGI(TAG, "BOOT DIAGNOSTIC: ST7735S 80x160 firmware is running");
 #else
-        ESP_LOGI(TAG, "BOOT DIAGNOSTIC: %dx%d RoboEyes firmware is running", DISPLAY_WIDTH,
+        ESP_LOGI(TAG, "BOOT DIAGNOSTIC: %dx%d RobotEye firmware is running", DISPLAY_WIDTH,
                  DISPLAY_HEIGHT);
 #endif
         xTaskCreate(
@@ -442,7 +442,7 @@ public:
                 vTaskDelay(pdMS_TO_TICKS(1500));
                 Application::GetInstance().Schedule([]() {
                     ESP_LOGI(TAG, "Playing localized startup greeting");
-                    static_cast<RoboEyesDisplay*>(Board::GetInstance().GetDisplay())
+                    static_cast<RobotEyeDisplay*>(Board::GetInstance().GetDisplay())
                         ->ShowHappyFor(3500);
                     Application::GetInstance().PlaySound(Lang::Sounds::OGG_WELCOME);
                 });
