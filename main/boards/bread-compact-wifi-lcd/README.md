@@ -151,4 +151,11 @@ Telegram cần Internet, thời gian hệ thống hợp lệ và CA bundle của
 
 Sau khi robot có Wi-Fi, bot phải gửi thông báo khởi động. Thử `/status`, `/web`, `/wake` và `/speed 50`.
 
+Để gửi nội dung do XiaoZhi trả lời hoặc tìm được, hãy yêu cầu rõ trong câu nói, ví dụ:
+
+- `Tìm dự báo thời tiết ngày mai và gửi kết quả qua Telegram.`
+- `Gửi phần tóm tắt vừa rồi cùng các đường dẫn qua Telegram.`
+
+Firmware cung cấp MCP tool `self.telegram.send_message` cho yêu cầu này. Tool chỉ được AI gọi khi người dùng nói rõ muốn gửi qua Telegram, gửi văn bản thuần tối đa 4000 byte và đưa vào hàng đợi hữu hạn để không chặn tác vụ chính hoặc âm thanh. Kết quả trả về xác nhận nội dung đã được xếp hàng, không phải biên nhận giao hàng từ Telegram.
+
 Nếu không hoạt động: kiểm tra Token/Chat ID, Internet/DNS/thời gian hệ thống và bảo đảm không có chương trình khác polling hoặc webhook dùng cùng bot.

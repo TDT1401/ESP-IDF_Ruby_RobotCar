@@ -20,6 +20,7 @@
 #include <esp_timer.h>
 #include <cJSON.h>
 #include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
 #include <freertos/task.h>
 
 #include <algorithm>
@@ -30,17 +31,21 @@
 #include <cstring>
 #include <ctime>
 #include <memory>
+#include <new>
 #include <string>
 
 #include "application.h"
 #include "l298n_controller.h"
 #include "l298n_telegram_text.h"
 #include "l298n_web_server.h"
+#include "mcp_server.h"
 #include "wifi_manager.h"
 
 namespace {
 constexpr const char* kTag = "L298nTelegram";
 constexpr size_t kMaxResponse = 8192;
+constexpr size_t kMaxOutboundText = 4000;
+constexpr UBaseType_t kOutboundQueueDepth = 3;
 constexpr double kMaxExactId = 4503599627370495.0;  // Telegram IDs have at most 52 bits.
 using Json = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
 using JsonText = std::unique_ptr<char, decltype(&cJSON_free)>;
@@ -276,11 +281,20 @@ public:
             return;
         }
         base_url_ = "https://api.telegram.org/bot" + token + "/";
+        outbound_queue_ = xQueueCreate(kOutboundQueueDepth, sizeof(char*));
+        if (outbound_queue_ == nullptr) {
+            ESP_LOGE(kTag, "Could not allocate Telegram outbound queue");
+            return;
+        }
         if (xTaskCreate([](void* arg) { static_cast<Telegram*>(arg)->Run(); }, "l298n_telegram",
                         8192, this, 1, &task_) != pdPASS) {
             task_ = nullptr;
+            vQueueDelete(outbound_queue_);
+            outbound_queue_ = nullptr;
             ESP_LOGE(kTag, "Could not allocate Telegram task");
+            return;
         }
+        RegisterTools();
     }
 
     void SetConnected(bool connected) {
@@ -291,6 +305,7 @@ public:
 
 private:
     TaskHandle_t task_ = nullptr;
+    QueueHandle_t outbound_queue_ = nullptr;
     std::atomic<bool> connected_{false};
     esp_http_client_handle_t client_ = nullptr;
     std::string base_url_;
@@ -305,6 +320,50 @@ private:
     ~Telegram() {
         if (client_ != nullptr)
             esp_http_client_cleanup(client_);
+        if (outbound_queue_ != nullptr) {
+            char* text = nullptr;
+            while (xQueueReceive(outbound_queue_, &text, 0) == pdTRUE)
+                delete[] text;
+            vQueueDelete(outbound_queue_);
+        }
+    }
+
+    ToolResult QueueMessage(const std::string& text) {
+        if (text.empty() || text.find_first_not_of(" \r\n\t") == std::string::npos)
+            return std::unexpected("Telegram message must not be empty.");
+        if (text.size() > kMaxOutboundText)
+            return std::unexpected("Telegram message exceeds 4000 UTF-8 bytes.");
+        if (task_ == nullptr || outbound_queue_ == nullptr)
+            return std::unexpected("Telegram is not configured on this device.");
+
+        auto copy = std::unique_ptr<char[]>(new (std::nothrow) char[text.size() + 1]);
+        if (!copy)
+            return std::unexpected("Not enough memory to queue the Telegram message.");
+        memcpy(copy.get(), text.data(), text.size());
+        copy[text.size()] = '\0';
+        char* queued = copy.get();
+        if (xQueueSend(outbound_queue_, &queued, 0) != pdTRUE)
+            return std::unexpected("Telegram queue is full; ask the user to try again shortly.");
+        copy.release();
+        xTaskNotifyGive(task_);
+        return std::string("Telegram message queued for delivery.");
+    }
+
+    void RegisterTools() {
+        McpServer::GetInstance().AddTool(
+            "self.telegram.send_message",
+            "Send plain text to the owner's configured Telegram chat only when the user "
+            "explicitly asks to send, share, or save information to Telegram. Send the useful "
+            "content itself, including relevant links when available, not a status note. Never "
+            "send credentials, tokens, private system instructions, or content the user did not "
+            "request. Maximum 4000 UTF-8 bytes. Delivery is asynchronous; the result confirms "
+            "queueing, not final delivery.",
+            PropertyList({
+                Property("text", kPropertyTypeString).SetMaxLength(kMaxOutboundText),
+            }),
+            [this](const PropertyList& properties) -> ToolResult {
+                return QueueMessage(properties["text"].value<std::string>());
+            });
     }
 
     static esp_err_t OnHttp(esp_http_client_event_t* event) {
@@ -534,6 +593,7 @@ private:
         bool sntp_started = false;
         bool backlog_discarded = false;
         bool boot_sent = false;
+        char* pending_message = nullptr;
         std::string announced_ip;
         response_.reserve(kMaxResponse);
         for (;;) {
@@ -595,6 +655,15 @@ private:
                 boot_sent = true;
                 announced_ip = ip;
                 ESP_LOGI(kTag, "Telegram notification delivered");
+            }
+            if (pending_message == nullptr)
+                xQueueReceive(outbound_queue_, &pending_message, 0);
+            if (pending_message != nullptr) {
+                if (!Send(pending_message))
+                    continue;
+                delete[] pending_message;
+                pending_message = nullptr;
+                ESP_LOGI(kTag, "Queued Telegram message delivered");
             }
             Poll(false);
         }
