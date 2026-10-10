@@ -8,16 +8,16 @@
 
 // Set to 1 to log microphone levels every 2 seconds, then rebuild and flash.
 // Startup configuration and I2S read errors are logged even when this is 0.
-#define MIC_DEBUG 0
+#define MIC_DEBUG 1
 
 // 如果使用 Duplex I2S 模式，请注释下面一行
 #define AUDIO_I2S_METHOD_SIMPLEX
 
 #ifdef AUDIO_I2S_METHOD_SIMPLEX
 
-#define AUDIO_I2S_MIC_GPIO_WS GPIO_NUM_4
-#define AUDIO_I2S_MIC_GPIO_SCK GPIO_NUM_5
-#define AUDIO_I2S_MIC_GPIO_DIN GPIO_NUM_6
+#define AUDIO_I2S_MIC_GPIO_WS GPIO_NUM_1
+#define AUDIO_I2S_MIC_GPIO_SCK GPIO_NUM_2
+#define AUDIO_I2S_MIC_GPIO_DIN GPIO_NUM_17
 #define AUDIO_I2S_SPK_GPIO_DOUT GPIO_NUM_7
 #define AUDIO_I2S_SPK_GPIO_BCLK GPIO_NUM_15
 #define AUDIO_I2S_SPK_GPIO_LRCK GPIO_NUM_16
@@ -143,8 +143,8 @@
 #define LCD_TYPE_ST7789_SERIAL
 #define DISPLAY_WIDTH 240
 #define DISPLAY_HEIGHT 240
-#define DISPLAY_MIRROR_X true
-#define DISPLAY_MIRROR_Y true
+#define DISPLAY_MIRROR_X false
+#define DISPLAY_MIRROR_Y false
 #define DISPLAY_SWAP_XY false
 #define DISPLAY_INVERT_COLOR true
 #define DISPLAY_RGB_ORDER LCD_RGB_ELEMENT_ORDER_RGB
