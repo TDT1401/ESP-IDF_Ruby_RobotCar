@@ -11,6 +11,7 @@ inline constexpr char kDivider[] = "━━━━━━━━━━━━━━�
 inline constexpr char kStatusHeader[] = "<b>🤖 XiaoMin ROBOT</b>";
 inline constexpr char kSystemSection[] = "<b>🧠 HỆ THỐNG</b>";
 inline constexpr char kMotorSection[] = "<b>🚗 ĐỘNG CƠ</b>";
+inline constexpr char kNavigationSection[] = "<b>📡 HC-SR04 / TỰ HÀNH</b>";
 inline constexpr char kNetworkSection[] = "<b>📶 KẾT NỐI</b>";
 inline constexpr char kStatusFooter[] =
     "<i>Motor hiển thị lệnh/PWM, không phải tốc độ đo từ bánh xe.</i>";
@@ -23,6 +24,11 @@ inline constexpr char kMotionStateLabel[] = "• Hoạt động: ";
 inline constexpr char kActivePwmLabel[] = "• PWM hiện tại: ";
 inline constexpr char kSavedSpeedLabel[] = "• Tốc độ đã đặt: ";
 inline constexpr char kEmotionLabel[] = "• Chuyển động cảm xúc: ";
+inline constexpr char kNavigationModeLabel[] = "• Chế độ: ";
+inline constexpr char kDistanceLabel[] = "• Khoảng cách đo: ";
+inline constexpr char kFollowDistanceLabel[] = "• Khoảng cách follow: ";
+inline constexpr char kObstacleDistanceLabel[] = "• Khoảng cách né vật cản: ";
+inline constexpr char kBlockedLabel[] = "• Đường đi: ";
 inline constexpr char kHardwareLabel[] = "• Phần cứng: ";
 inline constexpr char kWifiLabel[] = "• Wi-Fi: ";
 inline constexpr char kSignalLabel[] = "• Tín hiệu: ";
@@ -41,6 +47,13 @@ inline constexpr char kMemoryUnit[] = " KB";
 inline constexpr char kUptimeFormat[] = "%lld giờ %lld phút %lld giây";
 inline constexpr char kControlWeb[] = "🎮 Web thủ công";
 inline constexpr char kControlVoice[] = "🎙️ Giọng nói";
+inline constexpr char kControlAutonomy[] = "🤖 Tự hành";
+inline constexpr char kNavigationManual[] = "Thủ công";
+inline constexpr char kNavigationFollow[] = "Follow";
+inline constexpr char kNavigationAvoid[] = "Né vật cản";
+inline constexpr char kSensorNoEcho[] = "Không có Echo hợp lệ";
+inline constexpr char kPathClear[] = "Sẵn sàng";
+inline constexpr char kPathBlocked[] = "Bị chặn, motor đã dừng";
 inline constexpr char kMotorRunning[] = "🟢 Đang chạy";
 inline constexpr char kMotorPending[] = "🟡 Đang chờ đổi chiều";
 inline constexpr char kMotorIdle[] = "⚪ Đang dừng";
@@ -86,6 +99,9 @@ inline constexpr char kMenu[] =
     "<b>📋 DANH SÁCH LỆNH</b>\n\n"
     "🎙️ /wake — Đánh thức XiaoMin để trò chuyện\n"
     "⚙️ /speed — Xem tốc độ; /speed 50 — Đặt PWM 50%\n"
+    "👣 /follow on|off|CM — Follow; mặc định 30 cm\n"
+    "🧭 /avoid on|off|CM — Tự hành né vật cản; mặc định 20 cm\n"
+    "⏹️ /stop — Dừng motor và tắt tự hành\n"
     "🔎 /status — Xem trạng thái XiaoMin\n"
     "🌐 /web — Mở trang điều khiển xe\n"
     "📖 /menu — Hiển thị menu này\n\n"
@@ -123,6 +139,16 @@ inline constexpr char kSpeedHardwareError[] =
     "❌ Có lỗi phần cứng motor khi đặt tốc độ. Gửi /status để kiểm tra, kiểm tra dây nối và khởi "
     "động lại.";
 
+inline constexpr char kFollowUsage[] =
+    "Dùng <code>/follow on</code>, <code>/follow off</code> hoặc <code>/follow N</code> với N từ "
+    "10 đến 200 cm. Ví dụ: <code>/follow 30</code>.";
+inline constexpr char kAvoidUsage[] =
+    "Dùng <code>/avoid on</code>, <code>/avoid off</code> hoặc <code>/avoid N</code> với N từ 10 "
+    "đến 100 cm. Ví dụ: <code>/avoid 20</code>.";
+inline constexpr char kAutonomyUnavailable[] =
+    "❌ Không thể bật tự hành khi web đang điều khiển, tốc độ đang bằng 0 hoặc motor có lỗi.";
+inline constexpr char kEmergencyStopped[] = "⏹️ Motor đã dừng và chế độ tự hành đã tắt.";
+
 inline constexpr char kWebReadyHeader[] =
     "<b>🌐 ĐIỀU KHIỂN XE</b>\n"
     "━━━━━━━━━━━━━━━━\n"
@@ -158,6 +184,6 @@ inline constexpr char kUnknownCommand[] =
 
 // Telegram reply keyboard. Keep this as valid JSON.
 inline constexpr char kKeyboardJson[] =
-    R"({"keyboard":[["/wake","/speed"],["/speed 25","/speed 50","/speed 75"],["/status","/web"],["/menu"]],"resize_keyboard":true})";
+    R"({"keyboard":[["/wake","/stop"],["/follow on","/follow off"],["/avoid on","/avoid off"],["/status","/web"],["/menu"]],"resize_keyboard":true})";
 
 }  // namespace L298nTelegramText

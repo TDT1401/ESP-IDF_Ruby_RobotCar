@@ -10,7 +10,7 @@ Board ESP32-S3-N16R8, microphone I2S, MAX98357A và màn hình TFT SPI.
   thay cho backend Arduino/U8g2 của thư viện gốc.
 - Giao diện nhiều màn hình tự nhận biết câu hỏi: pin, đồng hồ, trạng thái Wi-Fi và nhiệt độ;
   trang thông tin tự quay lại mắt robot sau 15 giây.
-- Điều khiển motor bằng giọng nói/MCP, trang web nội bộ.
+- Điều khiển motor, follow và tự hành né vật cản bằng giọng nói/MCP; điều khiển thủ công bằng web.
 - Telegram.
 - Điều khiển web tại `http://<IP-robot>:8080`: tiến, lùi, trái, phải, dừng và tốc độ PWM.
 
@@ -60,6 +60,18 @@ Với biến thể `-l298n`:
 - Cấp nguồn motor riêng qua L298N và nối chung GND.
 - Khuyến nghị kéo `ENA` và `ENB` xuống GND bằng điện trở 10 kΩ.
 
+HC-SR04 được bật cùng các biến thể `-l298n`:
+
+| Chân HC-SR04 | Chân ESP32-S3 | Ghi chú                                      |
+| ------------ | ------------- | -------------------------------------------- |
+| VCC          | 5V            | Không cấp từ 3V3                             |
+| GND          | GND           | Phải nối chung GND                           |
+| TRIG         | GPIO14        | Tín hiệu ra từ ESP32-S3                      |
+| ECHO         | GPIO39        | Bắt buộc hạ mức 5 V xuống 3,3 V trước GPIO39 |
+
+Có thể dùng cầu chia áp cho `ECHO`, ví dụ 1 kΩ từ ECHO đến GPIO39 và 2 kΩ từ GPIO39 xuống GND.
+Không nối trực tiếp `ECHO` 5 V vào ESP32-S3.
+
 ## Build
 
 ```sh
@@ -92,6 +104,11 @@ idf.py -p <CONG_SERIAL> flash monitor
 | `/web`           | Lấy link trang điều khiển web hiện tại.     |
 | `/wake`          | Đánh thức robot khi robot đang chờ.         |
 | `/speed [0-100]` | Xem hoặc đặt tốc độ PWM; `0` dừng motor.    |
+| `/follow on|off` | Bật hoặc tắt follow mode.                   |
+| `/follow N`      | Đặt khoảng cách follow N cm và bật mode.    |
+| `/avoid on|off`  | Bật hoặc tắt tự hành né vật cản.            |
+| `/avoid N`       | Đặt khoảng cách né vật cản N cm và bật mode. |
+| `/stop`          | Dừng motor và tắt mọi chế độ tự hành.       |
 | `/start`         | Khởi động bot và hiển thị hướng dẫn cơ bản. |
 | `/menu`          | Mở menu lệnh Telegram.                      |
 | `/help`          | Hiển thị danh sách lệnh trợ giúp.           |
@@ -109,15 +126,32 @@ idf.py -p <CONG_SERIAL> flash monitor
 | Tốc độ mặc định             | 75%          |
 | Thời gian mặc định tiến/lùi | 1000 ms      |
 | Thời gian mặc định xoay     | 400 ms       |
+| Khoảng cách follow mặc định | 30 cm        |
+| Khoảng cách né vật cản      | 20 cm        |
 
-Robot không có encoder, cảm biến tránh vật cản hoặc đo quãng đường.
+Robot không có encoder. Một HC-SR04 cố định phía trước chỉ bám khoảng cách với vật thể nằm trong
+chùm siêu âm, không nhận diện người và không xác định được hướng trái/phải của mục tiêu. Follow mode
+chỉ tự chạy tiến và dừng, không tự lùi. Chế độ né vật cản tiến chậm, xoay tại chỗ để tìm hướng trống
+và dừng nếu cả hai lần thử vẫn bị chặn.
+
+Có thể điều khiển bằng giọng nói, ví dụ:
+
+- `Bật chế độ đi theo`, `Tắt follow mode`.
+- `Đặt khoảng cách đi theo là 40 cm`.
+- `Bật tự hành né vật cản`, `Tắt chế độ né vật cản`.
+- `Đặt khoảng cách né vật cản là 25 cm`.
+- `Dừng xe`.
+
+Khoảng cách follow hợp lệ là 10–200 cm; khoảng cách né vật cản hợp lệ là 10–100 cm. Các giá trị và
+mode chỉ lưu trong RAM, trở về 30 cm, 20 cm và chế độ thủ công sau khi khởi động lại. Mất Echo, dữ
+liệu cảm biến quá hạn, lỗi motor hoặc lệnh dừng đều làm motor dừng.
 
 ### Dùng web
 
 1. Kết nối robot và điện thoại/máy tính vào cùng Wi-Fi.
 2. Mở URL `L298nWeb: Motor control: http://<IP>:8080` trong serial log.
 3. Bấm **Bắt đầu**, giữ nút điều hướng để chạy và thả để dừng.
-4. Bấm **Trả về giọng nói** khi hoàn tất.
+4. Bấm **Trả về giọng nói** khi hoàn tất. Khi web giành quyền, follow/né vật cản sẽ bị tắt.
 
 Chỉ dùng trong mạng nội bộ; trang web không có đăng nhập. Khi thử lần đầu, kê bánh xe khỏi mặt đất. Lệnh **Dừng**, mất kết nối hoặc đóng trang phải làm motor dừng; hết phiên hoặc đóng trang sẽ trả quyền điều khiển về giọng nói.
 
@@ -149,7 +183,8 @@ Telegram cần Internet, thời gian hệ thống hợp lệ và CA bundle của
 
 ### Kiểm tra
 
-Sau khi robot có Wi-Fi, bot phải gửi thông báo khởi động. Thử `/status`, `/web`, `/wake` và `/speed 50`.
+Sau khi robot có Wi-Fi, bot phải gửi thông báo khởi động. Thử `/status`, `/web`, `/wake`, `/speed 50`,
+`/follow 30`, `/avoid 20` và `/stop`.
 
 Để gửi nội dung do XiaoZhi trả lời hoặc tìm được, hãy yêu cầu rõ trong câu nói, ví dụ:
 

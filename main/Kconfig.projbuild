@@ -782,12 +782,14 @@ config BREAD_COMPACT_WIFI_LCD_ST7735_80X160
     default y if LCD_CUSTOM
 
 config BREAD_COMPACT_WIFI_LCD_L298N
-    bool "L298N differential-drive motors on GPIO8-13"
+    bool "L298N motors on GPIO8-13 with HC-SR04 on GPIO14/39"
     depends on BOARD_TYPE_BREAD_COMPACT_WIFI_LCD && IDF_TARGET_ESP32S3
     default n
     help
         Adds timed movement, speed and stop MCP tools. Select a release
-        variant ending in -l298n. Remove the ENA/ENB jumpers before wiring.
+        variant ending in -l298n. It also adds follow and obstacle-avoidance
+        tools using an HC-SR04. Remove the ENA/ENB jumpers before wiring and
+        level-shift the HC-SR04 ECHO signal to 3.3 V.
 
 config BREAD_COMPACT_WIFI_LCD_L298N_INVERT_LEFT
     bool "Invert left motor direction"

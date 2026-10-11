@@ -25,6 +25,14 @@ void SetL298nWebConnected(bool connected);
 // ESP_ERR_INVALID_ARG rejects out-of-range values; ESP_FAIL reports a hardware fault.
 esp_err_t SetL298nMotorSpeed(int speed_percent);
 
+// Thread-safe HC-SR04 autonomous modes. Modes are mutually exclusive and RAM-only.
+// Disabling either active mode stops the motors. Manual/web movement also disables autonomy.
+esp_err_t SetL298nFollowMode(bool enabled);
+esp_err_t SetL298nObstacleAvoidance(bool enabled);
+esp_err_t SetL298nFollowDistance(int distance_cm);
+esp_err_t SetL298nObstacleDistance(int distance_cm);
+void StopL298nMotor();
+
 // Read-only snapshot of commanded outputs, not encoder feedback.
 struct L298nMotorStatus {
     const char* motion;
@@ -35,6 +43,12 @@ struct L298nMotorStatus {
     bool web_manual;
     bool emotion_enabled;
     bool gesture_active;
+    const char* autonomy_mode;
+    int follow_distance_cm;
+    int obstacle_distance_cm;
+    int measured_distance_cm;
+    bool distance_valid;
+    bool autonomy_blocked;
     esp_err_t hardware_error;
 };
 L298nMotorStatus GetL298nMotorStatus();

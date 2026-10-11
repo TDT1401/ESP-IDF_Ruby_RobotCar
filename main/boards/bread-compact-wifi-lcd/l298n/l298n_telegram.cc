@@ -67,6 +67,15 @@ std::string LowerAscii(std::string text) {
     return text;
 }
 
+bool ParseUnsigned(const std::string& text, int maximum, int& value) {
+    if (text.empty() || text.size() > 3 ||
+        text.find_first_not_of("0123456789") != std::string::npos) {
+        return false;
+    }
+    value = std::atoi(text.c_str());
+    return value <= maximum;
+}
+
 const char* StateName(DeviceState state) {
     switch (state) {
         case kDeviceStateStarting:
@@ -125,6 +134,14 @@ const char* MotionNameVi(const char* motion) {
     return L298nTelegramText::kMotionStopped;
 }
 
+const char* NavigationModeVi(const char* mode) {
+    if (strcmp(mode, "follow") == 0)
+        return L298nTelegramText::kNavigationFollow;
+    if (strcmp(mode, "obstacle_avoidance") == 0)
+        return L298nTelegramText::kNavigationAvoid;
+    return L298nTelegramText::kNavigationManual;
+}
+
 const char* RssiQuality(int rssi) {
     if (rssi >= -55)
         return L298nTelegramText::kRssiExcellent;
@@ -155,8 +172,11 @@ std::string StatusMessage() {
     const auto uptime = esp_timer_get_time() / 1000000;
     const int rssi = wifi.GetRssi();
     const bool motor_ok = motor.hardware_error == ESP_OK;
-    const char* control_text =
-        motor.web_manual ? L298nTelegramText::kControlWeb : L298nTelegramText::kControlVoice;
+    const char* control_text = L298nTelegramText::kControlVoice;
+    if (motor.web_manual)
+        control_text = L298nTelegramText::kControlWeb;
+    else if (strcmp(motor.autonomy_mode, "manual") != 0)
+        control_text = L298nTelegramText::kControlAutonomy;
     const char* motor_state_text = motor.moving    ? L298nTelegramText::kMotorRunning
                                    : motor.pending ? L298nTelegramText::kMotorPending
                                                    : L298nTelegramText::kMotorIdle;
@@ -218,6 +238,25 @@ std::string StatusMessage() {
         message += L298nTelegramText::kHardwareErrorPrefix;
         message += esp_err_to_name(motor.hardware_error);
     }
+
+    message += "\n\n";
+    message += L298nTelegramText::kNavigationSection;
+    message += "\n";
+    message += L298nTelegramText::kNavigationModeLabel;
+    message += "<b>";
+    message += NavigationModeVi(motor.autonomy_mode);
+    message += "</b>\n";
+    message += L298nTelegramText::kDistanceLabel;
+    message += motor.distance_valid ? "<b>" + std::to_string(motor.measured_distance_cm) + " cm</b>"
+                                    : L298nTelegramText::kSensorNoEcho;
+    message += "\n";
+    message += L298nTelegramText::kFollowDistanceLabel;
+    message += std::to_string(motor.follow_distance_cm) + " cm\n";
+    message += L298nTelegramText::kObstacleDistanceLabel;
+    message += std::to_string(motor.obstacle_distance_cm) + " cm\n";
+    message += L298nTelegramText::kBlockedLabel;
+    message += motor.autonomy_blocked ? L298nTelegramText::kPathBlocked
+                                      : L298nTelegramText::kPathClear;
 
     message += "\n\n";
     message += L298nTelegramText::kNetworkSection;
@@ -519,6 +558,40 @@ private:
         }
     }
 
+    void HandleAutonomy(const std::string& raw_argument, bool follow) {
+        const std::string argument = LowerAscii(raw_argument);
+        const char* usage = follow ? L298nTelegramText::kFollowUsage
+                                   : L298nTelegramText::kAvoidUsage;
+        esp_err_t error = ESP_OK;
+        if (argument.empty()) {
+            Send(usage, true);
+            return;
+        }
+        if (argument == "off") {
+            error = follow ? SetL298nFollowMode(false) : SetL298nObstacleAvoidance(false);
+        } else if (argument == "on") {
+            error = follow ? SetL298nFollowMode(true) : SetL298nObstacleAvoidance(true);
+        } else {
+            int distance = 0;
+            const int maximum = follow ? 200 : 100;
+            const int minimum = 10;
+            if (!ParseUnsigned(argument, maximum, distance) || distance < minimum) {
+                Send(usage, true);
+                return;
+            }
+            error = follow ? SetL298nFollowDistance(distance)
+                           : SetL298nObstacleDistance(distance);
+            if (error == ESP_OK) {
+                error = follow ? SetL298nFollowMode(true) : SetL298nObstacleAvoidance(true);
+            }
+        }
+        if (error == ESP_OK) {
+            Send(StatusMessage(), true);
+        } else {
+            Send(L298nTelegramText::kAutonomyUnavailable, true);
+        }
+    }
+
     void Handle(const cJSON* update) {
         const auto* message = cJSON_GetObjectItemCaseSensitive(update, "message");
         int64_t chat;
@@ -557,7 +630,14 @@ private:
             HandleWake();
         else if (command == "/speed")
             HandleSpeed(argument);
-        else if (command == "/start" || command == "/menu" || command == "/help")
+        else if (command == "/follow")
+            HandleAutonomy(argument, true);
+        else if (command == "/avoid")
+            HandleAutonomy(argument, false);
+        else if (command == "/stop") {
+            StopL298nMotor();
+            Send(L298nTelegramText::kEmergencyStopped, true);
+        } else if (command == "/start" || command == "/menu" || command == "/help")
             Send(L298nTelegramText::kMenu, true);
         else if (!command.empty() && command.front() == '/')
             Send(L298nTelegramText::kUnknownCommand, true);

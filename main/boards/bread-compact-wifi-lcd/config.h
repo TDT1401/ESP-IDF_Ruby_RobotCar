@@ -316,6 +316,10 @@
 #define MOTOR_RIGHT_IN1_PIN GPIO_NUM_11
 #define MOTOR_RIGHT_IN2_PIN GPIO_NUM_12
 #define MOTOR_RIGHT_EN_PIN GPIO_NUM_13
+
+// HC-SR04 uses 5 V power. ECHO must be level-shifted to 3.3 V before this GPIO.
+#define HCSR04_TRIGGER_PIN GPIO_NUM_14
+#define HCSR04_ECHO_PIN GPIO_NUM_39
 #endif
 
 #ifndef DISPLAY_SPI_CLOCK_HZ

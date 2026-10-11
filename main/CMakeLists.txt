@@ -895,6 +895,7 @@ file(GLOB BOARD_SOURCES
 list(APPEND SOURCES ${BOARD_SOURCES})
 
 if(CONFIG_BREAD_COMPACT_WIFI_LCD_L298N)
+    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/l298n/hcsr04_sensor.cc")
     list(APPEND SOURCES "boards/bread-compact-wifi-lcd/l298n/l298n_controller.cc")
     list(APPEND SOURCES "boards/bread-compact-wifi-lcd/l298n/l298n_web_server.cc")
     list(APPEND SOURCES "boards/bread-compact-wifi-lcd/l298n/l298n_telegram.cc")
