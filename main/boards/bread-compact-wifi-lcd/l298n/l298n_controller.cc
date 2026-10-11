@@ -16,6 +16,7 @@
 
 #include "../config.h"
 #include "application.h"
+#include "assets/lang_config.h"
 #include "hcsr04_sensor.h"
 #include "mcp_server.h"
 
@@ -46,6 +47,8 @@ constexpr int kAvoidClearanceCm = 10;
 constexpr int kAutonomyCommandMs = 180;
 constexpr int kAvoidTurnTimeoutMs = 900;
 constexpr int kSensorStaleMs = 250;
+constexpr int kProximityWarningCm = 20;
+constexpr int64_t kProximityWarningPeriodUs = 700000;
 constexpr int kAutonomySpeedPercent = 40;
 constexpr int kAutonomyTurnSpeedPercent = 38;
 
@@ -108,6 +111,11 @@ Emotion ParseEmotion(const char* emotion) {
     return Emotion::kNone;  // Neutral and sleepy remain still.
 }
 
+bool IsSleepEmotion(const char* emotion) {
+    return emotion != nullptr &&
+           (strcmp(emotion, "sleep") == 0 || strcmp(emotion, "sleepy") == 0);
+}
+
 const char* MotionName(Motion motion) {
     switch (motion) {
         case Motion::kForward:
@@ -152,6 +160,7 @@ public:
         web_sequence_ = 0;
         web_deadline_us_ = 0;
         web_manual_ = false;
+        ReleaseWebSleepLockLocked();
         StopLocked();
     }
 
@@ -225,8 +234,14 @@ public:
         StopLocked();
         if (fault_ != ESP_OK)
             return fault_;
+#ifdef CONFIG_PM_ENABLE
+        if (!Check(esp_pm_lock_acquire(web_sleep_lock_)))
+            return ESP_FAIL;
+        web_sleep_lock_held_ = true;
+#endif
         pending_emotion_ = Emotion::kNone;
         web_manual_ = true;
+        proximity_warning_enabled_ = true;
         web_sequence_ = 0;
         // Zero is reserved for an expired/released session.
         web_session_ = esp_random();
@@ -237,7 +252,8 @@ public:
         return ESP_OK;
     }
 
-    esp_err_t WebCommand(uint32_t session, uint32_t sequence, L298nWebCommand command, int speed) {
+    esp_err_t WebCommand(uint32_t session, uint32_t sequence, L298nWebCommand command, int speed,
+                         bool proximity_warning_enabled) {
         if (speed < 0 || speed > 100)
             return ESP_ERR_INVALID_ARG;
         Motion motion;
@@ -267,6 +283,7 @@ public:
             sequence <= web_sequence_ || now >= web_deadline_us_)
             return ESP_ERR_INVALID_STATE;
         web_sequence_ = sequence;
+        proximity_warning_enabled_ = proximity_warning_enabled;
         pending_emotion_ = Emotion::kNone;
         if (command == L298nWebCommand::kRelease) {
             EndWebControlLocked();
@@ -300,7 +317,20 @@ public:
 
     void UpdateEmotion(const char* emotion, bool speaking) {
         const auto next = ParseEmotion(emotion);
+        const bool sleep_requested = IsSleepEmotion(emotion);
         std::lock_guard lock(mutex_);
+        if (sleep_requested) {
+            response_active_ = speaking;
+            last_emotion_ = Emotion::kNone;
+            pending_emotion_ = Emotion::kNone;
+            manual_override_ = speaking;
+            DisableAutonomyLocked();
+            // The browser owns manual motion until it releases or times out.
+            // Sleep expressions still cancel autonomous and emotion movement.
+            if (!web_manual_)
+                StopLocked();
+            return;
+        }
         if (!speaking) {
             if (response_active_) {
                 manual_override_ = false;
@@ -383,6 +413,40 @@ public:
             UpdateObstacleAvoidanceLocked(distance_cm);
     }
 
+    void ScheduleProximityWarning() {
+        bool enqueue = false;
+        {
+            std::lock_guard lock(mutex_);
+            const int64_t now = esp_timer_get_time();
+            if (web_manual_ && proximity_warning_enabled_ && web_connected_ && web_session_ != 0 &&
+                now < web_deadline_us_ && sensor_valid_ &&
+                now - last_sensor_update_us_ <= kSensorStaleMs * 1000LL &&
+                measured_distance_cm_ < kProximityWarningCm && !warning_queued_ &&
+                now >= next_warning_at_us_) {
+                warning_queued_ = true;
+                enqueue = true;
+            }
+        }
+        if (!enqueue)
+            return;
+        Application::GetInstance().Schedule([this]() {
+            bool warn = false;
+            {
+                std::lock_guard lock(mutex_);
+                const int64_t now = esp_timer_get_time();
+                warning_queued_ = false;
+                next_warning_at_us_ = now + kProximityWarningPeriodUs;
+                warn = web_manual_ && proximity_warning_enabled_ && web_connected_ &&
+                       web_session_ != 0 && now < web_deadline_us_ && sensor_valid_ &&
+                       now - last_sensor_update_us_ <= kSensorStaleMs * 1000LL &&
+                       measured_distance_cm_ < kProximityWarningCm;
+            }
+            auto& app = Application::GetInstance();
+            if (warn && app.CanEnterSleepMode())
+                app.PlaySound(Lang::Sounds::OGG_POPUP);
+        });
+    }
+
 private:
     // MCP, HTTP and network callbacks and the timer share this controller.
     // Only short state/GPIO operations hold the mutex: no sleeps, JSON, logging,
@@ -392,6 +456,8 @@ private:
 #ifdef CONFIG_PM_ENABLE
     esp_pm_lock_handle_t sleep_lock_ = nullptr;
     bool sleep_lock_held_ = false;
+    esp_pm_lock_handle_t web_sleep_lock_ = nullptr;
+    bool web_sleep_lock_held_ = false;
 #endif
     Motion motion_ = Motion::kStop;
     int speed_percent_ = kDefaultSpeedPercent;
@@ -428,6 +494,9 @@ private:
     int64_t last_sensor_update_us_ = 0;
     int64_t avoid_turn_started_us_ = 0;
     bool sensor_valid_ = false;
+    bool warning_queued_ = false;
+    bool proximity_warning_enabled_ = true;
+    int64_t next_warning_at_us_ = 0;
     bool next_avoid_turn_left_ = true;
 
     L298nController() {
@@ -462,6 +531,8 @@ private:
         }
 #ifdef CONFIG_PM_ENABLE
         ESP_ERROR_CHECK(esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "l298n", &sleep_lock_));
+        ESP_ERROR_CHECK(esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "l298n_web",
+                                           &web_sleep_lock_));
 #endif
         esp_timer_create_args_t timer = {};
         timer.callback = [](void* arg) { static_cast<L298nController*>(arg)->Tick(); };
@@ -480,6 +551,7 @@ private:
         Stop();
 #ifdef CONFIG_PM_ENABLE
         esp_pm_lock_delete(sleep_lock_);
+        esp_pm_lock_delete(web_sleep_lock_);
 #endif
     }
 
@@ -622,12 +694,22 @@ private:
         StopOutputsLocked();
     }
 
+    void ReleaseWebSleepLockLocked() {
+#ifdef CONFIG_PM_ENABLE
+        if (web_sleep_lock_held_) {
+            Check(esp_pm_lock_release(web_sleep_lock_));
+            web_sleep_lock_held_ = false;
+        }
+#endif
+    }
+
     void EndWebControlLocked() {
         web_session_ = 0;
         web_sequence_ = 0;
         web_deadline_us_ = 0;
         web_manual_ = false;
         pending_emotion_ = Emotion::kNone;
+        ReleaseWebSleepLockLocked();
         // Do not replay a gesture from the response that was active while the browser owned it.
         manual_override_ = response_active_;
         StopLocked();
@@ -1090,7 +1172,9 @@ void InitializeL298nController() {
     // Singleton and tool callbacks live for the entire firmware lifetime.
     L298nController::Instance();
     InitializeHcsr04Sensor([](int distance_cm, bool valid) {
-        L298nController::Instance().UpdateDistance(distance_cm, valid);
+        auto& controller = L298nController::Instance();
+        controller.UpdateDistance(distance_cm, valid);
+        controller.ScheduleProximityWarning();
     });
     ESP_ERROR_CHECK(esp_register_shutdown_handler([]() { L298nController::Instance().Stop(); }));
 }
@@ -1104,8 +1188,9 @@ esp_err_t BeginL298nWebControl(uint32_t* session) {
 }
 
 esp_err_t CommandL298nWebControl(uint32_t session, uint32_t sequence, L298nWebCommand command,
-                                 int speed_percent) {
-    return L298nController::Instance().WebCommand(session, sequence, command, speed_percent);
+                                 int speed_percent, bool proximity_warning_enabled) {
+    return L298nController::Instance().WebCommand(session, sequence, command, speed_percent,
+                                                 proximity_warning_enabled);
 }
 
 void SetL298nWebConnected(bool connected) {

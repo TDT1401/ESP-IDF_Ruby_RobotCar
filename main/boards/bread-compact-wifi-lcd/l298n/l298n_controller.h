@@ -16,7 +16,7 @@ enum class L298nWebCommand { kStop, kForward, kBackward, kLeft, kRight, kRelease
 // Expiry or network loss stops motors, invalidates the session and returns control to voice.
 esp_err_t BeginL298nWebControl(uint32_t* session);
 esp_err_t CommandL298nWebControl(uint32_t session, uint32_t sequence, L298nWebCommand command,
-                                 int speed_percent);
+                                 int speed_percent, bool proximity_warning_enabled);
 void SetL298nWebConnected(bool connected);
 
 // Thread-safe shared voice/Telegram speed setting (RAM only, 0..100 PWM percent).

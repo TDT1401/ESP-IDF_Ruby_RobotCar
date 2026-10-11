@@ -145,7 +145,8 @@ Có thể điều khiển bằng giọng nói, ví dụ:
 
 Khoảng cách follow hợp lệ là 10–200 cm; khoảng cách né vật cản hợp lệ là 10–100 cm. Các giá trị và
 mode chỉ lưu trong RAM, trở về 30 cm, 20 cm và chế độ thủ công sau khi khởi động lại. Mất Echo, dữ
-liệu cảm biến quá hạn, lỗi motor hoặc lệnh dừng đều làm motor dừng.
+liệu cảm biến quá hạn, lỗi motor, lệnh dừng hoặc biểu cảm `sleep/sleepy` đều tắt chế độ tự hành và
+làm motor dừng.
 
 ### Dùng web
 
@@ -158,6 +159,19 @@ liệu cảm biến quá hạn, lỗi motor hoặc lệnh dừng đều làm mot
 
 Thẻ HC-SR04 trên web cập nhật khoảng cách, chế độ tự hành và hai ngưỡng follow/né vật cản mỗi
 2 giây. Khi không nhận được Echo, thẻ hiển thị lỗi và không giữ lại số đo cũ.
+Giao diện mặc định dùng chủ đề tối kiểu cyber cockpit và tự chuyển bố cục cho màn hình điện thoại.
+
+Trong buồng lái ngang, heartbeat vẫn duy trì phiên khi không bấm nút. Mất focus tạm thời
+khi trang còn hiển thị sẽ dừng xe nhưng giữ phiên; chuyển ứng dụng, ẩn hoặc đóng trang sẽ trả quyền.
+Một lỗi truyền mạng được thử lại một lần bằng lệnh **Dừng** với số thứ tự mới, không tự chạy lại
+theo hướng cũ. Watchdog motor vẫn giữ giới hạn 600 ms. Nếu phiên đã hết hoặc bị thu hồi,
+bấm **Kết nối lại** ngay trên HUD để nhận phiên mới; không cần thoát màn hình ngang.
+Trang không tự nhận lại phiên đã bị thu hồi, vì lệnh dừng bằng giọng nói cũng có thể hủy phiên.
+
+Buồng lái yêu cầu giữ sáng màn hình nếu trình duyệt hỗ trợ Screen Wake Lock. Tính năng này cần
+secure context; URL HTTP nội bộ của ESP32 thường không hỗ trợ. Khi HUD nhắc về tự tắt màn hình,
+hãy tăng thời gian chờ màn hình trong cài đặt điện thoại. Không chạm màn hình không làm hết phiên
+nếu trình duyệt vẫn chạy heartbeat; khóa màn hình có thể làm trình duyệt ngừng gửi heartbeat.
 
 Chỉ dùng trong mạng nội bộ; trang web không có đăng nhập. Khi thử lần đầu, kê bánh xe khỏi mặt đất.
 Lệnh **Dừng**, mất kết nối hoặc đóng trang phải làm motor dừng; hết phiên hoặc đóng trang sẽ trả quyền

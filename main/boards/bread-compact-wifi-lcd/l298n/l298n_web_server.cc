@@ -84,10 +84,14 @@ esp_err_t Command(httpd_req_t* req) {
     Json json(cJSON_ParseWithLengthOpts(body, received + 1, nullptr, true), cJSON_Delete);
     uint32_t session, sequence, speed;
     const auto* direction = cJSON_GetObjectItemCaseSensitive(json.get(), "direction");
-    if (!cJSON_IsObject(json.get()) || cJSON_GetArraySize(json.get()) != 4 ||
+    const auto* warning_enabled =
+        cJSON_GetObjectItemCaseSensitive(json.get(), "warning_enabled");
+    if (!cJSON_IsObject(json.get()) ||
+        cJSON_GetArraySize(json.get()) != (warning_enabled == nullptr ? 4 : 5) ||
         !ReadInteger(json.get(), "session", 1, UINT32_MAX, &session) ||
         !ReadInteger(json.get(), "sequence", 1, UINT32_MAX, &sequence) ||
-        !ReadInteger(json.get(), "speed", 0, 100, &speed) || !cJSON_IsString(direction))
+        !ReadInteger(json.get(), "speed", 0, 100, &speed) || !cJSON_IsString(direction) ||
+        (warning_enabled != nullptr && !cJSON_IsBool(warning_enabled)))
         return Reply(req, "400 Bad Request", "{\"error\":\"Invalid command\"}");
 
     L298nWebCommand command;
@@ -106,7 +110,9 @@ esp_err_t Command(httpd_req_t* req) {
     else
         return Reply(req, "400 Bad Request", "{\"error\":\"Invalid direction\"}");
 
-    if (CommandL298nWebControl(session, sequence, command, static_cast<int>(speed)) != ESP_OK)
+    if (CommandL298nWebControl(
+            session, sequence, command, static_cast<int>(speed),
+            warning_enabled == nullptr || cJSON_IsTrue(warning_enabled)) != ESP_OK)
         return Reply(req, "409 Conflict", "{\"error\":\"Session expired or motor unavailable\"}");
     return Reply(req, "200 OK", "{\"ok\":true}");
 }

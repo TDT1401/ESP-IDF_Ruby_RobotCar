@@ -393,6 +393,14 @@ public:
         return &led;
     }
 
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N
+    void SetPowerSaveLevel(PowerSaveLevel level) override {
+        (void)level;
+        // The local driving page must respond even while the assistant is idle.
+        WifiBoard::SetPowerSaveLevel(PowerSaveLevel::PERFORMANCE);
+    }
+#endif
+
     virtual AudioCodec* GetAudioCodec() override {
 #ifdef AUDIO_I2S_METHOD_SIMPLEX
         static MicDiagnosticCodec audio_codec(AUDIO_INPUT_SAMPLE_RATE, AUDIO_OUTPUT_SAMPLE_RATE,
@@ -412,8 +420,9 @@ public:
 #ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N
     void SetNetworkEventCallback(NetworkEventCallback callback) override {
         WifiBoard::SetNetworkEventCallback(
-            [callback = std::move(callback)](NetworkEvent event, const std::string& data) {
+            [this, callback = std::move(callback)](NetworkEvent event, const std::string& data) {
                 if (event == NetworkEvent::Connected) {
+                    SetPowerSaveLevel(PowerSaveLevel::PERFORMANCE);
                     UpdateL298nWebNetwork(true);
                     UpdateL298nTelegramNetwork(true);
                 } else if (event == NetworkEvent::Disconnected ||
