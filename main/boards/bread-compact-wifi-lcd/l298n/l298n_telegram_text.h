@@ -10,11 +10,13 @@ inline constexpr char kDivider[] = "━━━━━━━━━━━━━━�
 
 inline constexpr char kStatusHeader[] = "<b>🤖 XiaoMin ROBOT</b>";
 inline constexpr char kSystemSection[] = "<b>🧠 HỆ THỐNG</b>";
+inline constexpr char kDeviceSection[] = "<b>🔌 THIẾT BỊ</b>";
 inline constexpr char kMotorSection[] = "<b>🚗 ĐỘNG CƠ</b>";
 inline constexpr char kNavigationSection[] = "<b>📡 HC-SR04 / TỰ HÀNH</b>";
 inline constexpr char kNetworkSection[] = "<b>📶 KẾT NỐI</b>";
 inline constexpr char kStatusFooter[] =
-    "<i>Motor hiển thị lệnh/PWM, không phải tốc độ đo từ bánh xe.</i>";
+    "<i>Motor hiển thị lệnh/PWM, không phải tốc độ đo từ bánh xe. Màn hình, motor, loa và mic "
+    "không có đường nhận dạng thiết bị; trạng thái chỉ xác nhận phía firmware.</i>";
 inline constexpr char kStateLabel[] = "• Trạng thái: ";
 inline constexpr char kFirmwareLabel[] = "• Firmware: ";
 inline constexpr char kUptimeLabel[] = "• Hoạt động: ";
@@ -25,11 +27,15 @@ inline constexpr char kActivePwmLabel[] = "• PWM hiện tại: ";
 inline constexpr char kSavedSpeedLabel[] = "• Tốc độ đã đặt: ";
 inline constexpr char kEmotionLabel[] = "• Chuyển động cảm xúc: ";
 inline constexpr char kNavigationModeLabel[] = "• Chế độ: ";
-inline constexpr char kDistanceLabel[] = "• Khoảng cách đo: ";
 inline constexpr char kFollowDistanceLabel[] = "• Khoảng cách follow: ";
 inline constexpr char kObstacleDistanceLabel[] = "• Khoảng cách né vật cản: ";
 inline constexpr char kBlockedLabel[] = "• Đường đi: ";
 inline constexpr char kHardwareLabel[] = "• Phần cứng: ";
+inline constexpr char kDisplayDeviceLabel[] = "• Màn hình: ";
+inline constexpr char kMotorDeviceLabel[] = "• Motor: ";
+inline constexpr char kSpeakerDeviceLabel[] = "• Loa: ";
+inline constexpr char kMicrophoneDeviceLabel[] = "• Mic: ";
+inline constexpr char kSr04DeviceLabel[] = "• HC-SR04: ";
 inline constexpr char kWifiLabel[] = "• Wi-Fi: ";
 inline constexpr char kSignalLabel[] = "• Tín hiệu: ";
 inline constexpr char kIpLabel[] = "• IP: ";
@@ -41,6 +47,11 @@ inline constexpr char kStatusWebLinkPrefix[] = "🌐 ";
 inline constexpr char kWebAddressLabel[] = "📍 Địa chỉ: ";
 inline constexpr char kBootFirmwareLabel[] = "📦 Firmware: ";
 inline constexpr char kHardwareErrorPrefix[] = "❌ ";
+inline constexpr char kDeviceReady[] = "✅ Sẵn sàng";
+inline constexpr char kDeviceActive[] = "✅ Đang hoạt động";
+inline constexpr char kDeviceNoInfo[] = "❌ Lỗi: không có thông tin";
+inline constexpr char kDisplayNotReady[] = "❌ Lỗi: giao diện chưa khởi tạo";
+inline constexpr char kSr04NoEcho[] = "❌ Lỗi: không nhận được Echo";
 inline constexpr char kSignalUnitSeparator[] = " dBm · ";
 inline constexpr char kMemoryUnit[] = " KB";
 
@@ -51,7 +62,6 @@ inline constexpr char kControlAutonomy[] = "🤖 Tự hành";
 inline constexpr char kNavigationManual[] = "Thủ công";
 inline constexpr char kNavigationFollow[] = "Follow";
 inline constexpr char kNavigationAvoid[] = "Né vật cản";
-inline constexpr char kSensorNoEcho[] = "Không có Echo hợp lệ";
 inline constexpr char kPathClear[] = "Sẵn sàng";
 inline constexpr char kPathBlocked[] = "Bị chặn, motor đã dừng";
 inline constexpr char kMotorRunning[] = "🟢 Đang chạy";

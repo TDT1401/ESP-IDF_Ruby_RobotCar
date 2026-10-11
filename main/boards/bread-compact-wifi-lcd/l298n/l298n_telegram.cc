@@ -35,6 +35,9 @@
 #include <string>
 
 #include "application.h"
+#include "audio_codec.h"
+#include "board.h"
+#include "display.h"
 #include "l298n_controller.h"
 #include "l298n_telegram_text.h"
 #include "l298n_web_server.h"
@@ -169,6 +172,9 @@ std::string StatusMessage() {
     auto& wifi = WifiManager::GetInstance();
     const auto motor = GetL298nMotorStatus();
     const auto state = Application::GetInstance().GetDeviceState();
+    auto& board = Board::GetInstance();
+    auto* display = board.GetDisplay();
+    auto* codec = board.GetAudioCodec();
     const auto uptime = esp_timer_get_time() / 1000000;
     const int rssi = wifi.GetRssi();
     const bool motor_ok = motor.hardware_error == ESP_OK;
@@ -190,7 +196,7 @@ std::string StatusMessage() {
              static_cast<long long>(uptime % 60));
 
     std::string message;
-    message.reserve(1024);
+    message.reserve(1536);
     message += L298nTelegramText::kStatusHeader;
     message += "\n";
     message += L298nTelegramText::kDivider;
@@ -208,6 +214,56 @@ std::string StatusMessage() {
     message += "</code>\n";
     message += L298nTelegramText::kUptimeLabel;
     message += uptime_text;
+
+    message += "\n\n";
+    message += L298nTelegramText::kDeviceSection;
+    message += "\n";
+    message += L298nTelegramText::kDisplayDeviceLabel;
+    if (display == nullptr) {
+        message += L298nTelegramText::kDeviceNoInfo;
+    } else if (!display->IsSetupUICalled() || display->width() <= 0 || display->height() <= 0) {
+        message += L298nTelegramText::kDisplayNotReady;
+    } else {
+        message += L298nTelegramText::kDeviceActive;
+        message += " · " + std::to_string(display->width()) + "x" +
+                   std::to_string(display->height());
+    }
+    message += "\n";
+    message += L298nTelegramText::kMotorDeviceLabel;
+    if (!motor_ok) {
+        message += L298nTelegramText::kHardwareErrorPrefix;
+        message += "Lỗi: ";
+        message += esp_err_to_name(motor.hardware_error);
+    } else {
+        message += motor.moving ? L298nTelegramText::kDeviceActive
+                                : L298nTelegramText::kDeviceReady;
+    }
+    message += "\n";
+    message += L298nTelegramText::kSpeakerDeviceLabel;
+    if (codec == nullptr || codec->output_sample_rate() <= 0) {
+        message += L298nTelegramText::kDeviceNoInfo;
+    } else {
+        message += codec->output_enabled() ? L298nTelegramText::kDeviceActive
+                                           : L298nTelegramText::kDeviceReady;
+        message += " · " + std::to_string(codec->output_sample_rate()) + " Hz";
+    }
+    message += "\n";
+    message += L298nTelegramText::kMicrophoneDeviceLabel;
+    if (codec == nullptr || codec->input_sample_rate() <= 0) {
+        message += L298nTelegramText::kDeviceNoInfo;
+    } else {
+        message += codec->input_enabled() ? L298nTelegramText::kDeviceActive
+                                          : L298nTelegramText::kDeviceReady;
+        message += " · " + std::to_string(codec->input_sample_rate()) + " Hz";
+    }
+    message += "\n";
+    message += L298nTelegramText::kSr04DeviceLabel;
+    if (motor.distance_valid) {
+        message += L298nTelegramText::kDeviceActive;
+        message += " · <b>" + std::to_string(motor.measured_distance_cm) + " cm</b>";
+    } else {
+        message += L298nTelegramText::kSr04NoEcho;
+    }
 
     message += "\n\n";
     message += L298nTelegramText::kMotorSection;
@@ -246,10 +302,6 @@ std::string StatusMessage() {
     message += "<b>";
     message += NavigationModeVi(motor.autonomy_mode);
     message += "</b>\n";
-    message += L298nTelegramText::kDistanceLabel;
-    message += motor.distance_valid ? "<b>" + std::to_string(motor.measured_distance_cm) + " cm</b>"
-                                    : L298nTelegramText::kSensorNoEcho;
-    message += "\n";
     message += L298nTelegramText::kFollowDistanceLabel;
     message += std::to_string(motor.follow_distance_cm) + " cm\n";
     message += L298nTelegramText::kObstacleDistanceLabel;

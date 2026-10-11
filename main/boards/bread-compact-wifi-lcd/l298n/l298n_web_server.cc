@@ -111,13 +111,67 @@ esp_err_t Command(httpd_req_t* req) {
     return Reply(req, "200 OK", "{\"ok\":true}");
 }
 
+esp_err_t Status(httpd_req_t* req) {
+    if (req->content_len != 0)
+        return Reply(req, "400 Bad Request", "{\"error\":\"Invalid request\"}");
+    const auto motor = GetL298nMotorStatus();
+    char body[320];
+    const int length = snprintf(
+        body, sizeof(body),
+        "{\"distance_valid\":%s,\"distance_cm\":%d,\"autonomy_mode\":\"%s\","
+        "\"follow_distance_cm\":%d,\"obstacle_distance_cm\":%d,\"moving\":%s}",
+        motor.distance_valid ? "true" : "false", motor.measured_distance_cm,
+        motor.autonomy_mode, motor.follow_distance_cm, motor.obstacle_distance_cm,
+        motor.moving ? "true" : "false");
+    if (length < 0 || static_cast<size_t>(length) >= sizeof(body))
+        return Reply(req, "500 Internal Server Error", "{\"error\":\"Status unavailable\"}");
+    return Reply(req, "200 OK", body);
+}
+
+esp_err_t Autonomy(httpd_req_t* req) {
+    char body[96];
+    if (!IsControlRequest(req) || req->content_len == 0 || req->content_len >= sizeof(body)) {
+        Reply(req, "400 Bad Request", "{\"error\":\"Invalid request\"}");
+        return ESP_FAIL;
+    }
+    size_t received = 0;
+    while (received < req->content_len) {
+        const int count = httpd_req_recv(req, body + received, req->content_len - received);
+        if (count <= 0)
+            return ESP_FAIL;
+        received += count;
+    }
+    body[received] = '\0';
+    if (memchr(body, '\0', received) != nullptr)
+        return Reply(req, "400 Bad Request", "{\"error\":\"Invalid JSON\"}");
+
+    using Json = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
+    Json json(cJSON_ParseWithLengthOpts(body, received + 1, nullptr, true), cJSON_Delete);
+    const auto* mode = cJSON_GetObjectItemCaseSensitive(json.get(), "mode");
+    const auto* enabled = cJSON_GetObjectItemCaseSensitive(json.get(), "enabled");
+    if (!cJSON_IsObject(json.get()) || cJSON_GetArraySize(json.get()) != 2 ||
+        !cJSON_IsString(mode) || !cJSON_IsBool(enabled))
+        return Reply(req, "400 Bad Request", "{\"error\":\"Invalid autonomy command\"}");
+
+    esp_err_t error = ESP_ERR_INVALID_ARG;
+    if (strcmp(mode->valuestring, "follow") == 0)
+        error = SetL298nFollowMode(cJSON_IsTrue(enabled));
+    else if (strcmp(mode->valuestring, "avoid") == 0)
+        error = SetL298nObstacleAvoidance(cJSON_IsTrue(enabled));
+    else
+        return Reply(req, "400 Bad Request", "{\"error\":\"Invalid autonomy mode\"}");
+    if (error != ESP_OK)
+        return Reply(req, "409 Conflict", "{\"error\":\"Autonomy unavailable\"}");
+    return Reply(req, "200 OK", "{\"ok\":true}");
+}
+
 esp_err_t StartServer() {
     if (server != nullptr)
         return ESP_OK;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.server_port = 8080;  // Wi-Fi provisioning keeps port 80.
     config.ctrl_port = 32769;
-    config.max_uri_handlers = 3;
+    config.max_uri_handlers = 5;
     config.max_open_sockets = 2;
     config.lru_purge_enable = true;
     config.stack_size = 6144;
@@ -132,6 +186,8 @@ esp_err_t StartServer() {
         {.uri = "/", .method = HTTP_GET, .handler = Root, .user_ctx = nullptr},
         {.uri = "/api/claim", .method = HTTP_POST, .handler = Claim, .user_ctx = nullptr},
         {.uri = "/api/command", .method = HTTP_POST, .handler = Command, .user_ctx = nullptr},
+        {.uri = "/api/status", .method = HTTP_GET, .handler = Status, .user_ctx = nullptr},
+        {.uri = "/api/autonomy", .method = HTTP_POST, .handler = Autonomy, .user_ctx = nullptr},
     };
     for (const auto& route : routes) {
         error = httpd_register_uri_handler(server, &route);

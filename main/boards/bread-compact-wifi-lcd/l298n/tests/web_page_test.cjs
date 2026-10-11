@@ -28,7 +28,12 @@ class Element {
 class Input extends Element {}
 
 function setup() {
-  const elements = Object.fromEntries(['claim','release','stop','status','speedValue','theme']
+  const elements = Object.fromEntries([
+    'claim','release','stop','status','speedValue','theme','distance','sensorState','navigationState',
+    'modeNotice','manualTab','avoidTab','followTab','manualPanel','avoidPanel','followPanel',
+    'avoidStatus','followStatus','avoidDistance','followDistance','avoidOn','avoidOff','followOn',
+    'followOff'
+  ]
     .map(id => [id, new Element()]));
   elements.speed = new Input();
   const directions = Object.fromEntries(['f','b','l','r'].map(dir => {
@@ -38,22 +43,32 @@ function setup() {
   document.getElementById = id => elements[id];
   document.querySelectorAll = () => Object.values(directions);
   document.body = new Element();
-  const requests = [], timers = new Map();
+  const requests = [], timers = new Map(), intervals = new Map();
   let timerId = 0, heartbeat, nextReply;
+  let currentMode = 'manual';
   const context = vm.createContext({
     document,window,HTMLInputElement:Input,AbortController,
-    setInterval(fn) { heartbeat = fn; },
+    setInterval(fn, delay) { intervals.set(delay,fn); heartbeat = fn; },
     setTimeout(fn) { timers.set(++timerId,fn); return timerId; },
     clearTimeout(id) { timers.delete(id); },
-    fetch(url, options) {
-      requests.push({url, ...options, data: options.body && JSON.parse(options.body)});
+    fetch(url, options = {}) {
+      const requestData = options.body && JSON.parse(options.body);
+      requests.push({url, ...options, data: requestData});
       const reply = nextReply; nextReply = undefined;
       if (reply) return reply(options);
-      return Promise.resolve({ok:true,json:async () => url.endsWith('claim') ? {session:1234} : {ok:true}});
+      if (url.endsWith('claim')) currentMode = 'manual';
+      if (url.endsWith('autonomy'))
+        currentMode = requestData.enabled ? requestData.mode : currentMode === requestData.mode ?
+          'manual' : currentMode;
+      const responseData = url.endsWith('claim') ? {session:1234} : url.endsWith('status') ? {
+        distance_valid:true,distance_cm:34,autonomy_mode:currentMode,follow_distance_cm:30,
+        obstacle_distance_cm:20,moving:false
+      } : {ok:true};
+      return Promise.resolve({ok:true,json:async () => responseData});
     }
   });
   vm.runInContext(script,context);
-  return {elements,directions,document,window,requests,timers,
+  return {elements,directions,document,window,requests,timers,intervals,
     heartbeat:() => heartbeat(), replyNext:fn => { nextReply = fn; }};
 }
 const settle = () => new Promise(resolve => setImmediate(resolve));
@@ -62,7 +77,7 @@ const lastCommand = ui => ui.requests.filter(x => x.data).at(-1).data;
 
 test('opening does not claim or move; four directions stop on release', async () => {
   const ui = setup();
-  assert.equal(ui.requests.length,0);
+  assert.equal(ui.requests.filter(request => request.data).length,0);
   assert.equal(ui.directions.f.disabled,true);
   await claim(ui);
   assert.equal(lastCommand(ui).direction,'s');
@@ -74,6 +89,31 @@ test('opening does not claim or move; four directions stop on release', async ()
     await ui.directions[dir].emit('pointerup'); await settle();
     assert.equal(lastCommand(ui).direction,'s');
   }
+});
+
+test('status telemetry renders the measured SR04 distance and navigation settings', async () => {
+  const ui = setup(); await settle();
+  assert.equal(ui.elements.distance.textContent,'34 cm');
+  assert.equal(ui.elements.sensorState.textContent,'SR04 hoạt động');
+  assert.equal(ui.elements.navigationState.textContent,'Thủ công · Follow 30 cm · Né 20 cm');
+  assert.ok(ui.intervals.has(2000));
+});
+
+test('autonomy controls toggle modes and release manual control first', async () => {
+  const ui = setup(); await settle();
+  await ui.elements.followOn.emit('click'); await settle();
+  assert.deepEqual(ui.requests.filter(x => x.url.endsWith('autonomy')).at(-1).data,
+    {mode:'follow',enabled:true});
+  assert.equal(ui.elements.followStatus.textContent,'ON');
+
+  await claim(ui);
+  await ui.elements.avoidOn.emit('click'); await settle();
+  const releaseIndex = ui.requests.findLastIndex(x => x.data?.direction === 'release');
+  const autonomyIndex = ui.requests.findLastIndex(x => x.url.endsWith('autonomy'));
+  assert.ok(releaseIndex >= 0 && releaseIndex < autonomyIndex);
+  assert.deepEqual(ui.requests[autonomyIndex].data,{mode:'avoid',enabled:true});
+  assert.equal(ui.elements.avoidStatus.textContent,'ON');
+  assert.equal(ui.elements.followStatus.textContent,'OFF');
 });
 
 test('one pointer owns motion; pointer cancellation and lost capture stop', async () => {

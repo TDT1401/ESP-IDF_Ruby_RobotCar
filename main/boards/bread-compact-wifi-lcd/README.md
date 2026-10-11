@@ -12,7 +12,8 @@ Board ESP32-S3-N16R8, microphone I2S, MAX98357A và màn hình TFT SPI.
   trang thông tin tự quay lại mắt robot sau 15 giây.
 - Điều khiển motor, follow và tự hành né vật cản bằng giọng nói/MCP; điều khiển thủ công bằng web.
 - Telegram.
-- Điều khiển web tại `http://<IP-robot>:8080`: tiến, lùi, trái, phải, dừng và tốc độ PWM.
+- Điều khiển web tại `http://<IP-robot>:8080`: tiến, lùi, trái, phải, dừng, tốc độ PWM
+  và khoảng cách HC-SR04 theo thời gian thực.
 
 ## Nối dây
 
@@ -100,7 +101,7 @@ idf.py -p <CONG_SERIAL> flash monitor
 
 | Lệnh             | Mô tả                                       |
 | ---------------- | ------------------------------------------- |
-| `/status`        | Xem trạng thái robot và motor.              |
+| `/status`        | Xem robot, màn hình, motor, loa, mic và SR04. |
 | `/web`           | Lấy link trang điều khiển web hiện tại.     |
 | `/wake`          | Đánh thức robot khi robot đang chờ.         |
 | `/speed [0-100]` | Xem hoặc đặt tốc độ PWM; `0` dừng motor.    |
@@ -152,8 +153,15 @@ liệu cảm biến quá hạn, lỗi motor hoặc lệnh dừng đều làm mot
 2. Mở URL `L298nWeb: Motor control: http://<IP>:8080` trong serial log.
 3. Bấm **Bắt đầu**, giữ nút điều hướng để chạy và thả để dừng.
 4. Bấm **Trả về giọng nói** khi hoàn tất. Khi web giành quyền, follow/né vật cản sẽ bị tắt.
+5. Dùng các tab **Né vật cản** và **Follow** để bật hoặc tắt từng chế độ. Khi bật tự hành,
+   trang web tự trả quyền điều khiển thủ công trước; hai chế độ tự hành loại trừ nhau.
 
-Chỉ dùng trong mạng nội bộ; trang web không có đăng nhập. Khi thử lần đầu, kê bánh xe khỏi mặt đất. Lệnh **Dừng**, mất kết nối hoặc đóng trang phải làm motor dừng; hết phiên hoặc đóng trang sẽ trả quyền điều khiển về giọng nói.
+Thẻ HC-SR04 trên web cập nhật khoảng cách, chế độ tự hành và hai ngưỡng follow/né vật cản mỗi
+2 giây. Khi không nhận được Echo, thẻ hiển thị lỗi và không giữ lại số đo cũ.
+
+Chỉ dùng trong mạng nội bộ; trang web không có đăng nhập. Khi thử lần đầu, kê bánh xe khỏi mặt đất.
+Lệnh **Dừng**, mất kết nối hoặc đóng trang phải làm motor dừng; hết phiên hoặc đóng trang sẽ trả quyền
+điều khiển về giọng nói.
 
 ## Telegram cho L298N
 
@@ -185,6 +193,11 @@ Telegram cần Internet, thời gian hệ thống hợp lệ và CA bundle của
 
 Sau khi robot có Wi-Fi, bot phải gửi thông báo khởi động. Thử `/status`, `/web`, `/wake`, `/speed 50`,
 `/follow 30`, `/avoid 20` và `/stop`.
+
+`/status` báo trạng thái firmware của màn hình, motor, loa, mic và HC-SR04; HC-SR04 kèm khoảng cách
+đo hiện tại. Nếu không có đối tượng thiết bị, thông số không hợp lệ hoặc SR04 không nhận Echo, mục
+tương ứng sẽ báo lỗi. Màn hình, L298N, MAX98357A và mic I2S không có đường nhận dạng thiết bị nên
+trạng thái chỉ xác nhận phía firmware, không thể xác nhận dây nối hoặc tải vật lý thực tế.
 
 Để gửi nội dung do XiaoZhi trả lời hoặc tìm được, hãy yêu cầu rõ trong câu nói, ví dụ:
 
