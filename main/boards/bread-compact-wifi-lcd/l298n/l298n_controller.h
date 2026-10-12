@@ -46,6 +46,9 @@ struct L298nMotorStatus {
     const char* autonomy_mode;
     int follow_distance_cm;
     int obstacle_distance_cm;
+    int follow_target_effective_cm;
+    int obstacle_stop_effective_cm;
+    int web_warning_effective_cm;
     int measured_distance_cm;
     bool distance_valid;
     bool autonomy_blocked;

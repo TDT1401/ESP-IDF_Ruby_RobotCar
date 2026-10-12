@@ -51,11 +51,19 @@ constexpr int kAvoidReverseMs = 300;
 constexpr int kAvoidSideTurnMs = 550;
 constexpr int kAvoidSettleMs = 200;  // Flush the SR04 median filter after stopping a turn.
 constexpr int kSensorStaleMs = 250;
-constexpr int kProximityWarningCm = 20;
+constexpr int kReferenceSpeedPercent = 50;
 constexpr int64_t kProximityWarningPeriodUs = 700000;
 constexpr int kAutonomySpeedPercent = 40;
 constexpr int kAvoidReverseSpeedPercent = 45;
 constexpr int kAutonomyTurnSpeedPercent = 60;
+
+int ScaleDistanceForSpeed(int distance_cm, int speed_percent) {
+    // Keep the configured distance as the minimum threshold up to 50% PWM, then
+    // increase it proportionally. For example, 20 cm at 50% becomes 30 cm at 75%.
+    const int scaled_speed = std::max(speed_percent, kReferenceSpeedPercent);
+    return (distance_cm * scaled_speed + kReferenceSpeedPercent - 1) /
+           kReferenceSpeedPercent;
+}
 
 enum class Motion { kStop, kForward, kBackward, kLeft, kRight };
 enum class Emotion { kNone, kHappy, kSad, kAngry, kSurprised, kThinking, kWinking };
@@ -218,6 +226,9 @@ public:
                 AutonomyModeName(autonomy_mode_),
                 follow_distance_cm_,
                 obstacle_distance_cm_,
+                std::min(follow_distance_cm_, kFollowMaxTargetCm),
+                ScaleDistanceForSpeed(obstacle_distance_cm_, speed_percent_),
+                ScaleDistanceForSpeed(obstacle_distance_cm_, web_speed_percent_),
                 distance_fresh ? measured_distance_cm_ : -1,
                 distance_fresh,
                 avoid_state_ == AvoidState::kBlocked,
@@ -447,10 +458,13 @@ public:
         {
             std::lock_guard lock(mutex_);
             const int64_t now = esp_timer_get_time();
+            const int warning_distance =
+                ScaleDistanceForSpeed(obstacle_distance_cm_, web_speed_percent_);
             if (web_manual_ && proximity_warning_enabled_ && web_connected_ && web_session_ != 0 &&
                 now < web_deadline_us_ && sensor_valid_ &&
                 now - last_sensor_update_us_ <= kSensorStaleMs * 1000LL &&
-                measured_distance_cm_ < kProximityWarningCm && !warning_queued_ &&
+                motion_ == Motion::kForward && measured_distance_cm_ < warning_distance &&
+                !warning_queued_ &&
                 now >= next_warning_at_us_) {
                 warning_queued_ = true;
                 enqueue = true;
@@ -465,10 +479,12 @@ public:
                 const int64_t now = esp_timer_get_time();
                 warning_queued_ = false;
                 next_warning_at_us_ = now + kProximityWarningPeriodUs;
+                const int warning_distance =
+                    ScaleDistanceForSpeed(obstacle_distance_cm_, web_speed_percent_);
                 warn = web_manual_ && proximity_warning_enabled_ && web_connected_ &&
                        web_session_ != 0 && now < web_deadline_us_ && sensor_valid_ &&
                        now - last_sensor_update_us_ <= kSensorStaleMs * 1000LL &&
-                       measured_distance_cm_ < kProximityWarningCm;
+                       motion_ == Motion::kForward && measured_distance_cm_ < warning_distance;
             }
             auto& app = Application::GetInstance();
             if (warn && app.CanEnterSleepMode())
@@ -650,19 +666,20 @@ private:
     }
 
     void UpdateFollowLocked(int distance_cm) {
+        const int target_distance = std::min(follow_distance_cm_, kFollowMaxTargetCm);
         avoid_state_ = AvoidState::kForward;
         if (distance_cm > kFollowMaxTargetCm) {
             StopLocked();
             return;
         }
-        // Start retreating only at close range, then keep reversing until the configured
+        // Start retreating only at close range, then keep reversing until the effective
         // target is reached. A stop (including sensor loss) cancels the retreat.
-        if (distance_cm < follow_distance_cm_ &&
+        if (distance_cm < target_distance &&
             (distance_cm <= kFollowReverseTriggerCm || motion_ == Motion::kBackward)) {
             RefreshAutonomyMotionLocked(Motion::kBackward, kAutonomySpeedPercent);
             return;
         }
-        if (distance_cm <= follow_distance_cm_ + kFollowHysteresisCm) {
+        if (distance_cm <= target_distance + kFollowHysteresisCm) {
             StopLocked();
             return;
         }
@@ -723,7 +740,9 @@ private:
     }
 
     void UpdateObstacleAvoidanceLocked(int distance_cm) {
-        const int clear_distance = obstacle_distance_cm_ + kAvoidClearanceCm;
+        const int forward_speed = speed_percent_;
+        const int stop_distance = ScaleDistanceForSpeed(obstacle_distance_cm_, forward_speed);
+        const int clear_distance = stop_distance + kAvoidClearanceCm;
         const int64_t now = esp_timer_get_time();
         if (avoid_state_ == AvoidState::kBlocked) {
             if (distance_cm > clear_distance) {
@@ -737,7 +756,7 @@ private:
             return;
         }
         if (avoid_state_ == AvoidState::kForward) {
-            if (distance_cm <= obstacle_distance_cm_) {
+            if (distance_cm <= stop_distance) {
                 avoid_first_distance_cm_ = -1;
                 StartAvoidMotionLocked(AvoidState::kReverse, Motion::kBackward, kAvoidReverseMs);
             } else {
@@ -779,7 +798,7 @@ private:
         const int measured = avoid_sample_distance_cm_;
         if (avoid_state_ == AvoidState::kMeasureFirst) {
             avoid_first_distance_cm_ = measured;
-            if (measured > std::max(kAvoidFirstClearCm, obstacle_distance_cm_)) {
+            if (measured > std::max(kAvoidFirstClearCm, stop_distance)) {
                 DriveAvoidForwardLocked();
                 return;
             }
@@ -788,7 +807,7 @@ private:
             return;
         }
         if (avoid_state_ == AvoidState::kMeasureSecond) {
-            if (std::max(avoid_first_distance_cm_, measured) <= obstacle_distance_cm_) {
+            if (std::max(avoid_first_distance_cm_, measured) <= stop_distance) {
                 BlockAvoidLocked();
             } else if (measured >= avoid_first_distance_cm_) {
                 DriveAvoidForwardLocked();
@@ -799,7 +818,7 @@ private:
             return;
         }
         // Re-check the chosen left heading after returning; the obstacle may have moved.
-        if (measured > obstacle_distance_cm_)
+        if (measured > stop_distance)
             DriveAvoidForwardLocked();
         else
             BlockAvoidLocked();
@@ -1098,6 +1117,8 @@ private:
         int active_speed;
         int follow_distance;
         int obstacle_distance;
+        int effective_follow_distance;
+        int effective_obstacle_distance;
         int measured_distance;
         bool moving;
         bool emotion_enabled;
@@ -1117,6 +1138,9 @@ private:
             active_speed = moving_ ? ActiveSpeedLocked() : 0;
             follow_distance = follow_distance_cm_;
             obstacle_distance = obstacle_distance_cm_;
+            effective_follow_distance = std::min(follow_distance_cm_, kFollowMaxTargetCm);
+            effective_obstacle_distance =
+                ScaleDistanceForSpeed(obstacle_distance_cm_, speed_percent_);
             distance_valid =
                 sensor_valid_ && now - last_sensor_update_us_ <= kSensorStaleMs * 1000LL;
             measured_distance = distance_valid ? measured_distance_cm_ : -1;
@@ -1142,6 +1166,10 @@ private:
                                     AutonomyModeName(autonomy_mode)) ||
             !cJSON_AddNumberToObject(json.get(), "follow_distance_cm", follow_distance) ||
             !cJSON_AddNumberToObject(json.get(), "obstacle_distance_cm", obstacle_distance) ||
+            !cJSON_AddNumberToObject(json.get(), "follow_target_cm",
+                                    effective_follow_distance) ||
+            !cJSON_AddNumberToObject(json.get(), "obstacle_stop_cm",
+                                    effective_obstacle_distance) ||
             !cJSON_AddNumberToObject(json.get(), "measured_distance_cm", measured_distance) ||
             !cJSON_AddBoolToObject(json.get(), "distance_valid", distance_valid) ||
             !cJSON_AddBoolToObject(json.get(), "autonomy_blocked", autonomy_blocked) ||
@@ -1231,7 +1259,8 @@ private:
             "Enable or disable HC-SR04 follow mode (bật/tắt chế độ đi theo). The robot only "
             "follows an object directly in front and stops when the target is lost. At 10 cm "
             "or closer it reverses until reaching the configured target distance; otherwise "
-            "it moves forward when farther than the target plus a 4 cm deadband. "
+            "it moves forward when farther than the target plus a 4 cm deadband. The default "
+            "target is 30 cm and does not change with speed. "
             "There is no rear obstacle sensor. Enabling disables obstacle avoidance. "
             "distance_cm: 10..200 changes the target before switching mode; -1 keeps the current "
             "target. Defaults off with a 30 cm target after reboot.",
@@ -1253,8 +1282,9 @@ private:
             });
         server.AddTool(
             "self.navigation.set_follow_distance",
-            "Set the HC-SR04 follow target distance in centimetres (khoảng cách đi theo), 10..200. "
-            "Default is 30 cm. Changing it does not enable follow mode.",
+            "Set the HC-SR04 follow target distance in centimetres (khoảng cách đi theo), "
+            "10..200. Default is 30 cm and does not change with speed. Changing it "
+            "does not enable follow mode.",
             PropertyList({Property("distance_cm", kPropertyTypeInteger, kMinFollowDistanceCm,
                                    kMaxFollowDistanceCm)}),
             [this](const PropertyList& properties) -> ToolResult {
@@ -1266,14 +1296,16 @@ private:
         server.AddTool(
             "self.navigation.set_obstacle_avoidance",
             "Enable or disable autonomous HC-SR04 obstacle avoidance (bật/tắt tự hành né vật "
-            "cản). At the configured distance the robot briefly reverses, probes left, and "
+            "cản). At the effective stop distance the robot briefly reverses, probes left, and "
             "drives left immediately if clearance exceeds both 40 cm and the stop distance. "
             "Otherwise it probes right and chooses the farther safe direction, rechecking "
             "left if it returns there. It stops if neither direction is safe or readings fail. "
             "Turns are timed, not angle-controlled; there is no rear sensor. "
             "Enabling disables follow mode. Defaults "
             "off after reboot. distance_cm: 10..100 changes the stop distance before switching "
-            "mode; -1 keeps the current distance (20 cm after reboot).",
+            "mode; -1 keeps the current distance (20 cm at 50% PWM after reboot). The effective "
+            "stop distance scales proportionally above 50% and never falls below the configured "
+            "value at lower speeds.",
             PropertyList({Property("enabled", kPropertyTypeBoolean),
                           Property("distance_cm", kPropertyTypeInteger, -1, -1,
                                    kMaxObstacleDistanceCm)}),
@@ -1292,8 +1324,10 @@ private:
             });
         server.AddTool(
             "self.navigation.set_obstacle_distance",
-            "Set the HC-SR04 obstacle stop distance in centimetres (khoảng cách né vật cản), "
-            "10..100. Default is 20 cm. Changing it does not enable obstacle avoidance.",
+            "Set the HC-SR04 obstacle stop distance baseline in centimetres (khoảng cách né vật "
+            "cản), 10..100. Default is 20 cm at 50% PWM; the effective stop distance scales "
+            "proportionally above 50% and never falls below the configured value at lower speeds. "
+            "Changing it does not enable obstacle avoidance.",
             PropertyList({Property("distance_cm", kPropertyTypeInteger, kMinObstacleDistanceCm,
                                    kMaxObstacleDistanceCm)}),
             [this](const PropertyList& properties) -> ToolResult {
@@ -1303,8 +1337,8 @@ private:
                 return GetState();
             });
         server.AddTool("self.navigation.get_state",
-                       "Read HC-SR04 distance, sensor validity, follow/avoid thresholds, current "
-                       "autonomy mode and blocked state.",
+                       "Read HC-SR04 distance, sensor validity, configured and speed-adjusted "
+                       "follow/avoid thresholds, current autonomy mode and blocked state.",
                        PropertyList(),
                        [this](const PropertyList&) -> ToolResult { return GetState(); });
     }

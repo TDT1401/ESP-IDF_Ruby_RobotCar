@@ -78,7 +78,7 @@ inline constexpr char kL298nWebPage[] = R"html(
             <div class="hud-topbar"><button id="hudConnect" class="hud-exit" type="button" aria-live="polite">Kết nối lại</button><strong class="hud-title">RUBY · REMOTE CONTROL</strong><div class="hud-top-actions"><button id="hudSound" class="hud-exit hud-sound" type="button" aria-label="Âm cảnh báo" aria-pressed="true">🔊 Âm: Bật</button><button id="hudExit" class="hud-exit" type="button">✕ Thu nhỏ</button></div></div>
             <div id="hudNotice" class="hud-notice" role="status" aria-live="polite"></div>
             <section class="hud-bank"><span class="hud-bank-label">ĐIỀU HƯỚNG</span><div class="hud-controls"><button class="drive hud-drive" data-dir="l" disabled aria-label="Xoay trái">◀<small>Trái</small></button><button class="drive hud-drive" data-dir="r" disabled aria-label="Xoay phải">▶<small>Phải</small></button></div></section>
-            <section class="hud-center"><span class="hud-kicker">MANUAL DRIVE</span><strong class="hud-heading">REMOTE CONTROL</strong><div class="hud-speed"><output id="hudSpeedValue">75%</output><span>POWER OUTPUT</span></div><div class="speed-presets" aria-label="Mức tốc độ"><button id="speed50" class="speed-preset" type="button">50</button><button id="speed75" class="speed-preset active" type="button">75</button><button id="speed100" class="speed-preset" type="button">100</button></div><div id="hudDistance" class="hud-distance"><span>SR04</span><strong id="manualDistance">-- cm</strong></div><div id="hudWarning" class="hud-warning" role="alert">⚠ Còn dưới 20 cm · sắp va chạm</div><button class="hud-stop" id="hudStop" disabled aria-label="Dừng xe">■<small>DỪNG</small></button></section>
+            <section class="hud-center"><span class="hud-kicker">MANUAL DRIVE</span><strong class="hud-heading">REMOTE CONTROL</strong><div class="hud-speed"><output id="hudSpeedValue">75%</output><span>POWER OUTPUT</span></div><div class="speed-presets" aria-label="Mức tốc độ"><button id="speed50" class="speed-preset" type="button">50</button><button id="speed75" class="speed-preset active" type="button">75</button><button id="speed100" class="speed-preset" type="button">100</button></div><div id="hudDistance" class="hud-distance"><span>SR04</span><strong id="manualDistance">-- cm</strong></div><div id="hudWarning" class="hud-warning" role="alert">⚠ Cảnh báo sớm · dưới 30 cm</div><button class="hud-stop" id="hudStop" disabled aria-label="Dừng xe">■<small>DỪNG</small></button></section>
             <section class="hud-bank"><span class="hud-bank-label">TIẾN / LÙI</span><div class="hud-controls"><button class="drive hud-drive" data-dir="f" disabled aria-label="Tiến">▲<small>Tiến</small></button><button class="drive hud-drive" data-dir="b" disabled aria-label="Lùi">▼<small>Lùi</small></button></div></section>
           </div>
         </article>
@@ -107,6 +107,7 @@ inline constexpr char kL298nWebPage[] = R"html(
     let telemetryBusy = false, autonomyBusy = false, currentMode = 'manual', autonomyVersion = 0;
     let recovering = false, wakeLock = null, wakePending = false, wakeUnavailable = false;
     let hudMode = false, warningEnabled = true;
+    let warningDistanceCm = 30, obstacleDistanceCm = 20;
 
     const modeNames = {manual:'Thủ công',follow:'Follow',avoid:'Né vật cản'};
 
@@ -119,9 +120,12 @@ inline constexpr char kL298nWebPage[] = R"html(
     }
 
     function updateDistanceAlert(valid, distance) {
-      const nearObstacle = hudMode && valid && distance < 20;
+      const nearObstacle = hudMode && valid && distance < warningDistanceCm;
       $('hudDistance').classList.toggle('danger',nearObstacle);
       $('hudWarning').classList.toggle('active',nearObstacle);
+      $('hudWarning').textContent = distance < obstacleDistanceCm
+        ? '⚠ Nguy cơ va chạm · dưới ' + obstacleDistanceCm + ' cm'
+        : '⚠ Cảnh báo sớm · dưới ' + warningDistanceCm + ' cm';
     }
 
     function applyMode(mode) {
@@ -145,6 +149,10 @@ inline constexpr char kL298nWebPage[] = R"html(
         const response = await fetch('/api/status',{cache:'no-store',signal:controller.signal});
         if (!response.ok) throw new Error(String(response.status));
         const data = await response.json();
+        obstacleDistanceCm = Number.isFinite(data.obstacle_distance_cm)
+          ? data.obstacle_distance_cm : 20;
+        warningDistanceCm = Number.isFinite(data.warning_distance_cm)
+          ? data.warning_distance_cm : obstacleDistanceCm;
         const distanceOk = data.distance_valid && Number.isFinite(data.distance_cm) &&
           data.distance_cm >= 0;
         const distanceText = distanceOk ? data.distance_cm + ' cm' : '-- cm';
@@ -154,8 +162,10 @@ inline constexpr char kL298nWebPage[] = R"html(
         $('sensorState').classList.toggle('ok',distanceOk);
         $('sensorState').classList.toggle('error',!distanceOk);
         updateDistanceAlert(distanceOk,data.distance_cm);
-        $('followDistance').textContent = 'Mục tiêu ' + data.follow_distance_cm + ' cm';
-        $('avoidDistance').textContent = 'Ngưỡng ' + data.obstacle_distance_cm + ' cm';
+        $('followDistance').textContent = 'Mục tiêu ' +
+          (Number.isFinite(data.follow_target_cm) ? data.follow_target_cm : data.follow_distance_cm) + ' cm';
+        $('avoidDistance').textContent = 'Ngưỡng ' +
+          (Number.isFinite(data.obstacle_stop_cm) ? data.obstacle_stop_cm : data.obstacle_distance_cm) + ' cm';
         if (modeVersion === autonomyVersion) applyMode(data.autonomy_mode);
       } catch (_) {
         $('distance').textContent = '-- cm';
@@ -254,6 +264,9 @@ inline constexpr char kL298nWebPage[] = R"html(
       $('speedValue').textContent = value + '%';
       $('hudSpeedValue').textContent = value + '%';
       speedValues.forEach(speed => $('speed' + speed).classList.toggle('active',speed === value));
+      warningDistanceCm = Math.ceil(obstacleDistanceCm * Math.max(value,50) / 50);
+      updateDistanceAlert($('manualDistance').textContent !== '-- cm',
+        Number.parseInt($('manualDistance').textContent,10));
       if (value === 0) stop();
       else if (session && !releasing) { pending = true; void pump(); }
     }

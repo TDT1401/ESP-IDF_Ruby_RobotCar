@@ -110,7 +110,8 @@ function setup({fullscreen = 'native'} = {}) {
       const responseData = url.endsWith('claim') ? {session:1234} : url.endsWith('status') ? {
         distance_valid:statusValid,distance_cm:statusDistance,
         autonomy_mode:currentMode === 'avoid' ? 'obstacle_avoidance' : currentMode,follow_distance_cm:30,
-        obstacle_distance_cm:20,moving:false
+        obstacle_distance_cm:20,follow_target_cm:30,obstacle_stop_cm:20,
+        warning_distance_cm:30,moving:false
       } : {ok:true};
       return Promise.resolve({ok:true,json:async () => responseData});
     }
@@ -226,15 +227,15 @@ test('HUD tab claims control, shows the portrait rotation prompt, and exits safe
   assert.equal(ui.elements.manualTab.classList.contains('active'),true);
 });
 
-test('HUD refreshes SR04 distance and marks values below 20 cm', async () => {
+test('HUD refreshes SR04 distance and applies the speed-scaled warning threshold', async () => {
   const ui = setup();
   await ui.elements.hudTab.emit('click'); await settle();
   assert.ok(ui.intervals.has(250));
-  ui.setDistance(20);
+  ui.setDistance(30);
   ui.intervals.get(250)(); await settle();
-  assert.equal(ui.elements.manualDistance.textContent,'20 cm');
+  assert.equal(ui.elements.manualDistance.textContent,'30 cm');
   assert.equal(ui.elements.hudDistance.classList.contains('danger'),false);
-  ui.setDistance(19);
+  ui.setDistance(29);
   ui.intervals.get(250)(); await settle();
   assert.equal(ui.elements.hudDistance.classList.contains('danger'),true);
   ui.setDistance(10,false);

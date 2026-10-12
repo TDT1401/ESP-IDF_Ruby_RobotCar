@@ -125,9 +125,13 @@ esp_err_t Status(httpd_req_t* req) {
     const int length = snprintf(
         body, sizeof(body),
         "{\"distance_valid\":%s,\"distance_cm\":%d,\"autonomy_mode\":\"%s\","
-        "\"follow_distance_cm\":%d,\"obstacle_distance_cm\":%d,\"moving\":%s}",
+        "\"follow_distance_cm\":%d,\"obstacle_distance_cm\":%d,"
+        "\"follow_target_cm\":%d,\"obstacle_stop_cm\":%d,"
+        "\"warning_distance_cm\":%d,\"moving\":%s}",
         motor.distance_valid ? "true" : "false", motor.measured_distance_cm,
         motor.autonomy_mode, motor.follow_distance_cm, motor.obstacle_distance_cm,
+        motor.follow_target_effective_cm, motor.obstacle_stop_effective_cm,
+        motor.web_warning_effective_cm,
         motor.moving ? "true" : "false");
     if (length < 0 || static_cast<size_t>(length) >= sizeof(body))
         return Reply(req, "500 Internal Server Error", "{\"error\":\"Status unavailable\"}");
