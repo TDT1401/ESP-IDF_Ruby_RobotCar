@@ -25,15 +25,17 @@ inline constexpr char kL298nWebPage[] = R"html(
     .notice{min-height:22px;margin:9px 0 13px;color:#9fb0cd;font-size:12px;text-align:center}.dashboard{display:grid;grid-template-columns:195px 1fr;gap:18px}.menu{display:flex;flex-direction:column;gap:8px;align-self:start;padding:9px;border:1px solid var(--line);border-radius:21px;background:linear-gradient(160deg,#10182bdd,#090f1ddd);box-shadow:var(--shadow),inset 0 1px #ffffff0d;backdrop-filter:blur(18px)}.menu:before{padding:8px 10px 4px;color:#596985;font-size:9px;font-weight:850;letter-spacing:1.8px;content:"CONTROL MODE"}.menu button{border:1px solid transparent;text-align:left;font-size:13px;font-weight:750;color:#8f9db7}.menu button.active{border-color:#28d7ff55;background:linear-gradient(105deg,#164262aa,#25245aaa);box-shadow:0 0 22px #28d7ff19,inset 3px 0 var(--cyan);color:#fff}
     .panel-shell{padding:0;border:0;background:transparent}.panel{display:none;min-height:510px;padding:26px 24px;border:1px solid var(--line);border-radius:25px;background:linear-gradient(145deg,var(--panel),#090f1de8);box-shadow:var(--shadow),inset 0 1px #ffffff0d;backdrop-filter:blur(18px)}.panel.active{display:block;animation:panelIn .22s ease}@keyframes panelIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}.panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.mode-status{padding:7px 11px;border:1px solid #ff4f7038;border-radius:999px;background:#ff4f7011;color:var(--danger);font-size:10px;font-weight:850;letter-spacing:1px}.mode-status.on{border-color:#39e58c45;background:#39e58c12;color:var(--success);box-shadow:0 0 18px #39e58c16}
     #status{min-height:50px;margin:19px 0;padding:13px 15px;border:1px solid var(--line);border-radius:13px;background:#060b16a8;color:#adbad0;font-size:13px;line-height:1.55}.actions{display:flex;gap:10px}.actions button{flex:1;font-size:13px;font-weight:750}.primary{border-color:#28d7ff66;background:linear-gradient(135deg,#087fa4,#315bd8);box-shadow:0 8px 24px #197acb35;color:white}
-    .manual-head-actions{display:flex;align-items:center;gap:8px}.expand-drive{padding:8px 11px;border-color:#28d7ff4f;background:#10243b;color:#c9f7ff;font-size:11px;font-weight:800}.drive-pad{display:grid;grid-template-columns:repeat(3,minmax(68px,88px));grid-template-rows:repeat(3,82px);justify-content:center;gap:11px;margin:28px auto}.drive{position:relative;border:1px solid #28d7ff47;border-radius:18px;background:linear-gradient(145deg,#183558,#101b32);box-shadow:0 10px 20px #0005,inset 0 1px #ffffff18;color:#dff8ff;font-size:25px;font-weight:850;touch-action:none;user-select:none;-webkit-user-select:none}.drive:hover:not(:disabled){box-shadow:0 0 20px #28d7ff25,inset 0 1px #ffffff22}.drive small{display:block;margin-top:3px;color:#8eaac8;font-size:10px;font-weight:700;letter-spacing:.5px}.drive.held{transform:scale(.94);border-color:var(--cyan);background:#0a7998;box-shadow:0 0 26px #28d7ff55}.drive.held small{color:#fff}.drive-pad [data-dir=f]{grid-column:2;grid-row:1}.drive-pad [data-dir=l]{grid-column:1;grid-row:2}.drive-pad [data-dir=r]{grid-column:3;grid-row:2}.drive-pad [data-dir=b]{grid-column:2;grid-row:3}.drive-pad .stop-drive{grid-column:2;grid-row:2;border-color:#ff4f7066;background:linear-gradient(145deg,#7c1731,#3a1020);color:#ffdce4}.stop-drive:hover:not(:disabled){box-shadow:0 0 22px #ff4f7038}.speed-label{display:flex;justify-content:space-between;color:#aab8cf;font-size:12px;font-weight:750;letter-spacing:.3px}.speed-label output{color:var(--cyan);font-variant-numeric:tabular-nums}input[type=range]{width:100%;height:5px;margin:18px 0;appearance:none;border-radius:999px;background:linear-gradient(90deg,var(--cyan),var(--purple));accent-color:var(--cyan)}input[type=range]::-webkit-slider-thumb{width:19px;height:19px;appearance:none;border:3px solid #dffaff;border-radius:50%;background:var(--cyan);box-shadow:0 0 15px #28d7ffaa}.hint{margin-top:14px;text-align:center}
+    .manual-head-actions{display:flex;align-items:center;gap:8px}.drive{position:relative;border:1px solid #28d7ff47;border-radius:18px;background:linear-gradient(145deg,#183558,#101b32);box-shadow:0 10px 20px #0005,inset 0 1px #ffffff18;color:#dff8ff;font-size:25px;font-weight:850;touch-action:none;user-select:none;-webkit-user-select:none}.drive:hover:not(:disabled){box-shadow:0 0 20px #28d7ff25,inset 0 1px #ffffff22}.drive small{display:block;margin-top:3px;color:#8eaac8;font-size:10px;font-weight:700;letter-spacing:.5px}.drive.held{transform:scale(.94);border-color:var(--cyan);background:#0a7998;box-shadow:0 0 26px #28d7ff55}.drive.held small{color:#fff}.stop-drive{border-color:#ff4f7066!important;background:linear-gradient(145deg,#7c1731,#3a1020)!important;color:#ffdce4!important}.stop-drive:hover:not(:disabled){box-shadow:0 0 22px #ff4f7038}.speed-label{display:flex;justify-content:space-between;color:#aab8cf;font-size:12px;font-weight:750;letter-spacing:.3px}.speed-label output{color:var(--cyan);font-variant-numeric:tabular-nums}input[type=range]{width:100%;height:5px;margin:18px 0;appearance:none;border-radius:999px;background:linear-gradient(90deg,var(--cyan),var(--purple));accent-color:var(--cyan)}input[type=range]::-webkit-slider-thumb{width:19px;height:19px;appearance:none;border:3px solid #dffaff;border-radius:50%;background:var(--cyan);box-shadow:0 0 15px #28d7ffaa}.hint{margin-top:14px;text-align:center}.status-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:18px 0}.status-card,.config-card{padding:15px;border:1px solid var(--line);border-radius:15px;background:#080e1c}.status-card span,.config-card label{display:block;color:var(--muted);font-size:11px;font-weight:750}.status-card strong{display:block;margin-top:7px;color:#dff8ff;font-size:15px}.config-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}.config-card input{width:100%;margin:10px 0 0;padding:11px;border:1px solid var(--line);border-radius:10px;background:#050a14;color:var(--text);font:inherit}.config-actions{display:flex;align-items:center;gap:12px;margin-top:14px}.config-actions button{min-width:150px}.config-hint{margin:0;color:var(--muted);font-size:11px}
     .landscape-hud{display:none}.hud-topbar{grid-column:1/-1;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 clamp(10px,2vw,26px);border-bottom:1px solid #28d7ff54;background:linear-gradient(90deg,#06132d,#10264a 50%,#06132d);box-shadow:0 8px 28px #00d9ff20}.hud-signal{display:flex;align-items:center;gap:7px;color:#70f6ff;font-size:10px;font-weight:850;letter-spacing:1.2px}.hud-signal:before{width:8px;height:8px;border-radius:50%;background:var(--success);box-shadow:0 0 13px var(--success);content:""}.hud-title{color:#34e8ff;font-size:clamp(14px,2.2vw,23px);font-weight:900;letter-spacing:1.6px;text-align:center;text-shadow:0 0 18px #00d9ffaa}.hud-exit{justify-self:end;padding:7px 11px;border-color:#28d7ff66;background:#0a1c37;color:#79f4ff;font-size:11px;font-weight:850}.hud-bank{position:relative;display:grid;grid-template-rows:auto 1fr;align-items:center;overflow:hidden;padding:clamp(11px,2vw,25px)}.hud-bank:before{position:absolute;inset:8% 3%;border:clamp(8px,1.1vw,15px) solid #253c65;border-top-color:#355787;border-bottom-color:#182b50;border-radius:42% 42% 27% 27%;box-shadow:inset 0 0 35px #0bdcff0c,0 0 34px #0bdcff0b;content:""}.hud-bank:after{position:absolute;inset:13% 7%;border:1px solid #28d7ff2c;border-radius:40% 40% 25% 25%;content:""}.hud-bank-label{position:relative;z-index:1;color:#6fefff;font-size:10px;font-weight:900;letter-spacing:2px;text-align:center;text-shadow:0 0 12px #00d9ff}.hud-controls{position:relative;z-index:1;display:grid;grid-template-columns:1fr 1fr;place-items:center;gap:clamp(8px,2vw,28px)}.hud-drive{width:clamp(68px,12vw,136px);height:clamp(68px,12vw,136px);padding:0;border:2px solid #36dfff7a;border-radius:50%;background:radial-gradient(circle at 40% 32%,#244d79,#0b1c38 58%,#050d1e 70%);box-shadow:inset 0 0 18px #55eaff38,inset 0 -12px 24px #0007,0 0 26px #00d9ff20;color:#9cf7ff;font-size:clamp(26px,4.5vw,49px);text-shadow:0 0 13px #00d9ff}.hud-drive small{font-size:9px}.hud-drive.held{transform:scale(.92);background:radial-gradient(circle,#15a6cb,#07516d 65%,#032335);box-shadow:inset 0 0 20px #fff4,0 0 32px #00d9ffaa}.hud-center{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(5px,1.2vh,12px);padding:8px;text-align:center}.hud-center:before{position:absolute;inset:12% -5% 3%;z-index:0;border:1px solid #28d7ff22;clip-path:polygon(22% 0,78% 0,100% 100%,0 100%);background:linear-gradient(180deg,#10284e45,transparent);content:""}.hud-center>*{position:relative;z-index:1}.hud-kicker{color:#667b9f;font-size:8px;font-weight:900;letter-spacing:2.3px}.hud-heading{color:#20e7ff;font-size:clamp(11px,1.6vw,17px);font-weight:900;letter-spacing:1.8px;text-shadow:0 0 13px #00d9ff}.hud-speed{display:grid;line-height:.9}.hud-speed output{color:#f4fbff;font-size:clamp(40px,8vw,92px);font-weight:900;letter-spacing:-4px;text-shadow:0 0 25px #247dff8a}.hud-speed span{margin-top:7px;color:#5b6e90;font-size:8px;font-weight:850;letter-spacing:2px}.speed-presets{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;width:min(100%,260px)}.speed-preset{padding:8px 6px;border-radius:999px;color:#8397b8;font-size:11px;font-weight:850}.speed-preset.active{border-color:#28d7ff9c;background:linear-gradient(135deg,#087fa4,#315bd8);box-shadow:0 0 18px #28d7ff4a;color:#fff}.hud-distance{display:flex;align-items:baseline;gap:8px;padding:7px 13px;border:1px solid #28d7ff3c;border-radius:999px;background:#031024c7}.hud-distance span{color:#637b9e;font-size:8px;font-weight:900;letter-spacing:1.2px}.hud-distance strong{color:#61f0ff;font-size:clamp(15px,2.4vw,25px);font-variant-numeric:tabular-nums}.hud-stop{min-width:110px;padding:8px 18px;border-color:#ff4f7080;border-radius:999px;background:linear-gradient(145deg,#7c1731,#3a1020);color:#ffdce4;font-size:12px;font-weight:850}.hud-stop small{display:inline;margin-left:5px}
     body.drive-expanded{overflow:hidden}#manualPanel.drive-expanded{position:fixed;inset:0;z-index:20}#manualPanel:fullscreen,#manualPanel:-webkit-full-screen,#manualPanel.drive-expanded{width:100%;height:100vh;height:100dvh;min-height:0;padding:20px;border:0;border-radius:0;background:radial-gradient(circle at 50% 30%,#13284a,#050711 72%);overflow:auto}
     .mode-card{position:relative;display:grid;min-height:330px;margin-top:25px;padding:30px;place-items:center;overflow:hidden;border:1px solid var(--line);border-radius:22px;background:radial-gradient(circle at 50% 25%,#243b6638,transparent 45%),#070c18;text-align:center}.mode-card:before{position:absolute;inset:14px;border:1px solid #ffffff08;border-radius:16px;content:""}.mode-icon{display:grid;width:88px;height:88px;place-items:center;border:1px solid #28d7ff3b;border-radius:27px;background:linear-gradient(145deg,#172f51,#18152d);box-shadow:0 0 32px #28d7ff1f;font-size:44px}.mode-card strong{font-size:19px;letter-spacing:.1px}.mode-actions{position:relative;z-index:1;display:grid;grid-template-columns:1fr 1fr;gap:12px;width:min(100%,410px);margin-top:22px}.mode-on,.mode-off{min-height:50px;color:white;font-size:12px;font-weight:850;letter-spacing:1px}.mode-on{border-color:#39e58c55;background:linear-gradient(135deg,#128351,#16a86b);box-shadow:0 8px 24px #16a86b25}.mode-off{border-color:#ff4f7055;background:linear-gradient(135deg,#9d2944,#c53755);box-shadow:0 8px 24px #c5375525}footer{padding:22px 8px;color:#576784;font-size:11px;line-height:1.75;text-align:center}
     @media(max-width:720px){main{padding:18px 13px 100px}.brand-copy{display:block}.online{margin-top:5px;width:max-content}.dashboard{display:block}.menu{position:fixed;z-index:10;right:10px;bottom:10px;left:10px;display:grid;grid-template-columns:repeat(3,1fr);padding:7px;border-color:#314462;background:#080d18f2;box-shadow:0 14px 45px #000c}.menu:before{display:none}.menu button{text-align:center}.panel{min-height:520px}}
-    @media(max-width:470px){header{align-items:flex-start}.brand-mark{width:44px;height:44px}.online{display:none}.telemetry{width:100%;gap:10px;padding:10px 12px}.sensor-state{font-size:10px}.panel{padding:22px 14px}.manual-head-actions .mode-status{display:none}.expand-drive{padding:8px}.mode-actions{grid-template-columns:1fr}.actions{flex-direction:column}.drive-pad{gap:8px}}
+    @media(max-width:470px){header{align-items:flex-start}.brand-mark{width:44px;height:44px}.online{display:none}.telemetry{width:100%;gap:10px;padding:10px 12px}.sensor-state{font-size:10px}.panel{padding:22px 14px}.manual-head-actions .mode-status{display:none}.mode-actions{grid-template-columns:1fr}.actions{flex-direction:column}.status-grid{grid-template-columns:1fr}.config-grid{grid-template-columns:1fr}.config-actions{align-items:stretch;flex-direction:column}.config-actions button{width:100%}}
     @media(orientation:landscape){#manualPanel:fullscreen,#manualPanel:-webkit-full-screen,#manualPanel.drive-expanded{display:block;padding:0;overflow:hidden;background:radial-gradient(circle at 50% 45%,#0d2a51,#030816 62%,#080922);box-shadow:inset 0 0 90px #000}#manualPanel:fullscreen .panel-head,#manualPanel:-webkit-full-screen .panel-head,#manualPanel.drive-expanded .panel-head,#manualPanel:fullscreen .portrait-manual,#manualPanel:-webkit-full-screen .portrait-manual,#manualPanel.drive-expanded .portrait-manual{display:none}#manualPanel:fullscreen .landscape-hud,#manualPanel:-webkit-full-screen .landscape-hud,#manualPanel.drive-expanded .landscape-hud{display:grid;width:100%;height:100%;min-height:0;grid-template-columns:minmax(0,1fr) minmax(0,.82fr) minmax(0,1fr);grid-template-rows:48px minmax(0,1fr);padding-right:env(safe-area-inset-right);padding-left:env(safe-area-inset-left)}}
     @media(orientation:landscape) and (max-height:500px){.landscape-hud{padding-bottom:16px}.hud-topbar{min-height:40px}.hud-bank{min-width:0;padding:6px}.hud-bank:before{inset:6% 1%;border-width:6px}.hud-bank:after{inset:11% 5%}.hud-controls{gap:clamp(4px,1vw,12px)}.hud-drive{width:clamp(44px,min(10vw,23vh),88px);height:clamp(44px,min(10vw,23vh),88px);font-size:clamp(20px,5vh,32px)}.hud-center{min-width:0;gap:3px;padding:3px}.hud-speed output{font-size:clamp(32px,15vh,58px)}.hud-speed span{margin-top:3px}.speed-presets{gap:3px}.speed-preset{padding:5px 2px}.hud-distance{padding:4px 8px}.hud-stop{min-width:0;padding:5px 10px}#manualPanel:fullscreen .landscape-hud,#manualPanel:-webkit-full-screen .landscape-hud,#manualPanel.drive-expanded .landscape-hud{grid-template-rows:40px minmax(0,1fr)}}
     .landscape-hud{position:relative;padding-bottom:max(24px,env(safe-area-inset-bottom))}.hud-notice{position:absolute;z-index:2;right:10px;bottom:max(5px,env(safe-area-inset-bottom));left:10px;color:#b8cae4;font-size:11px;text-align:center;pointer-events:none}#hudConnect{justify-self:start}#hudConnect:disabled{opacity:1;filter:none;color:var(--success);cursor:default}
+    .hud-joystick-bank{grid-template-rows:auto 1fr;min-width:0}.joystick-surface{position:relative;z-index:1;align-self:center;justify-self:center;width:min(38vw,34vh,290px);aspect-ratio:1;border:2px solid #36dfff70;border-radius:50%;background:radial-gradient(circle,#19355a 0 5%,#102343 6% 48%,#0a1830 49% 68%,#12284a 69% 71%,#071126 72%);box-shadow:inset 0 0 35px #38ddff25,0 0 35px #00d9ff20;touch-action:none;user-select:none;-webkit-user-select:none}.joystick-surface:before,.joystick-surface:after{position:absolute;content:"";pointer-events:none}.joystick-surface:before{top:50%;right:9%;left:9%;height:1px;background:#52dfff40}.joystick-surface:after{top:9%;bottom:9%;left:50%;width:1px;background:#52dfff40}.joystick-surface.disabled{opacity:.38;filter:grayscale(.6)}.joystick-handle{position:absolute;z-index:1;top:50%;left:50%;display:grid;width:31%;height:31%;place-items:center;border:2px solid #9bf5ff;border-radius:50%;background:radial-gradient(circle at 35% 28%,#35ddf5,#08759d 62%,#063552);box-shadow:inset 0 2px #fff8,0 0 26px #00d9ffaa;color:#effcff;font-size:clamp(21px,4vh,38px);transform:translate(-50%,-50%);pointer-events:none}.joystick-surface.active .joystick-handle{background:radial-gradient(circle at 35% 28%,#64edff,#087fa4 62%,#063552);box-shadow:inset 0 2px #fff9,0 0 34px #00d9ffff}.joystick-label{position:absolute;z-index:1;color:#78dff3;font-size:9px;font-weight:850;letter-spacing:1px;pointer-events:none}.joystick-label.forward{top:7%;left:50%;transform:translateX(-50%)}.joystick-label.reverse{bottom:7%;left:50%;transform:translateX(-50%)}.joystick-label.left{top:50%;left:5%;transform:translateY(-50%)}.joystick-label.right{top:50%;right:5%;transform:translateY(-50%)}
+    @media(orientation:landscape) and (max-height:500px){.joystick-surface{width:min(34vw,43vh,220px)}.joystick-handle{width:30%;height:30%}}
     .hud-top-actions{display:flex;align-items:center;justify-self:end;gap:6px}.hud-sound[aria-pressed="false"]{border-color:#ff4f7059;color:#ffb8c5}
     @media(orientation:landscape) and (max-height:500px){.landscape-hud{padding-bottom:max(16px,env(safe-area-inset-bottom))}}
     .hud-rotate{display:none}#manualPanel.hud-mode .panel-head,#manualPanel.hud-mode .portrait-manual{display:none}#manualPanel.hud-mode .hud-rotate{display:grid;min-height:100%;padding:30px;place-content:center;justify-items:center;gap:18px;text-align:center}.hud-rotate-icon{font-size:clamp(56px,15vw,100px)}.hud-rotate strong{font-size:clamp(22px,6vw,36px)}.hud-rotate p{max-width:28em;color:var(--muted)}.hud-rotate-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:10px}.hud-warning{display:none;color:var(--danger);font-size:11px;font-weight:900;text-align:center}.hud-warning.active{display:block}.hud-distance.danger{border-color:var(--danger);box-shadow:0 0 18px #ff4f7055}.hud-distance.danger strong{color:var(--danger)}
@@ -51,35 +53,38 @@ inline constexpr char kL298nWebPage[] = R"html(
     <div id="modeNotice" class="notice" role="status" aria-live="polite"></div>
     <div class="dashboard">
       <nav class="menu" aria-label="Chế độ điều khiển">
-        <button id="manualTab" class="active">🎮 Thủ công</button>
+        <button id="manualTab" class="active">📊 Trạng thái</button>
         <button id="hudTab">🚗 HUD</button>
         <button id="avoidTab">🛡️ Né vật cản</button>
         <button id="followTab">👣 Follow</button>
       </nav>
       <section class="panel-shell">
         <article id="manualPanel" class="panel active">
-          <div class="panel-head"><div><h2>Cầm lái thủ công</h2><p class="subtitle">Giữ nút để chạy, thả tay để dừng.</p></div><div class="manual-head-actions"><span class="mode-status on">READY</span><button id="expandDrive" class="expand-drive" disabled aria-label="Phóng to buồng lái">⛶ Phóng to</button></div></div>
+          <div class="panel-head"><div><h2>Trạng thái &amp; cấu hình</h2><p class="subtitle">Thông tin cảm biến, chế độ lái và thông số hoạt động.</p></div><div class="manual-head-actions"><span id="controlStatus" class="mode-status">CHƯA KẾT NỐI</span></div></div>
           <div class="portrait-manual">
             <div id="status" role="status" aria-live="polite">Bấm “Bắt đầu” để nhận quyền điều khiển.</div>
-            <div class="actions"><button id="claim" class="primary">Bắt đầu</button><button id="release" disabled>Trả về giọng nói</button></div>
-            <div class="drive-pad" aria-label="Bốn hướng điều khiển">
-              <button class="drive" data-dir="f" disabled aria-label="Tiến">▲<small>Tiến</small></button>
-              <button class="drive" data-dir="l" disabled aria-label="Xoay trái">◀<small>Trái</small></button>
-              <button class="drive stop-drive" id="stop" disabled aria-label="Dừng xe">■<small>Dừng</small></button>
-              <button class="drive" data-dir="r" disabled aria-label="Xoay phải">▶<small>Phải</small></button>
-              <button class="drive" data-dir="b" disabled aria-label="Lùi">▼<small>Lùi</small></button>
+            <div class="status-grid">
+              <div class="status-card"><span>Chế độ</span><strong id="statusMode">Điều khiển web</strong></div>
+              <div class="status-card"><span>Motor</span><strong id="statusMotion">Đang dừng</strong></div>
+              <div class="status-card"><span>Mức PWM lệnh</span><strong id="statusSpeed">0%</strong></div>
             </div>
-            <label class="speed-label" for="speed">Tốc độ PWM <output id="speedValue">75%</output></label>
+            <div class="actions"><button id="claim" class="primary">Nhận quyền lái</button><button id="release" disabled>Trả quyền về giọng nói</button><button class="stop-drive" id="stop" disabled>Dừng xe</button></div>
+            <label class="speed-label" for="speed">Tốc độ tối đa trên HUD <output id="speedValue">75%</output></label>
             <input id="speed" type="range" min="0" max="100" value="75" step="5">
-            <p class="hint">Bàn phím: giữ phím mũi tên hoặc W / A / S / D. Phím cách để dừng.</p>
+            <h3>Thông số tự hành</h3>
+            <div class="config-grid">
+              <div class="config-card"><label for="followDistanceSetting">Khoảng cách Follow (cm)</label><input id="followDistanceSetting" type="number" min="10" max="200" step="1" value="30"></div>
+              <div class="config-card"><label for="obstacleDistanceSetting">Ngưỡng né vật cản (cm)</label><input id="obstacleDistanceSetting" type="number" min="10" max="100" step="1" value="20"></div>
+            </div>
+            <div class="config-actions"><button id="saveConfig" type="button">Lưu thông số</button><p class="config-hint">Áp dụng ngay trong firmware; giá trị sẽ về mặc định sau khi khởi động lại.</p></div>
           </div>
           <div class="hud-rotate" aria-live="polite"><div class="hud-rotate-icon">↻</div><strong>Xoay ngang màn hình để trải nghiệm.</strong><p id="hudRotateStatus">Đang kết nối điều khiển xe…</p><div class="hud-rotate-actions"><button id="hudRotateConnect" type="button">Kết nối lại</button><button id="hudRotateExit" type="button">Quay lại</button></div></div>
           <div class="landscape-hud" aria-label="Buồng lái ngang">
             <div class="hud-topbar"><button id="hudConnect" class="hud-exit" type="button" aria-live="polite">Kết nối lại</button><strong class="hud-title">RUBY · REMOTE CONTROL</strong><div class="hud-top-actions"><button id="hudSound" class="hud-exit hud-sound" type="button" aria-label="Âm cảnh báo" aria-pressed="true">🔊 Âm: Bật</button><button id="hudExit" class="hud-exit" type="button">✕ Thu nhỏ</button></div></div>
             <div id="hudNotice" class="hud-notice" role="status" aria-live="polite"></div>
-            <section class="hud-bank"><span class="hud-bank-label">ĐIỀU HƯỚNG</span><div class="hud-controls"><button class="drive hud-drive" data-dir="l" disabled aria-label="Xoay trái">◀<small>Trái</small></button><button class="drive hud-drive" data-dir="r" disabled aria-label="Xoay phải">▶<small>Phải</small></button></div></section>
+            <section class="hud-bank hud-joystick-bank"><span class="hud-bank-label">JOYSTICK · LÁI MỀM</span><div id="hudJoystick" class="joystick-surface" role="application" aria-label="Kéo joystick để tiến, lùi và rẽ"><span class="joystick-label forward">TIẾN</span><span class="joystick-label reverse">LÙI</span><span class="joystick-label left">TRÁI</span><span class="joystick-label right">PHẢI</span><span id="hudJoystickHandle" class="joystick-handle" aria-hidden="true">✣</span></div></section>
             <section class="hud-center"><span class="hud-kicker">MANUAL DRIVE</span><strong class="hud-heading">REMOTE CONTROL</strong><div class="hud-speed"><output id="hudSpeedValue">75%</output><span>POWER OUTPUT</span></div><div class="speed-presets" aria-label="Mức tốc độ"><button id="speed50" class="speed-preset" type="button">50</button><button id="speed75" class="speed-preset active" type="button">75</button><button id="speed100" class="speed-preset" type="button">100</button></div><div id="hudDistance" class="hud-distance"><span>SR04</span><strong id="manualDistance">-- cm</strong></div><div id="hudWarning" class="hud-warning" role="alert">⚠ Cảnh báo sớm · dưới 30 cm</div><button class="hud-stop" id="hudStop" disabled aria-label="Dừng xe">■<small>DỪNG</small></button></section>
-            <section class="hud-bank"><span class="hud-bank-label">TIẾN / LÙI</span><div class="hud-controls"><button class="drive hud-drive" data-dir="f" disabled aria-label="Tiến">▲<small>Tiến</small></button><button class="drive hud-drive" data-dir="b" disabled aria-label="Lùi">▼<small>Lùi</small></button></div></section>
+            <section class="hud-bank"><span class="hud-bank-label">ĐIỀU HƯỚNG DỰ PHÒNG</span><div class="hud-controls"><button class="drive hud-drive" data-dir="f" disabled aria-label="Tiến">▲<small>Tiến</small></button><button class="drive hud-drive" data-dir="l" disabled aria-label="Xoay trái">◀<small>Trái</small></button><button class="drive hud-drive" data-dir="r" disabled aria-label="Xoay phải">▶<small>Phải</small></button><button class="drive hud-drive" data-dir="b" disabled aria-label="Lùi">▼<small>Lùi</small></button></div></section>
           </div>
         </article>
         <article id="avoidPanel" class="panel">
@@ -92,7 +97,7 @@ inline constexpr char kL298nWebPage[] = R"html(
         </article>
       </section>
     </div>
-    <footer>Trong chế độ thủ công, motor chỉ nhận lệnh từ trang này; lệnh dừng bằng giọng nói vẫn có hiệu lực.<br>Mất kết nối sẽ dừng xe. Bấm “Bắt đầu”, rồi “Trả về giọng nói” để thoát chế độ thủ công.</footer>
+    <footer>Trong phiên HUD, motor chỉ nhận lệnh từ trang này; lệnh dừng bằng giọng nói vẫn có hiệu lực.<br>Mất kết nối sẽ dừng xe. Các thông số tự hành áp dụng trong phiên hoạt động hiện tại.</footer>
   </main>
   <script>
     'use strict';
@@ -101,15 +106,16 @@ inline constexpr char kL298nWebPage[] = R"html(
     const stopButtons = [$('stop'),$('hudStop')];
     const speedValues = [50,75,100];
     const names = {s:'Đã dừng',f:'Tiến',b:'Lùi',l:'Xoay trái',r:'Xoay phải'};
-    const keys = {ArrowUp:'f',ArrowDown:'b',ArrowLeft:'l',ArrowRight:'r',w:'f',s:'b',a:'l',d:'r'};
     let session = 0, sequence = 0, epoch = 0, busy = false, pending = false;
-    let direction = 's', releasing = false, heldPointer = null, heldKey = null;
+    let direction = 's', releasing = false, heldPointer = null;
+    let joystickX = 0, joystickY = 0;
+    let joystickPointer = null;
     let telemetryBusy = false, autonomyBusy = false, currentMode = 'manual', autonomyVersion = 0;
     let recovering = false, wakeLock = null, wakePending = false, wakeUnavailable = false;
     let hudMode = false, warningEnabled = true;
     let warningDistanceCm = 30, obstacleDistanceCm = 20;
 
-    const modeNames = {manual:'Thủ công',follow:'Follow',avoid:'Né vật cản'};
+    const modeNames = {manual:'Điều khiển web',follow:'Follow',avoid:'Né vật cản'};
 
     function showPanel(name) {
       for (const mode of ['manual','avoid','follow']) {
@@ -133,6 +139,7 @@ inline constexpr char kL298nWebPage[] = R"html(
       if (mode === 'obstacle_avoidance') mode = 'avoid';
       currentMode = mode;
       const follow = mode === 'follow', avoid = mode === 'avoid';
+      if ($('statusMode')) $('statusMode').textContent = modeNames[mode] || modeNames.manual;
       $('followStatus').textContent = follow ? 'ON' : 'OFF';
       $('followStatus').classList.toggle('on',follow);
       $('avoidStatus').textContent = avoid ? 'ON' : 'OFF';
@@ -167,6 +174,18 @@ inline constexpr char kL298nWebPage[] = R"html(
         $('avoidDistance').textContent = 'Ngưỡng ' +
           (Number.isFinite(data.obstacle_stop_cm) ? data.obstacle_stop_cm : data.obstacle_distance_cm) + ' cm';
         if (modeVersion === autonomyVersion) applyMode(data.autonomy_mode);
+        if ($('statusMotion')) {
+          const motionNames = {forward:'Tiến',backward:'Lùi',turn_left:'Xoay trái',
+            turn_right:'Xoay phải',stopped:'Đang dừng'};
+          $('statusMotion').textContent = data.moving
+            ? motionNames[data.motion] || 'Đang chạy' : 'Đang dừng';
+        }
+        if ($('statusSpeed')) $('statusSpeed').textContent =
+          (data.moving && Number.isFinite(data.speed_percent) ? data.speed_percent : 0) + '%';
+        if ($('followDistanceSetting') && document.activeElement !== $('followDistanceSetting'))
+          $('followDistanceSetting').value = String(data.follow_distance_cm);
+        if ($('obstacleDistanceSetting') && document.activeElement !== $('obstacleDistanceSetting'))
+          $('obstacleDistanceSetting').value = String(data.obstacle_distance_cm);
       } catch (_) {
         $('distance').textContent = '-- cm';
         $('manualDistance').textContent = '-- cm';
@@ -186,14 +205,7 @@ inline constexpr char kL298nWebPage[] = R"html(
     function setDriveFallback(active) {
       $('manualPanel').classList.toggle('drive-expanded',active);
       document.body.classList.toggle('drive-expanded',active);
-      renderFullscreen();
       render();
-    }
-
-    function renderFullscreen() {
-      const active = driveIsFullscreen();
-      $('expandDrive').textContent = active ? '✕ Thu nhỏ' : '⛶ Phóng to';
-      $('expandDrive').setAttribute('aria-label',active ? 'Thu nhỏ buồng lái' : 'Phóng to buồng lái');
     }
 
     // Optional: ESP32 HTTP pages may not expose the secure-context Wake Lock API.
@@ -248,13 +260,20 @@ inline constexpr char kL298nWebPage[] = R"html(
       $('claim').disabled = Boolean(session) || busy || autonomyBusy;
       $('release').disabled = !session || releasing;
       stopButtons.forEach(button => { button.disabled = !session || releasing; });
-      $('expandDrive').disabled = (!session || releasing || busy) && !driveIsFullscreen();
+      if ($('controlStatus')) {
+        $('controlStatus').textContent = session ? 'ĐÃ KẾT NỐI' : 'CHƯA KẾT NỐI';
+        $('controlStatus').classList.toggle('on',Boolean(session));
+      }
       for (const id of ['followOn','followOff','avoidOn','avoidOff'])
         $(id).disabled = autonomyBusy || busy || releasing;
       driveButtons.forEach(button => {
         button.disabled = !session || releasing || recovering;
         button.classList.toggle('held', Boolean(session) && button.dataset.dir === direction);
       });
+      if ($('hudJoystick')) {
+        $('hudJoystick').setAttribute('aria-disabled',String(!session || releasing || recovering));
+        $('hudJoystick').classList.toggle('disabled',!session || releasing || recovering);
+      }
       renderHud();
       void syncWakeLock();
     }
@@ -269,36 +288,6 @@ inline constexpr char kL298nWebPage[] = R"html(
         Number.parseInt($('manualDistance').textContent,10));
       if (value === 0) stop();
       else if (session && !releasing) { pending = true; void pump(); }
-    }
-
-    async function toggleDriveFullscreen() {
-      const panel = $('manualPanel');
-      try {
-        if (!driveIsFullscreen()) {
-          if (!session) return;
-          const request = panel.requestFullscreen || panel.webkitRequestFullscreen;
-          if (request) {
-            try {
-              await request.call(panel);
-              if (!driveIsFullscreen()) setDriveFallback(true);
-            } catch (_) { setDriveFallback(true); }
-          } else setDriveFallback(true);
-          if (!panel.classList.contains('drive-expanded')) {
-            try {
-              if (screen.orientation && screen.orientation.lock)
-                await screen.orientation.lock('landscape');
-            } catch (_) { /* The landscape layout follows the device orientation. */ }
-          }
-        } else if (panel.classList.contains('drive-expanded')) {
-          setDriveFallback(false);
-        } else {
-          const exit = document.exitFullscreen || document.webkitExitFullscreen;
-          if (exit) await exit.call(document);
-        }
-      } catch (_) {
-        $('status').textContent = 'Không thể chuyển sang chế độ phóng to.';
-      }
-      renderFullscreen();
     }
 
     function enterHud() {
@@ -322,8 +311,10 @@ inline constexpr char kL298nWebPage[] = R"html(
     }
 
     function commandBody(token, dir) {
-      return JSON.stringify({session:token,sequence:++sequence,direction:dir,
-        speed:Number($('speed').value),warning_enabled:warningEnabled});
+      const command = {session:token,sequence:++sequence,direction:dir,
+        speed:Number($('speed').value),warning_enabled:warningEnabled};
+      if (dir === 'j') { command.x = joystickX; command.y = joystickY; }
+      return JSON.stringify(command);
     }
 
     async function post(path, body) {
@@ -355,7 +346,13 @@ inline constexpr char kL298nWebPage[] = R"html(
       ++epoch;
       session = 0; direction = 's'; pending = false; releasing = false;
       recovering = false;
-      heldPointer = null; heldKey = null;
+      heldPointer = null;
+      joystickPointer = null; joystickX = 0; joystickY = 0;
+      if ($('hudJoystick')) $('hudJoystick').classList.toggle('active',false);
+      if ($('hudJoystickHandle')) {
+        $('hudJoystickHandle').style.left = '50%';
+        $('hudJoystickHandle').style.top = '50%';
+      }
       $('status').textContent = message;
       render();
     }
@@ -374,14 +371,15 @@ inline constexpr char kL298nWebPage[] = R"html(
           session = 0; direction = 's'; releasing = false; pending = false;
           $('status').textContent = 'Đã trả quyền điều khiển motor về giọng nói.';
         } else if (sentDirection === direction) {
-          $('status').textContent = (sentSpeed === 0 ? names.s : names[sentDirection]) + ' · Điều khiển thủ công';
+          $('status').textContent = (sentSpeed === 0 ? names.s : sentDirection === 'j'
+            ? 'Joystick' : names[sentDirection]) + ' · Điều khiển thủ công';
         }
       } catch (error) {
         if (currentEpoch === epoch) {
           // Retry once with a newer STOP, never replay a held movement or claim a new session.
           if (!recovering && !releasing && !error.status && !document.hidden) {
             recovering = true;
-            heldPointer = null; heldKey = null;
+            heldPointer = null; resetJoystick();
             direction = 's'; pending = true;
           } else {
             park(error.status === 409
@@ -398,14 +396,45 @@ inline constexpr char kL298nWebPage[] = R"html(
 
     function requestDirection(next) {
       if (!session || releasing || (recovering && next !== 's')) return;
+      if (next !== 'j') { joystickX = 0; joystickY = 0; }
       direction = next; pending = true;
       render();
       void pump();
     }
 
     function stop() {
-      heldPointer = null; heldKey = null;
+      heldPointer = null; joystickPointer = null;
+      resetJoystick();
       requestDirection('s');
+    }
+
+    function resetJoystick() {
+      joystickX = 0; joystickY = 0; joystickPointer = null;
+      if ($('hudJoystick')) $('hudJoystick').classList.toggle('active',false);
+      if ($('hudJoystickHandle')) {
+        $('hudJoystickHandle').style.left = '50%';
+        $('hudJoystickHandle').style.top = '50%';
+      }
+    }
+
+    function updateJoystick(event) {
+      const surface = $('hudJoystick');
+      const bounds = surface.getBoundingClientRect();
+      const radius = Math.min(bounds.width,bounds.height) * 0.36;
+      const dx = event.clientX - (bounds.left + bounds.width / 2);
+      const dy = event.clientY - (bounds.top + bounds.height / 2);
+      const length = Math.hypot(dx,dy);
+      const scale = length > radius ? radius / length : 1;
+      const nx = dx * scale / radius;
+      const ny = dy * scale / radius;
+      const deadzone = 0.12;
+      joystickX = Math.abs(nx) < deadzone ? 0 : Math.round(nx * 1000);
+      joystickY = Math.abs(ny) < deadzone ? 0 : Math.round(-ny * 1000);
+      $('hudJoystickHandle').style.left = (50 + nx * 36) + '%';
+      $('hudJoystickHandle').style.top = (50 + ny * 36) + '%';
+      $('hudJoystick').classList.toggle('active',joystickX !== 0 || joystickY !== 0);
+      if (joystickX === 0 && joystickY === 0) requestDirection('s');
+      else requestDirection('j');
     }
 
     async function setAutonomy(mode, enabled) {
@@ -415,7 +444,7 @@ inline constexpr char kL298nWebPage[] = R"html(
       $('modeNotice').textContent = 'Đang chuyển chế độ…';
       try {
         if (session) {
-          heldPointer = null; heldKey = null;
+          heldPointer = null; resetJoystick();
           releasing = true; direction = 'release'; pending = true;
           await pump();
           if (session) throw new Error('release failed');
@@ -435,6 +464,29 @@ inline constexpr char kL298nWebPage[] = R"html(
       }
     }
 
+    async function saveConfiguration() {
+      const followDistance = Number($('followDistanceSetting').value);
+      const obstacleDistance = Number($('obstacleDistanceSetting').value);
+      if (!Number.isInteger(followDistance) || followDistance < 10 || followDistance > 200 ||
+          !Number.isInteger(obstacleDistance) || obstacleDistance < 10 || obstacleDistance > 100) {
+        $('status').textContent = 'Khoảng cách Follow phải từ 10–200 cm; ngưỡng né vật cản từ 10–100 cm.';
+        return;
+      }
+      $('saveConfig').disabled = true;
+      $('status').textContent = 'Đang lưu thông số…';
+      try {
+        await post('/api/config',JSON.stringify({
+          follow_distance_cm:followDistance,obstacle_distance_cm:obstacleDistance
+        }));
+        obstacleDistanceCm = obstacleDistance;
+        warningDistanceCm = Math.ceil(obstacleDistance * Math.max(Number($('speed').value),50) / 50);
+        $('status').textContent = 'Đã áp dụng thông số trong firmware.';
+        await refreshTelemetry();
+      } catch (_) {
+        $('status').textContent = 'Không lưu được thông số. Kiểm tra kết nối rồi thử lại.';
+      } finally { $('saveConfig').disabled = false; }
+    }
+
     async function claimControl() {
       if (session || busy || autonomyBusy || document.hidden) return;
       busy = true;
@@ -445,12 +497,13 @@ inline constexpr char kL298nWebPage[] = R"html(
         const result = await post('/api/claim');
         if (currentEpoch !== epoch) return;
         session = result.session; sequence = 0; direction = 's'; pending = true;
+        joystickX = 0; joystickY = 0; joystickPointer = null;
         warningEnabled = true;
         recovering = false;
         wakeUnavailable = false;
         ++autonomyVersion;
         applyMode('manual');
-        $('status').textContent = 'Đã kết nối. Giữ một nút hướng để chạy.';
+        $('status').textContent = 'Đã kết nối HUD. Kéo joystick hoặc giữ nút hướng để lái.';
       } catch (_) {
         if (currentEpoch === epoch)
           $('status').textContent = 'Chưa nhận được quyền điều khiển. Kiểm tra Wi-Fi hoặc trang đang điều khiển khác, rồi thử lại.';
@@ -465,7 +518,7 @@ inline constexpr char kL298nWebPage[] = R"html(
 
     $('release').addEventListener('click', () => {
       if (!session || releasing) return;
-      heldPointer = null; heldKey = null;
+      heldPointer = null; resetJoystick();
       releasing = true; direction = 'release'; pending = true;
       render();
       void pump();
@@ -485,8 +538,8 @@ inline constexpr char kL298nWebPage[] = R"html(
     $('avoidOff').addEventListener('click',() => { void setAutonomy('avoid',false); });
     $('followOn').addEventListener('click',() => { void setAutonomy('follow',true); });
     $('followOff').addEventListener('click',() => { void setAutonomy('follow',false); });
-    $('expandDrive').addEventListener('click',() => { void toggleDriveFullscreen(); });
-    $('hudExit').addEventListener('click',() => { if (hudMode) exitHud(); else void toggleDriveFullscreen(); });
+    if ($('saveConfig')) $('saveConfig').addEventListener('click',() => { void saveConfiguration(); });
+    $('hudExit').addEventListener('click',exitHud);
     $('hudRotateExit').addEventListener('click',exitHud);
     $('hudRotateConnect').addEventListener('click',() => { void claimControl(); });
     document.addEventListener('fullscreenchange',() => {
@@ -494,10 +547,9 @@ inline constexpr char kL298nWebPage[] = R"html(
         try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); }
         catch (_) {}
       }
-      renderFullscreen();
       render();
     });
-    document.addEventListener('webkitfullscreenchange',() => { renderFullscreen(); render(); });
+    document.addEventListener('webkitfullscreenchange',() => render());
     stopButtons.forEach(button => {
       button.addEventListener('pointerdown', event => { event.preventDefault(); stop(); });
       button.addEventListener('click', stop);
@@ -510,7 +562,8 @@ inline constexpr char kL298nWebPage[] = R"html(
       button.addEventListener('contextmenu', event => event.preventDefault());
       button.addEventListener('pointerdown', event => {
         event.preventDefault();
-        if (!session || releasing || recovering || heldPointer !== null || heldKey !== null || event.button !== 0) return;
+        if (!session || releasing || recovering || heldPointer !== null ||
+            joystickPointer !== null || event.button !== 0) return;
         heldPointer = event.pointerId;
         button.setPointerCapture(event.pointerId);
         requestDirection(button.dataset.dir);
@@ -518,19 +571,28 @@ inline constexpr char kL298nWebPage[] = R"html(
       for (const type of ['pointerup','pointercancel','lostpointercapture'])
         button.addEventListener(type, event => { if (event.pointerId === heldPointer) stop(); });
     });
+    const joystick = $('hudJoystick');
+    if (joystick) {
+      joystick.addEventListener('contextmenu', event => event.preventDefault());
+      joystick.addEventListener('pointerdown', event => {
+        event.preventDefault();
+        if (!session || releasing || recovering || heldPointer !== null ||
+            joystickPointer !== null || event.button !== 0) return;
+        joystickPointer = event.pointerId;
+        joystick.setPointerCapture(event.pointerId);
+        joystick.classList.add('active');
+        updateJoystick(event);
+      });
+      joystick.addEventListener('pointermove', event => {
+        if (event.pointerId === joystickPointer) updateJoystick(event);
+      });
+      for (const type of ['pointerup','pointercancel','lostpointercapture'])
+        joystick.addEventListener(type, event => {
+          if (event.pointerId === joystickPointer) stop();
+        });
+    }
     window.addEventListener('keydown', event => {
-      if (event.target instanceof HTMLInputElement || event.ctrlKey || event.altKey || event.metaKey) return;
-      if (event.code === 'Space' && session) { event.preventDefault(); stop(); return; }
-      const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
-      if (!keys[key] || !session || releasing || recovering) return;
-      event.preventDefault();
-      if (event.repeat || heldKey !== null || heldPointer !== null) return;
-      heldKey = key;
-      requestDirection(keys[key]);
-    });
-    window.addEventListener('keyup', event => {
-      const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
-      if (key === heldKey) stop();
+      if (event.code === 'Space' && session) { event.preventDefault(); stop(); }
     });
     const pageLost = () => park('Đã dừng xe và trả quyền điều khiển về giọng nói.');
     window.addEventListener('blur',() => {
@@ -546,7 +608,6 @@ inline constexpr char kL298nWebPage[] = R"html(
     setInterval(() => { if (hudMode && !document.hidden) void refreshTelemetry(); },250);
     setInterval(() => { if (session && !releasing) { pending = true; void pump(); } },150);
     $('theme').addEventListener('click', () => document.body.classList.toggle('ultra'));
-    renderFullscreen();
     render();
   </script>
 </body>

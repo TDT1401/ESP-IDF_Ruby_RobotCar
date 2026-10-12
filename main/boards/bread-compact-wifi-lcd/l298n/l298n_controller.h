@@ -10,13 +10,14 @@ void InitializeL298nController();
 // Called only after initialization. Records display events; motion runs on the motor timer.
 void UpdateL298nEmotion(const char* emotion, bool speaking);
 
-enum class L298nWebCommand { kStop, kForward, kBackward, kLeft, kRight, kRelease };
+enum class L298nWebCommand { kStop, kForward, kBackward, kLeft, kRight, kJoystick, kRelease };
 
 // Thread-safe board-local API. A single browser owns a renewable 600 ms session.
 // Expiry or network loss stops motors, invalidates the session and returns control to voice.
 esp_err_t BeginL298nWebControl(uint32_t* session);
 esp_err_t CommandL298nWebControl(uint32_t session, uint32_t sequence, L298nWebCommand command,
-                                 int speed_percent, bool proximity_warning_enabled);
+                                 int speed_percent, bool proximity_warning_enabled,
+                                 int joystick_x = 0, int joystick_y = 0);
 void SetL298nWebConnected(bool connected);
 
 // Thread-safe shared voice/Telegram speed setting (RAM only, 0..100 PWM percent).

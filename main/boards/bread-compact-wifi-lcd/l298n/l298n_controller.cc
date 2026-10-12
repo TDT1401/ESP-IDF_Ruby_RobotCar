@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <mutex>
 
@@ -279,8 +280,9 @@ public:
     }
 
     esp_err_t WebCommand(uint32_t session, uint32_t sequence, L298nWebCommand command, int speed,
-                         bool proximity_warning_enabled) {
-        if (speed < 0 || speed > 100)
+                         bool proximity_warning_enabled, int joystick_x, int joystick_y) {
+        if (speed < 0 || speed > 100 || joystick_x < -1000 || joystick_x > 1000 ||
+            joystick_y < -1000 || joystick_y > 1000)
             return ESP_ERR_INVALID_ARG;
         Motion motion;
         switch (command) {
@@ -295,6 +297,13 @@ public:
                 break;
             case L298nWebCommand::kRight:
                 motion = Motion::kRight;
+                break;
+            case L298nWebCommand::kJoystick:
+                motion = joystick_y > 0   ? Motion::kForward
+                         : joystick_y < 0 ? Motion::kBackward
+                         : joystick_x < 0 ? Motion::kLeft
+                         : joystick_x > 0 ? Motion::kRight
+                                          : Motion::kStop;
                 break;
             case L298nWebCommand::kStop:
             case L298nWebCommand::kRelease:
@@ -323,7 +332,36 @@ public:
         web_speed_percent_ = speed;
         if (motion == Motion::kStop || speed == 0) {
             StopLocked();
+        } else if (command == L298nWebCommand::kJoystick) {
+            int left = joystick_y + joystick_x;
+            int right = joystick_y - joystick_x;
+            const int peak = std::max(std::abs(left), std::abs(right));
+            if (peak > 1000) {
+                left = left * 1000 / peak;
+                right = right * 1000 / peak;
+            }
+            left = left * speed / 1000;
+            right = right * speed / 1000;
+            if (left == 0 && right == 0) {
+                StopLocked();
+            } else {
+                if (!web_joystick_active_ && moving_)
+                    StopOutputsLocked();
+                web_joystick_active_ = true;
+                if (!ApplyWebDriveLocked(left, right)) {
+                    StopLocked();
+                    EndWebControlLocked();
+                    return ESP_FAIL;
+                }
+                motion_ = motion;
+                moving_ = true;
+                deadline_us_ = web_deadline_us_;
+            }
         } else {
+            if (web_joystick_active_) {
+                StopLocked();
+                web_joystick_active_ = false;
+            }
             // Heartbeats refresh the deadline without interrupting PWM or the direction delay.
             if (motion_ != motion) {
                 StopLocked();
@@ -516,6 +554,9 @@ private:
     bool manual_override_ = false;
     bool web_connected_ = false;
     bool web_manual_ = false;
+    bool web_joystick_active_ = false;
+    int web_left_output_percent_ = 0;
+    int web_right_output_percent_ = 0;
     uint32_t web_session_ = 0;
     uint32_t web_sequence_ = 0;
     int64_t web_deadline_us_ = 0;
@@ -829,6 +870,7 @@ private:
         gesture_count_ = 0;
         gesture_index_ = 0;
         gesture_deadline_us_ = 0;
+        web_joystick_active_ = false;
         StopOutputsLocked();
     }
 
@@ -864,6 +906,8 @@ private:
         }
         motion_ = Motion::kStop;
         moving_ = false;
+        web_left_output_percent_ = 0;
+        web_right_output_percent_ = 0;
         start_at_us_ = 0;
         deadline_us_ = 0;
 #ifdef CONFIG_PM_ENABLE
@@ -881,6 +925,57 @@ private:
                Check(ledc_update_duty(kMode, kLeftChannel)) &&
                Check(ledc_set_duty(kMode, kRightChannel, duty)) &&
                Check(ledc_update_duty(kMode, kRightChannel));
+    }
+
+    bool ApplyWebDriveLocked(int left, int right) {
+        const bool direction_changed =
+            (left != 0 && web_left_output_percent_ != 0 &&
+             (left < 0) != (web_left_output_percent_ < 0)) ||
+            (right != 0 && web_right_output_percent_ != 0 &&
+             (right < 0) != (web_right_output_percent_ < 0));
+        if (direction_changed)
+            StopOutputsLocked();
+
+        auto set_direction = [this](gpio_num_t in1, gpio_num_t in2, int output, bool inverted) {
+            if (output == 0)
+                return Check(gpio_set_level(in1, 0)) && Check(gpio_set_level(in2, 0));
+            const bool forward = (output > 0) != inverted;
+            return Check(gpio_set_level(in1, forward)) && Check(gpio_set_level(in2, !forward));
+        };
+        auto set_pwm = [this](ledc_channel_t channel, int output) {
+            if (output == 0)
+                return Check(ledc_stop(kMode, channel, 0));
+            const uint32_t duty = static_cast<uint32_t>(std::abs(output)) * 1023 / 100;
+            return Check(ledc_set_duty(kMode, channel, duty)) &&
+                   Check(ledc_update_duty(kMode, channel));
+        };
+
+        bool ok = true;
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N_INVERT_LEFT
+        constexpr bool invert_left = true;
+#else
+        constexpr bool invert_left = false;
+#endif
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N_INVERT_RIGHT
+        constexpr bool invert_right = true;
+#else
+        constexpr bool invert_right = false;
+#endif
+        if (left == 0)
+            ok = set_pwm(kLeftChannel, 0) && ok;
+        if (right == 0)
+            ok = set_pwm(kRightChannel, 0) && ok;
+        ok = set_direction(MOTOR_LEFT_IN1_PIN, MOTOR_LEFT_IN2_PIN, left, invert_left) && ok;
+        ok = set_direction(MOTOR_RIGHT_IN1_PIN, MOTOR_RIGHT_IN2_PIN, right, invert_right) && ok;
+        if (left != 0)
+            ok = set_pwm(kLeftChannel, left) && ok;
+        if (right != 0)
+            ok = set_pwm(kRightChannel, right) && ok;
+        if (ok) {
+            web_left_output_percent_ = left;
+            web_right_output_percent_ = right;
+        }
+        return ok;
     }
 
     int ActiveSpeedLocked() const {
@@ -960,6 +1055,10 @@ private:
                 StopLocked();
             return;
         }
+        // Web joystick outputs are applied directly from validated commands. Keep the timed
+        // direction path active for the four HUD buttons.
+        if (web_manual_ && web_joystick_active_)
+            return;
         if (autonomy_mode_ != AutonomyMode::kManual &&
             (invalid_sensor_samples_ >= 2 ||
              now - last_sensor_update_us_ > kSensorStaleMs * 1000LL)) {
@@ -1366,9 +1465,11 @@ esp_err_t BeginL298nWebControl(uint32_t* session) {
 }
 
 esp_err_t CommandL298nWebControl(uint32_t session, uint32_t sequence, L298nWebCommand command,
-                                 int speed_percent, bool proximity_warning_enabled) {
+                                 int speed_percent, bool proximity_warning_enabled,
+                                 int joystick_x, int joystick_y) {
     return L298nController::Instance().WebCommand(session, sequence, command, speed_percent,
-                                                 proximity_warning_enabled);
+                                                 proximity_warning_enabled, joystick_x,
+                                                 joystick_y);
 }
 
 void SetL298nWebConnected(bool connected) {
