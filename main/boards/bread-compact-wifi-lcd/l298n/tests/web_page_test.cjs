@@ -108,7 +108,8 @@ function setup({fullscreen = 'native'} = {}) {
         currentMode = requestData.enabled ? requestData.mode : currentMode === requestData.mode ?
           'manual' : currentMode;
       const responseData = url.endsWith('claim') ? {session:1234} : url.endsWith('status') ? {
-        distance_valid:statusValid,distance_cm:statusDistance,autonomy_mode:currentMode,follow_distance_cm:30,
+        distance_valid:statusValid,distance_cm:statusDistance,
+        autonomy_mode:currentMode === 'avoid' ? 'obstacle_avoidance' : currentMode,follow_distance_cm:30,
         obstacle_distance_cm:20,moving:false
       } : {ok:true};
       return Promise.resolve({ok:true,json:async () => responseData});

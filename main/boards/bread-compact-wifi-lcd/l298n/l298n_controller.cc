@@ -43,19 +43,34 @@ constexpr int kMinObstacleDistanceCm = 10;
 constexpr int kMaxObstacleDistanceCm = 100;
 constexpr int kFollowMaxTargetCm = 300;
 constexpr int kFollowHysteresisCm = 4;
+constexpr int kFollowReverseTriggerCm = 10;
 constexpr int kAvoidClearanceCm = 10;
 constexpr int kAutonomyCommandMs = 180;
-constexpr int kAvoidTurnTimeoutMs = 900;
+constexpr int kAvoidFirstClearCm = 40;
+constexpr int kAvoidReverseMs = 300;
+constexpr int kAvoidSideTurnMs = 550;
+constexpr int kAvoidSettleMs = 200;  // Flush the SR04 median filter after stopping a turn.
 constexpr int kSensorStaleMs = 250;
 constexpr int kProximityWarningCm = 20;
 constexpr int64_t kProximityWarningPeriodUs = 700000;
 constexpr int kAutonomySpeedPercent = 40;
-constexpr int kAutonomyTurnSpeedPercent = 38;
+constexpr int kAvoidReverseSpeedPercent = 45;
+constexpr int kAutonomyTurnSpeedPercent = 60;
 
 enum class Motion { kStop, kForward, kBackward, kLeft, kRight };
 enum class Emotion { kNone, kHappy, kSad, kAngry, kSurprised, kThinking, kWinking };
 enum class AutonomyMode { kManual, kFollow, kObstacleAvoidance };
-enum class AvoidState { kForward, kTurnFirst, kTurnSecond, kBlocked };
+enum class AvoidState {
+    kForward,
+    kReverse,
+    kTurnFirst,
+    kMeasureFirst,
+    kTurnSecond,
+    kMeasureSecond,
+    kReturnFirst,
+    kMeasureChosen,
+    kBlocked
+};
 
 struct GestureStep {
     Motion motion;
@@ -393,8 +408,13 @@ public:
         measured_distance_cm_ = valid ? distance_cm : -1;
         if (!valid) {
             valid_sensor_samples_ = 0;
-            if (++invalid_sensor_samples_ >= 2 && autonomy_mode_ != AutonomyMode::kManual)
+            avoid_clear_samples_ = 0;
+            if (++invalid_sensor_samples_ >= 2 && autonomy_mode_ != AutonomyMode::kManual) {
+                if (autonomy_mode_ == AutonomyMode::kObstacleAvoidance &&
+                    avoid_state_ != AvoidState::kForward && avoid_state_ != AvoidState::kBlocked)
+                    BlockAvoidLocked();
                 StopLocked();
+            }
             return;
         }
         invalid_sensor_samples_ = 0;
@@ -403,7 +423,16 @@ public:
             !MotionAllowed()) {
             return;
         }
-        if (valid_sensor_samples_ < 2) {
+        // One missed echo must not cancel a live scan on the first recovered reading.
+        // A phase can only start after two valid samples. Two missed echoes or the
+        // existing motor deadline still cancel it; an expired phase is never revived.
+        const bool recovering_live_scan =
+            autonomy_mode_ == AutonomyMode::kObstacleAvoidance && AvoidMotionPhaseLocked() &&
+            motion_ != Motion::kStop && esp_timer_get_time() < deadline_us_;
+        if (valid_sensor_samples_ < 2 && !recovering_live_scan) {
+            if (autonomy_mode_ == AutonomyMode::kObstacleAvoidance &&
+                avoid_state_ != AvoidState::kForward && avoid_state_ != AvoidState::kBlocked)
+                BlockAvoidLocked();
             StopLocked();
             return;
         }
@@ -492,12 +521,14 @@ private:
     int invalid_sensor_samples_ = 0;
     int avoid_clear_samples_ = 0;
     int64_t last_sensor_update_us_ = 0;
-    int64_t avoid_turn_started_us_ = 0;
+    int64_t avoid_phase_deadline_us_ = 0;
+    int avoid_phase_duration_ms_ = 0;
+    int avoid_first_distance_cm_ = -1;
+    int avoid_sample_distance_cm_ = -1;
     bool sensor_valid_ = false;
     bool warning_queued_ = false;
     bool proximity_warning_enabled_ = true;
     int64_t next_warning_at_us_ = 0;
-    bool next_avoid_turn_left_ = true;
 
     L298nController() {
         constexpr uint64_t pins = (1ULL << MOTOR_LEFT_EN_PIN) | (1ULL << MOTOR_LEFT_IN1_PIN) |
@@ -566,7 +597,10 @@ private:
         autonomy_mode_ = AutonomyMode::kManual;
         avoid_state_ = AvoidState::kForward;
         avoid_clear_samples_ = 0;
-        avoid_turn_started_us_ = 0;
+        avoid_phase_deadline_us_ = 0;
+        avoid_phase_duration_ms_ = 0;
+        avoid_first_distance_cm_ = -1;
+        avoid_sample_distance_cm_ = -1;
         valid_sensor_samples_ = 0;
         invalid_sensor_samples_ = 0;
     }
@@ -586,7 +620,10 @@ private:
         autonomy_mode_ = requested;
         avoid_state_ = AvoidState::kForward;
         avoid_clear_samples_ = 0;
-        avoid_turn_started_us_ = 0;
+        avoid_phase_deadline_us_ = 0;
+        avoid_phase_duration_ms_ = 0;
+        avoid_first_distance_cm_ = -1;
+        avoid_sample_distance_cm_ = -1;
         valid_sensor_samples_ = 0;
         invalid_sensor_samples_ = 0;
         return ESP_OK;
@@ -614,23 +651,75 @@ private:
 
     void UpdateFollowLocked(int distance_cm) {
         avoid_state_ = AvoidState::kForward;
-        if (distance_cm <= follow_distance_cm_ + kFollowHysteresisCm ||
-            distance_cm > kFollowMaxTargetCm) {
+        if (distance_cm > kFollowMaxTargetCm) {
+            StopLocked();
+            return;
+        }
+        // Start retreating only at close range, then keep reversing until the configured
+        // target is reached. A stop (including sensor loss) cancels the retreat.
+        if (distance_cm < follow_distance_cm_ &&
+            (distance_cm <= kFollowReverseTriggerCm || motion_ == Motion::kBackward)) {
+            RefreshAutonomyMotionLocked(Motion::kBackward, kAutonomySpeedPercent);
+            return;
+        }
+        if (distance_cm <= follow_distance_cm_ + kFollowHysteresisCm) {
             StopLocked();
             return;
         }
         RefreshAutonomyMotionLocked(Motion::kForward, kAutonomySpeedPercent);
     }
 
-    void StartAvoidTurnLocked(AvoidState state) {
+    bool AvoidMotionPhaseLocked() const {
+        return avoid_state_ == AvoidState::kReverse || avoid_state_ == AvoidState::kTurnFirst ||
+               avoid_state_ == AvoidState::kTurnSecond || avoid_state_ == AvoidState::kReturnFirst;
+    }
+
+    void BlockAvoidLocked() {
+        StopLocked();
+        avoid_state_ = AvoidState::kBlocked;
+        avoid_clear_samples_ = 0;
+        avoid_phase_deadline_us_ = 0;
+        avoid_phase_duration_ms_ = 0;
+        avoid_first_distance_cm_ = -1;
+        avoid_sample_distance_cm_ = -1;
+    }
+
+    void StartAvoidMotionLocked(AvoidState state, Motion motion, int duration_ms) {
         StopLocked();
         avoid_state_ = state;
         avoid_clear_samples_ = 0;
-        avoid_turn_started_us_ = esp_timer_get_time();
-        const bool turn_left = state == AvoidState::kTurnFirst ? next_avoid_turn_left_
-                                                               : !next_avoid_turn_left_;
-        RefreshAutonomyMotionLocked(turn_left ? Motion::kLeft : Motion::kRight,
-                                    kAutonomyTurnSpeedPercent);
+        avoid_phase_duration_ms_ = duration_ms;
+        // Tick starts this clock when the bridge is actually enabled, after direction delay.
+        avoid_phase_deadline_us_ = 0;
+        const int speed = state == AvoidState::kReverse ? kAvoidReverseSpeedPercent
+                                                       : kAutonomyTurnSpeedPercent;
+        if (!RefreshAutonomyMotionLocked(motion, speed))
+            BlockAvoidLocked();
+    }
+
+    void FinishAvoidMotionLocked(int64_t now) {
+        StopLocked();
+        if (avoid_state_ == AvoidState::kReverse) {
+            StartAvoidMotionLocked(AvoidState::kTurnFirst, Motion::kLeft, kAvoidSideTurnMs);
+            return;
+        }
+        if (avoid_state_ == AvoidState::kTurnFirst)
+            avoid_state_ = AvoidState::kMeasureFirst;
+        else if (avoid_state_ == AvoidState::kTurnSecond)
+            avoid_state_ = AvoidState::kMeasureSecond;
+        else
+            avoid_state_ = AvoidState::kMeasureChosen;
+        avoid_phase_deadline_us_ = now + kAvoidSettleMs * 1000LL;
+        avoid_clear_samples_ = 0;
+        avoid_sample_distance_cm_ = -1;
+    }
+
+    void DriveAvoidForwardLocked() {
+        avoid_state_ = AvoidState::kForward;
+        avoid_phase_deadline_us_ = 0;
+        avoid_clear_samples_ = 0;
+        if (!RefreshAutonomyMotionLocked(Motion::kForward, kAutonomySpeedPercent))
+            BlockAvoidLocked();
     }
 
     void UpdateObstacleAvoidanceLocked(int distance_cm) {
@@ -639,9 +728,7 @@ private:
         if (avoid_state_ == AvoidState::kBlocked) {
             if (distance_cm > clear_distance) {
                 if (++avoid_clear_samples_ >= 3) {
-                    avoid_state_ = AvoidState::kForward;
-                    avoid_clear_samples_ = 0;
-                    RefreshAutonomyMotionLocked(Motion::kForward, kAutonomySpeedPercent);
+                    DriveAvoidForwardLocked();
                 }
             } else {
                 avoid_clear_samples_ = 0;
@@ -651,39 +738,71 @@ private:
         }
         if (avoid_state_ == AvoidState::kForward) {
             if (distance_cm <= obstacle_distance_cm_) {
-                StartAvoidTurnLocked(AvoidState::kTurnFirst);
+                avoid_first_distance_cm_ = -1;
+                StartAvoidMotionLocked(AvoidState::kReverse, Motion::kBackward, kAvoidReverseMs);
             } else {
-                RefreshAutonomyMotionLocked(Motion::kForward, kAutonomySpeedPercent);
+                DriveAvoidForwardLocked();
             }
             return;
         }
 
-        if (distance_cm > clear_distance) {
-            ++avoid_clear_samples_;
-        } else {
-            avoid_clear_samples_ = 0;
-        }
-        if (avoid_clear_samples_ >= 2) {
-            next_avoid_turn_left_ = !next_avoid_turn_left_;
-            avoid_state_ = AvoidState::kForward;
-            avoid_clear_samples_ = 0;
-            RefreshAutonomyMotionLocked(Motion::kForward, kAutonomySpeedPercent);
+        if (AvoidMotionPhaseLocked()) {
+            // An interrupted scan no longer has a trustworthy timed heading.
+            if (motion_ == Motion::kStop || (moving_ && now >= deadline_us_)) {
+                BlockAvoidLocked();
+                return;
+            }
+            if (avoid_phase_deadline_us_ != 0 && now >= avoid_phase_deadline_us_) {
+                FinishAvoidMotionLocked(now);
+                return;
+            }
+            Motion motion = Motion::kLeft;
+            if (avoid_state_ == AvoidState::kReverse)
+                motion = Motion::kBackward;
+            else if (avoid_state_ == AvoidState::kTurnSecond)
+                motion = Motion::kRight;
+            const int speed = avoid_state_ == AvoidState::kReverse ? kAvoidReverseSpeedPercent
+                                                                 : kAutonomyTurnSpeedPercent;
+            if (!RefreshAutonomyMotionLocked(motion, speed))
+                BlockAvoidLocked();
             return;
         }
-        if (now - avoid_turn_started_us_ >= kAvoidTurnTimeoutMs * 1000LL) {
-            if (avoid_state_ == AvoidState::kTurnFirst) {
-                StartAvoidTurnLocked(AvoidState::kTurnSecond);
+
+        // Measure only while stationary, after allowing old-heading samples to leave the filter.
+        if (now < avoid_phase_deadline_us_)
+            return;
+        avoid_sample_distance_cm_ = avoid_clear_samples_ == 0
+                                        ? distance_cm
+                                        : std::min(avoid_sample_distance_cm_, distance_cm);
+        if (++avoid_clear_samples_ < 2)
+            return;
+        const int measured = avoid_sample_distance_cm_;
+        if (avoid_state_ == AvoidState::kMeasureFirst) {
+            avoid_first_distance_cm_ = measured;
+            if (measured > std::max(kAvoidFirstClearCm, obstacle_distance_cm_)) {
+                DriveAvoidForwardLocked();
+                return;
+            }
+            // From the left probe to the right probe: cross twice the first turn angle.
+            StartAvoidMotionLocked(AvoidState::kTurnSecond, Motion::kRight, 2 * kAvoidSideTurnMs);
+            return;
+        }
+        if (avoid_state_ == AvoidState::kMeasureSecond) {
+            if (std::max(avoid_first_distance_cm_, measured) <= obstacle_distance_cm_) {
+                BlockAvoidLocked();
+            } else if (measured >= avoid_first_distance_cm_) {
+                DriveAvoidForwardLocked();
             } else {
-                StopLocked();
-                avoid_state_ = AvoidState::kBlocked;
-                next_avoid_turn_left_ = !next_avoid_turn_left_;
+                StartAvoidMotionLocked(AvoidState::kReturnFirst, Motion::kLeft,
+                                       2 * kAvoidSideTurnMs);
             }
             return;
         }
-        const bool turn_left = avoid_state_ == AvoidState::kTurnFirst ? next_avoid_turn_left_
-                                                                      : !next_avoid_turn_left_;
-        RefreshAutonomyMotionLocked(turn_left ? Motion::kLeft : Motion::kRight,
-                                    kAutonomyTurnSpeedPercent);
+        // Re-check the chosen left heading after returning; the obstacle may have moved.
+        if (measured > obstacle_distance_cm_)
+            DriveAvoidForwardLocked();
+        else
+            BlockAvoidLocked();
     }
 
     void StopLocked() {
@@ -825,9 +944,23 @@ private:
         if (autonomy_mode_ != AutonomyMode::kManual &&
             (invalid_sensor_samples_ >= 2 ||
              now - last_sensor_update_us_ > kSensorStaleMs * 1000LL)) {
+            avoid_clear_samples_ = 0;
+            if (autonomy_mode_ == AutonomyMode::kObstacleAvoidance &&
+                avoid_state_ != AvoidState::kForward && avoid_state_ != AvoidState::kBlocked)
+                BlockAvoidLocked();
             if (motion_ != Motion::kStop)
                 StopLocked();
             return;
+        }
+        if (autonomy_mode_ == AutonomyMode::kObstacleAvoidance && AvoidMotionPhaseLocked()) {
+            if (motion_ == Motion::kStop || now >= deadline_us_) {
+                BlockAvoidLocked();
+                return;
+            }
+            if (avoid_phase_deadline_us_ != 0 && now >= avoid_phase_deadline_us_) {
+                FinishAvoidMotionLocked(now);
+                return;
+            }
         }
         if (motion_ == Motion::kStop && pending_emotion_ == Emotion::kNone)
             return;
@@ -885,6 +1018,11 @@ private:
             // Web deadlines are measured from reception, never from motor start.
             if (!web_manual_)
                 deadline_us_ = esp_timer_get_time() + static_cast<int64_t>(duration_ms_) * 1000;
+            if (autonomy_mode_ == AutonomyMode::kObstacleAvoidance && AvoidMotionPhaseLocked() &&
+                avoid_phase_deadline_us_ == 0) {
+                avoid_phase_deadline_us_ = esp_timer_get_time() +
+                                          static_cast<int64_t>(avoid_phase_duration_ms_) * 1000;
+            }
         }
     }
 
@@ -1091,8 +1229,10 @@ private:
         server.AddTool(
             "self.navigation.set_follow_mode",
             "Enable or disable HC-SR04 follow mode (bật/tắt chế độ đi theo). The robot only "
-            "follows an object directly in front, moves forward only, and stops when the target "
-            "is lost or reaches the configured distance. Enabling disables obstacle avoidance. "
+            "follows an object directly in front and stops when the target is lost. At 10 cm "
+            "or closer it reverses until reaching the configured target distance; otherwise "
+            "it moves forward when farther than the target plus a 4 cm deadband. "
+            "There is no rear obstacle sensor. Enabling disables obstacle avoidance. "
             "distance_cm: 10..200 changes the target before switching mode; -1 keeps the current "
             "target. Defaults off with a 30 cm target after reboot.",
             PropertyList({Property("enabled", kPropertyTypeBoolean),
@@ -1126,8 +1266,12 @@ private:
         server.AddTool(
             "self.navigation.set_obstacle_avoidance",
             "Enable or disable autonomous HC-SR04 obstacle avoidance (bật/tắt tự hành né vật "
-            "cản). The robot moves forward, turns in place when blocked, never reverses, and "
-            "stops if both turn attempts remain blocked. Enabling disables follow mode. Defaults "
+            "cản). At the configured distance the robot briefly reverses, probes left, and "
+            "drives left immediately if clearance exceeds both 40 cm and the stop distance. "
+            "Otherwise it probes right and chooses the farther safe direction, rechecking "
+            "left if it returns there. It stops if neither direction is safe or readings fail. "
+            "Turns are timed, not angle-controlled; there is no rear sensor. "
+            "Enabling disables follow mode. Defaults "
             "off after reboot. distance_cm: 10..100 changes the stop distance before switching "
             "mode; -1 keeps the current distance (20 cm after reboot).",
             PropertyList({Property("enabled", kPropertyTypeBoolean),

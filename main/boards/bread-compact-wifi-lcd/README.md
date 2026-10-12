@@ -132,8 +132,36 @@ idf.py -p <CONG_SERIAL> flash monitor
 
 Robot không có encoder. Một HC-SR04 cố định phía trước chỉ bám khoảng cách với vật thể nằm trong
 chùm siêu âm, không nhận diện người và không xác định được hướng trái/phải của mục tiêu. Follow mode
-chỉ tự chạy tiến và dừng, không tự lùi. Chế độ né vật cản tiến chậm, xoay tại chỗ để tìm hướng trống
-và dừng nếu cả hai lần thử vẫn bị chặn.
+tiến khi mục tiêu xa hơn khoảng cách đặt cộng vùng đệm 4 cm. Khi số đo còn **10 cm hoặc gần hơn**
+và nhỏ hơn khoảng cách mục tiêu, xe bắt đầu lùi; tiếp tục lùi cho tới khi đạt khoảng cách mục tiêu
+hiện tại rồi dừng. Mặc định mục tiêu là **30 cm**, có thể đổi trong khoảng **10–200 cm** bằng
+giọng nói/MCP hoặc `/follow N` (ví dụ `/follow 50`: lùi từ 10 cm tới 50 cm).
+Khoảng 10 cm là ngưỡng bắt đầu lùi, không phải khoảng cách mục tiêu. Nếu đổi mục tiêu trong lúc
+lùi, xe dùng giá trị mới ở lần cập nhật cảm biến tiếp theo. Khi motor bị dừng do mất số đo hoặc
+watchdog, lượt lùi bị hủy. SR04 chỉ nhìn phía trước, vì vậy cần chừa khoảng trống phía sau xe.
+Chế độ né vật cản dùng ngưỡng đã đặt (mặc định **20 cm**, tùy chỉnh **10–100 cm**):
+
+1. Khi số đo bằng hoặc thấp hơn ngưỡng, xe dừng tiến và lùi ngắn **300 ms**.
+2. Xoay trái **550 ms**, dừng **200 ms** cho cảm biến ổn định rồi lấy hai số đo hợp lệ;
+   dùng số nhỏ hơn để đánh giá hướng đó.
+3. Nếu hướng đầu **trên 40 cm** và cũng lớn hơn ngưỡng vật cản đang đặt, xe đi ngay hướng đó.
+4. Nếu chưa đạt, xoay phải **1100 ms** để đi qua hướng ban đầu sang bên đối diện, rồi dừng đo.
+   Chọn bên có khoảng cách lớn hơn, với điều kiện khoảng cách lớn hơn ngưỡng vật cản.
+   Nếu hai bên bằng nhau thì chọn phải (hướng đang nhìn) để không xoay lại thừa.
+5. Nếu bên trái tốt hơn, xoay trái **1100 ms** để quay về hướng đã đo và đo lại trước khi tiến.
+   Nếu cả hai hướng quá gần hoặc hướng chọn không còn an toàn, xe dừng; chỉ đi tiếp khi hướng
+   phía trước có ba số đo liên tiếp vượt ngưỡng cộng **10 cm**.
+
+Chuỗi né chạy theo timer, không chặn luồng âm thanh. Khi đang lùi/xoay, một mẫu mất Echo rồi có
+số đo hợp lệ trở lại trước hạn motor sẽ không hủy lượt thăm dò. Hai mẫu lỗi liên tiếp hoặc
+watchdog dừng motor sẽ hủy lượt đó, không dùng lại các hướng đã đo. Các thời gian nằm ở
+`kAvoidReverseMs`, `kAvoidSideTurnMs`, `kAvoidSettleMs` trong `l298n_controller.cc`.
+PWM lùi là **45%**, xoay **60%**, tiến **40%**; đều bị giới hạn bởi mức `/speed` đang đặt.
+Nếu xe chỉ rung mà không xoay, thử `/speed 75` rồi `/avoid 20`; kiểm tra `/status` để xem mode,
+PWM và trạng thái bị chặn. Các hằng `kAvoidReverseSpeedPercent`, `kAutonomyTurnSpeedPercent`
+cho phép hiệu chỉnh lực lùi/xoay. Mức xoay cũ 38% có thể không đủ lực trên mặt sàn.
+Không có encoder nên góc xoay và quãng lùi phụ thuộc tốc độ, pin, bánh và mặt sàn; cần thử và
+hiệu chỉnh trên xe. SR04 không kiểm tra vật cản phía sau khi lùi.
 
 Có thể điều khiển bằng giọng nói, ví dụ:
 

@@ -125,6 +125,8 @@ inline constexpr char kL298nWebPage[] = R"html(
     }
 
     function applyMode(mode) {
+      // Status uses the firmware enum name; control requests use the shorter "avoid".
+      if (mode === 'obstacle_avoidance') mode = 'avoid';
       currentMode = mode;
       const follow = mode === 'follow', avoid = mode === 'avoid';
       $('followStatus').textContent = follow ? 'ON' : 'OFF';
