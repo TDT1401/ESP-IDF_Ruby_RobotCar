@@ -14,7 +14,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "../config.h"
+#include "../../config.h"
 
 namespace {
 

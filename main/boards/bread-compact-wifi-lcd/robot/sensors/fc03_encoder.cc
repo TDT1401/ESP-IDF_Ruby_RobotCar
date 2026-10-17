@@ -9,7 +9,7 @@
 #include <cinttypes>
 #include <cmath>
 
-#include "../config.h"
+#include "../../config.h"
 
 namespace {
 #ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03

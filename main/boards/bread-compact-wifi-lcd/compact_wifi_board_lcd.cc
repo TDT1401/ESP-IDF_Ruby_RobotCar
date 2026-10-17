@@ -13,9 +13,9 @@
 #include "wifi_manager.h"
 
 #ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N
-#include "l298n/l298n_controller.h"
-#include "l298n/l298n_telegram.h"
-#include "l298n/l298n_web_server.h"
+#include "robot/controller/l298n_controller.h"
+#include "robot/telegram/telegram.h"
+#include "robot/web/web_server.h"
 #endif
 
 #include <driver/i2c_master.h>

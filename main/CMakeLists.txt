@@ -895,11 +895,11 @@ file(GLOB BOARD_SOURCES
 list(APPEND SOURCES ${BOARD_SOURCES})
 
 if(CONFIG_BREAD_COMPACT_WIFI_LCD_L298N)
-    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/l298n/fc03_encoder.cc")
-    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/l298n/hcsr04_sensor.cc")
-    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/l298n/l298n_controller.cc")
-    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/l298n/l298n_web_server.cc")
-    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/l298n/l298n_telegram.cc")
+    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/sensors/fc03_encoder.cc")
+    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/sensors/hcsr04_sensor.cc")
+    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/controller/l298n_controller.cc")
+    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/web/web_server.cc")
+    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/telegram/telegram.cc")
 endif()
 
 # Select one audio engine for each chip family

@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const {test} = require('node:test');
-const source = fs.readFileSync(path.join(__dirname, '../l298n_web_page.h'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../web/web_page.h'), 'utf8');
 const script = source.match(/<script>([\s\S]*?)<\/script>/)[1];
 
 class Element {

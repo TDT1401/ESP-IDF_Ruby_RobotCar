@@ -15,6 +15,29 @@ Bo mạch ESP32-S3-N16R8, microphone I2S, MAX98357A và màn hình TFT SPI.
 - Hai FC-03: đếm xung, đo RPM và cho phép xe tiến/lùi theo quãng đường.
 - Telegram.
 
+## Cấu trúc mã nguồn
+
+Các chức năng robot được nhóm trong `robot/`:
+
+```text
+robot/
+├── controller/  # Điều khiển motor, tự hành, cử chỉ và công cụ MCP
+├── sensors/     # Encoder FC-03 và cảm biến khoảng cách HC-SR04
+├── web/         # HTTP server và trang điều khiển nhúng
+├── telegram/    # Tích hợp Telegram, nội dung tin nhắn và cấu hình cá nhân
+└── tests/       # Kiểm thử hồi quy trang điều khiển
+```
+
+`compact_wifi_board_lcd.cc` khởi tạo các module này. Chân GPIO vẫn nằm trong
+`config.h`; `main/CMakeLists.txt` chọn các file nguồn robot khi bật
+`CONFIG_BREAD_COMPACT_WIFI_LCD_L298N`.
+
+Chạy kiểm thử trang điều khiển từ thư mục gốc dự án:
+
+```sh
+node --test main/boards/bread-compact-wifi-lcd/robot/tests/web_page_test.cjs
+```
+
 ## Component
 
 | Số lượng | Linh kiện                 | Ghi chú        |
@@ -158,7 +181,7 @@ Số đo có thể lệch quãng đường thực do trượt bánh và sai số
    https://api.telegram.org/bot<TOKEN_CUA_BAN>/getUpdates
    ```
 
-3. Sao chép [telegram_config.example.h](l298n/telegram_config.example.h) thành `l298n/telegram_config.local.h` và điền:
+3. Sao chép [telegram_config.example.h](robot/telegram/telegram_config.example.h) thành `robot/telegram/telegram_config.local.h` và điền:
 
    ```cpp
    #pragma once

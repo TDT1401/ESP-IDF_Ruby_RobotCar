@@ -2,7 +2,7 @@
 
 | Ưu tiên | Phát hiện                                                                                                                                                                                                                                               | Đề xuất                                                                     |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| **P1**  | Ngưỡng cảnh báo cố định 20 cm ở mọi tốc độ; ở tốc độ cao, thời gian phản ứng của người lái sẽ ngắn hơn. [Ngưỡng hiện tại](C:/Users/ASUS/Documents/PROJECT/Robotics/xiaozhi-esp32-2.5.0/main/boards/bread-compact-wifi-lcd/l298n/l298n_controller.cc:50) | Giữ cảnh báo bắt buộc dưới 20 cm và cân nhắc thêm cảnh báo sớm theo tốc độ. |
+| **P1**  | Ngưỡng cảnh báo cố định 20 cm ở mọi tốc độ; ở tốc độ cao, thời gian phản ứng của người lái sẽ ngắn hơn. [Ngưỡng hiện tại](C:/Users/ASUS/Documents/PROJECT/Robotics/xiaozhi-esp32-2.5.0/main/boards/bread-compact-wifi-lcd/robot/controller/l298n_controller.cc:50) | Giữ cảnh báo bắt buộc dưới 20 cm và cân nhắc thêm cảnh báo sớm theo tốc độ. |
 
 Đã triển khai trong firmware. Ngưỡng được tính theo khoảng cách cấu hình, lấy 50% làm mốc: ngưỡng = khoảng cách × max(tốc độ, 50) / 50, làm tròn lên. Vì vậy, 20 cm ở 50% thành 30 cm ở 75% và 40 cm ở 100%. Khi đổi khoảng cách cấu hình, ngưỡng tương ứng tự cập nhật.
 

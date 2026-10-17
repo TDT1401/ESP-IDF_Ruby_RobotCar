@@ -1,4 +1,4 @@
-#include "l298n_telegram.h"
+#include "telegram.h"
 
 #include <sdkconfig.h>
 
@@ -34,13 +34,13 @@
 #include <new>
 #include <string>
 
+#include "../controller/l298n_controller.h"
+#include "../web/web_server.h"
 #include "application.h"
 #include "audio_codec.h"
 #include "board.h"
 #include "display.h"
-#include "l298n_controller.h"
-#include "l298n_telegram_text.h"
-#include "l298n_web_server.h"
+#include "telegram_text.h"
 #include "mcp_server.h"
 #include "wifi_manager.h"
 
@@ -847,7 +847,7 @@ void InitializeL298nTelegram() {
 #if L298N_TELEGRAM_ENABLED
     ESP_LOGE("L298nTelegram", "Telegram needs CONFIG_MBEDTLS_CERTIFICATE_BUNDLE; not started");
 #else
-    ESP_LOGI("L298nTelegram", "Disabled; configure l298n/telegram_config.local.h to enable");
+    ESP_LOGI("L298nTelegram", "Disabled; configure robot/telegram/telegram_config.local.h to enable");
 #endif
 }
 

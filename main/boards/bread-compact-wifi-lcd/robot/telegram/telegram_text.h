@@ -3,7 +3,7 @@
 // Edit this file to customize Telegram wording and icons.
 // Messages use Telegram HTML: supported tags include <b>, <i>, <code> and <a>.
 // Keep every opened tag closed. Dynamic values (IP, firmware, status) are added
-// by l298n_telegram.cc and should not be written into these strings.
+// by telegram.cc and should not be written into these strings.
 namespace L298nTelegramText {
 
 inline constexpr char kDivider[] = "━━━━━━━━━━━━━━━━";

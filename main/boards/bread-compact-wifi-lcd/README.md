@@ -15,6 +15,29 @@ ESP32-S3-N16R8 board with an I2S microphone, MAX98357A amplifier, and SPI TFT di
 - Two FC-03 encoders: wheel pulses, RPM and measured forward/backward moves.
 - Telegram integration.
 
+## Source layout
+
+Robot features are grouped under `robot/`:
+
+```text
+robot/
+├── controller/  # Motor control, autonomy, gestures and MCP tools
+├── sensors/     # FC-03 encoders and HC-SR04 distance sensor
+├── web/         # HTTP server and embedded control page
+├── telegram/    # Telegram integration, messages and local configuration
+└── tests/       # Browser control regression tests
+```
+
+`compact_wifi_board_lcd.cc` initializes these modules. Board pins remain in
+`config.h`; `main/CMakeLists.txt` selects the robot sources when
+`CONFIG_BREAD_COMPACT_WIFI_LCD_L298N` is enabled.
+
+Run the browser tests from the repository root:
+
+```sh
+node --test main/boards/bread-compact-wifi-lcd/robot/tests/web_page_test.cjs
+```
+
 ## Components
 
 | Quantity | Component                  | Notes             |
@@ -157,7 +180,7 @@ Wheel slip and calibration error can change the real travel distance.
    https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates
    ```
 
-3. Copy [telegram_config.example.h](l298n/telegram_config.example.h) to `l298n/telegram_config.local.h` and fill in:
+3. Copy [telegram_config.example.h](robot/telegram/telegram_config.example.h) to `robot/telegram/telegram_config.local.h` and fill in:
 
    ```cpp
    #pragma once

@@ -15,10 +15,10 @@
 #include <cstring>
 #include <mutex>
 
-#include "../config.h"
+#include "../../config.h"
+#include "../sensors/hcsr04_sensor.h"
 #include "application.h"
 #include "assets/lang_config.h"
-#include "hcsr04_sensor.h"
 #include "mcp_server.h"
 
 namespace {

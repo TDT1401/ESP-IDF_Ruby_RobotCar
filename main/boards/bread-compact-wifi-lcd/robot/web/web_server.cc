@@ -1,4 +1,4 @@
-#include "l298n_web_server.h"
+#include "web_server.h"
 
 #include <esp_http_server.h>
 #include <esp_log.h>
@@ -11,8 +11,8 @@
 #include <cstring>
 #include <memory>
 
-#include "l298n_controller.h"
-#include "l298n_web_page.h"
+#include "../controller/l298n_controller.h"
+#include "web_page.h"
 
 namespace {
 constexpr const char* kTag = "L298nWeb";

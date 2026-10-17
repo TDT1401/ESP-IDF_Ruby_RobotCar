@@ -4,7 +4,7 @@
 
 #include <cstdint>
 
-#include "fc03_encoder.h"
+#include "../sensors/fc03_encoder.h"
 
 // Board-lifetime controller; call once after the LCD backlight is initialized.
 void InitializeL298nController();
