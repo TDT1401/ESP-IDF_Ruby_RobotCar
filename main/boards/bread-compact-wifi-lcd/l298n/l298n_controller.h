@@ -4,6 +4,8 @@
 
 #include <cstdint>
 
+#include "fc03_encoder.h"
+
 // Board-lifetime controller; call once after the LCD backlight is initialized.
 void InitializeL298nController();
 
@@ -34,7 +36,7 @@ esp_err_t SetL298nFollowDistance(int distance_cm);
 esp_err_t SetL298nObstacleDistance(int distance_cm);
 void StopL298nMotor();
 
-// Read-only snapshot of commanded outputs, not encoder feedback.
+// Read-only snapshot. PWM/moving describe commanded outputs; encoder is measured feedback.
 struct L298nMotorStatus {
     const char* motion;
     int speed_percent;
@@ -54,5 +56,6 @@ struct L298nMotorStatus {
     bool distance_valid;
     bool autonomy_blocked;
     esp_err_t hardware_error;
+    Fc03EncoderStatus encoder;
 };
 L298nMotorStatus GetL298nMotorStatus();

@@ -36,7 +36,8 @@ class Input extends Element {}
 function setup({fullscreen = 'native'} = {}) {
   const elements = Object.fromEntries([
     'claim','release','stop','hudStop','status','speedValue','hudSpeedValue','theme','distance',
-    'manualDistance','sensorState',
+    'manualDistance','sensorState','encoderPanel','encoderTravel','encoderRpm','encoderPulses',
+    'encoderWheels','encoderState','hudEncoder','hudTravel','hudEncoderState',
     'modeNotice','manualTab','hudTab','avoidTab','followTab','manualPanel','avoidPanel','followPanel',
     'avoidStatus','followStatus','avoidDistance','followDistance','avoidOn','avoidOff','followOn',
     'followOff','expandDrive','hudExit','hudConnect','hudNotice','hudRotateConnect',
@@ -88,6 +89,7 @@ function setup({fullscreen = 'native'} = {}) {
   let timerId = 0, heartbeat, nextReply;
   let currentMode = 'manual';
   let statusDistance = 34, statusValid = true;
+  let encoderStatus;
   let now = 0, serverDeadline = 0;
   const context = vm.createContext({
     document,window,screen,navigator,HTMLInputElement:Input,AbortController,
@@ -111,7 +113,7 @@ function setup({fullscreen = 'native'} = {}) {
         distance_valid:statusValid,distance_cm:statusDistance,
         autonomy_mode:currentMode === 'avoid' ? 'obstacle_avoidance' : currentMode,follow_distance_cm:30,
         obstacle_distance_cm:20,follow_target_cm:30,obstacle_stop_cm:20,
-        warning_distance_cm:30,moving:false
+        warning_distance_cm:30,moving:false,encoder:encoderStatus
       } : {ok:true};
       return Promise.resolve({ok:true,json:async () => responseData});
     }
@@ -120,6 +122,7 @@ function setup({fullscreen = 'native'} = {}) {
   return {elements,directions,hudDirections,document,window,requests,timers,intervals,orientationLog,
     wakeLocks,navigator,advance:ms => { now += ms; },
     setDistance:(value, valid = true) => { statusDistance = value; statusValid = valid; },
+    setEncoder:value => { encoderStatus = value; },
     heartbeat:() => heartbeat(), replyNext:fn => { nextReply = fn; }};
 }
 const settle = () => new Promise(resolve => setImmediate(resolve));
@@ -148,6 +151,50 @@ test('status telemetry renders the measured SR04 distance in both compact displa
   assert.equal(ui.elements.sensorState.textContent,'SR04 hoạt động');
   assert.equal(ui.elements.manualDistance.textContent,'34 cm');
   assert.ok(ui.intervals.has(2000));
+});
+
+test('FC03 telemetry keeps uncalibrated counts separate from distance and PWM', async () => {
+  const ui = setup(); await settle();
+  assert.equal(ui.elements.encoderPanel.hidden,true);
+  ui.setEncoder({enabled:true,ready:true,calibrated:false,travel_m:null,
+    left:{pulses:123,rpm:null,distance_m:null},right:{pulses:120,rpm:null,distance_m:null}});
+  await ui.intervals.get(2000)(); await settle();
+  assert.equal(ui.elements.encoderPanel.hidden,false);
+  assert.equal(ui.elements.hudEncoder.hidden,false);
+  assert.equal(ui.elements.encoderPulses.textContent,'123 / 120');
+  assert.equal(ui.elements.encoderTravel.textContent,'-- m');
+  assert.equal(ui.elements.encoderRpm.textContent,'-- / --');
+  assert.match(ui.elements.encoderState.textContent,/Chưa hiệu chuẩn/);
+  assert.equal(ui.elements.distance.textContent,'34 cm');
+  assert.equal(ui.requests.filter(request => request.data).length,0);
+});
+
+test('FC03 calibrated travel is visible on HUD and invalidated on telemetry loss', async () => {
+  const ui = setup(); await settle();
+  ui.setEncoder({enabled:true,ready:true,calibrated:true,travel_m:1.2345,distance_complete:false,
+    left:{pulses:123,rpm:12.5,distance_m:1.2,no_pulses:true},
+    right:{pulses:120,rpm:13,distance_m:1.3,no_pulses:false}});
+  await ui.intervals.get(2000)(); await settle();
+  assert.equal(ui.elements.hudTravel.textContent,'≈ 1.234 m');
+  assert.equal(ui.elements.encoderRpm.textContent,'12.5 / 13.0');
+  assert.match(ui.elements.encoderWheels.textContent,/1.200 \/ 1.300 m/);
+  assert.match(ui.elements.encoderState.textContent,/thiếu xung/);
+  assert.match(ui.elements.encoderState.textContent,/Không có xung bánh trái/);
+  ui.replyNext(() => Promise.reject(new Error('offline')));
+  await ui.intervals.get(2000)(); await settle();
+  assert.equal(ui.elements.hudTravel.textContent,'-- m');
+  assert.equal(ui.elements.encoderPulses.textContent,'-- / --');
+  assert.equal(ui.elements.encoderState.textContent,'Mất kết nối số đo');
+});
+
+test('FC03 hardware failure cannot display stale distances as measured data', async () => {
+  const ui = setup(); await settle();
+  ui.setEncoder({enabled:true,ready:false,calibrated:true,error:'ESP_FAIL',travel_m:12,
+    left:{pulses:5,rpm:20,distance_m:12},right:{pulses:5,rpm:20,distance_m:12}});
+  await ui.intervals.get(2000)(); await settle();
+  assert.equal(ui.elements.encoderTravel.textContent,'-- m');
+  assert.equal(ui.elements.encoderPulses.textContent,'-- / --');
+  assert.equal(ui.elements.encoderState.textContent,'Lỗi FC-03: ESP_FAIL');
 });
 
 test('portrait keeps the classic D-pad and landscape HUD is orientation-gated', () => {

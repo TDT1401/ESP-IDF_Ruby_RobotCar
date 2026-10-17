@@ -41,6 +41,7 @@ inline constexpr char kL298nWebPage[] = R"html(
     .hud-rotate{display:none}#manualPanel.hud-mode .panel-head,#manualPanel.hud-mode .portrait-manual{display:none}#manualPanel.hud-mode .hud-rotate{display:grid;min-height:100%;padding:30px;place-content:center;justify-items:center;gap:18px;text-align:center}.hud-rotate-icon{font-size:clamp(56px,15vw,100px)}.hud-rotate strong{font-size:clamp(22px,6vw,36px)}.hud-rotate p{max-width:28em;color:var(--muted)}.hud-rotate-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:10px}.hud-warning{display:none;color:var(--danger);font-size:11px;font-weight:900;text-align:center}.hud-warning.active{display:block}.hud-distance.danger{border-color:var(--danger);box-shadow:0 0 18px #ff4f7055}.hud-distance.danger strong{color:var(--danger)}
     @media(max-width:720px){.menu{grid-template-columns:repeat(4,minmax(0,1fr))}.menu button{padding:10px 3px;font-size:11px}}
     @media(orientation:landscape){#manualPanel.hud-mode .hud-rotate{display:none}}
+    .hud-encoder{color:#b8cae4;font-size:11px;line-height:1.3}.hud-encoder strong{color:#61f0ff;font-variant-numeric:tabular-nums}.hud-encoder small{display:block;max-width:220px;font-size:9px;color:#a5b4cb}.encoder-note{color:var(--muted);font-size:12px;line-height:1.5;overflow-wrap:anywhere}
   </style>
 </head>
 <body>
@@ -48,7 +49,7 @@ inline constexpr char kL298nWebPage[] = R"html(
     <header><div class="brand"><div class="brand-mark">🤖</div><div class="brand-copy"><div><div class="eyebrow">Robot control system</div><h1>Ruby <span>Drive</span></h1><p class="subtitle">Điều khiển xe qua Wi-Fi</p></div><span class="online">SYSTEM ONLINE</span></div></div><button id="theme" class="theme" aria-label="Đổi độ tương phản">◐</button></header>
     <div class="telemetry" aria-live="polite">
       <div class="telemetry-icon">◉</div>
-      <div class="telemetry-copy"><span class="distance-label">KHOẢNG CÁCH</span><strong id="distance" class="distance">-- cm</strong></div><span id="sensorState" class="sensor-state error">Đang chờ SR04…</span>
+      <div class="telemetry-copy"><span class="distance-label">KHOẢNG CÁCH VẬT CẢN</span><strong id="distance" class="distance">-- cm</strong></div><span id="sensorState" class="sensor-state error">Đang chờ SR04…</span>
     </div>
     <div id="modeNotice" class="notice" role="status" aria-live="polite"></div>
     <div class="dashboard">
@@ -68,6 +69,15 @@ inline constexpr char kL298nWebPage[] = R"html(
               <div class="status-card"><span>Motor</span><strong id="statusMotion">Đang dừng</strong></div>
               <div class="status-card"><span>Mức PWM lệnh</span><strong id="statusSpeed">0%</strong></div>
             </div>
+            <section id="encoderPanel" hidden aria-live="polite">
+              <div class="status-grid">
+                <div class="status-card"><span>Xe đã đi · ước lượng từ lúc bật</span><strong id="encoderTravel">-- m</strong></div>
+                <div class="status-card"><span>RPM đo được · trái / phải</span><strong id="encoderRpm">-- / --</strong></div>
+                <div class="status-card"><span>Tổng xung · trái / phải</span><strong id="encoderPulses">-- / --</strong></div>
+              </div>
+              <p id="encoderWheels" class="encoder-note">Quãng đường bánh trái/phải: -- / -- m</p>
+              <p id="encoderState" class="encoder-note">Đang chờ FC-03…</p>
+            </section>
             <div class="actions"><button id="claim" class="primary">Nhận quyền lái</button><button id="release" disabled>Trả quyền về giọng nói</button><button class="stop-drive" id="stop" disabled>Dừng xe</button></div>
             <label class="speed-label" for="speed">Tốc độ tối đa trên HUD <output id="speedValue">75%</output></label>
             <input id="speed" type="range" min="0" max="100" value="75" step="5">
@@ -83,7 +93,7 @@ inline constexpr char kL298nWebPage[] = R"html(
             <div class="hud-topbar"><button id="hudConnect" class="hud-exit" type="button" aria-live="polite">Kết nối lại</button><strong class="hud-title">RUBY · REMOTE CONTROL</strong><div class="hud-top-actions"><button id="hudSound" class="hud-exit hud-sound" type="button" aria-label="Âm cảnh báo" aria-pressed="true">🔊 Âm: Bật</button><button id="hudExit" class="hud-exit" type="button">✕ Thu nhỏ</button></div></div>
             <div id="hudNotice" class="hud-notice" role="status" aria-live="polite"></div>
             <section class="hud-bank hud-joystick-bank"><span class="hud-bank-label">JOYSTICK · LÁI MỀM</span><div id="hudJoystick" class="joystick-surface" role="application" aria-label="Kéo joystick để tiến, lùi và rẽ"><span class="joystick-label forward">TIẾN</span><span class="joystick-label reverse">LÙI</span><span class="joystick-label left">TRÁI</span><span class="joystick-label right">PHẢI</span><span id="hudJoystickHandle" class="joystick-handle" aria-hidden="true">✣</span></div></section>
-            <section class="hud-center"><span class="hud-kicker">MANUAL DRIVE</span><strong class="hud-heading">REMOTE CONTROL</strong><div class="hud-speed"><output id="hudSpeedValue">75%</output><span>POWER OUTPUT</span></div><div class="speed-presets" aria-label="Mức tốc độ"><button id="speed50" class="speed-preset" type="button">50</button><button id="speed75" class="speed-preset active" type="button">75</button><button id="speed100" class="speed-preset" type="button">100</button></div><div id="hudDistance" class="hud-distance"><span>SR04</span><strong id="manualDistance">-- cm</strong></div><div id="hudWarning" class="hud-warning" role="alert">⚠ Cảnh báo sớm · dưới 30 cm</div><button class="hud-stop" id="hudStop" disabled aria-label="Dừng xe">■<small>DỪNG</small></button></section>
+            <section class="hud-center"><span class="hud-kicker">MANUAL DRIVE</span><strong class="hud-heading">REMOTE CONTROL</strong><div class="hud-speed"><output id="hudSpeedValue">75%</output><span>POWER OUTPUT</span></div><div class="speed-presets" aria-label="Mức tốc độ"><button id="speed50" class="speed-preset" type="button">50</button><button id="speed75" class="speed-preset active" type="button">75</button><button id="speed100" class="speed-preset" type="button">100</button></div><div id="hudEncoder" class="hud-encoder" hidden>ĐÃ ĐI <strong id="hudTravel">-- m</strong><small id="hudEncoderState">Đang chờ FC-03…</small></div><div id="hudDistance" class="hud-distance"><span>SR04</span><strong id="manualDistance">-- cm</strong></div><div id="hudWarning" class="hud-warning" role="alert">⚠ Cảnh báo sớm · dưới 30 cm</div><button class="hud-stop" id="hudStop" disabled aria-label="Dừng xe">■<small>DỪNG</small></button></section>
             <section class="hud-bank"><span class="hud-bank-label">ĐIỀU HƯỚNG DỰ PHÒNG</span><div class="hud-controls"><button class="drive hud-drive" data-dir="f" disabled aria-label="Tiến">▲<small>Tiến</small></button><button class="drive hud-drive" data-dir="l" disabled aria-label="Xoay trái">◀<small>Trái</small></button><button class="drive hud-drive" data-dir="r" disabled aria-label="Xoay phải">▶<small>Phải</small></button><button class="drive hud-drive" data-dir="b" disabled aria-label="Lùi">▼<small>Lùi</small></button></div></section>
           </div>
         </article>
@@ -146,6 +156,39 @@ inline constexpr char kL298nWebPage[] = R"html(
       $('avoidStatus').classList.toggle('on',avoid);
     }
 
+    function renderEncoder(encoder, disconnected = false) {
+      if (!disconnected) {
+        $('encoderPanel').hidden = !encoder?.enabled;
+        $('hudEncoder').hidden = !encoder?.enabled;
+      }
+      const ready = encoder?.enabled && encoder.ready;
+      const numeric = value => Number.isFinite(value) && value >= 0;
+      const calibrated = ready && encoder.calibrated;
+      const travel = calibrated && numeric(encoder.travel_m)
+        ? '≈ ' + encoder.travel_m.toFixed(3) + ' m' : '-- m';
+      $('encoderTravel').textContent = travel;
+      $('hudTravel').textContent = travel;
+      $('encoderPulses').textContent = ready && numeric(encoder.left?.pulses) && numeric(encoder.right?.pulses)
+        ? encoder.left.pulses + ' / ' + encoder.right.pulses : '-- / --';
+      $('encoderRpm').textContent = calibrated && numeric(encoder.left?.rpm) && numeric(encoder.right?.rpm)
+        ? encoder.left.rpm.toFixed(1) + ' / ' + encoder.right.rpm.toFixed(1) : '-- / --';
+      const wheels = calibrated && numeric(encoder.left?.distance_m) && numeric(encoder.right?.distance_m)
+        ? encoder.left.distance_m.toFixed(3) + ' / ' + encoder.right.distance_m.toFixed(3) : '-- / --';
+      $('encoderWheels').textContent = 'Quãng đường bánh trái/phải: ' + wheels + ' m';
+      let state = disconnected ? 'Mất kết nối số đo' : !encoder?.enabled ? 'FC-03 chưa bật'
+        : !ready ? 'Lỗi FC-03: ' + (encoder.error || 'không có số đo')
+        : !calibrated ? 'Chưa hiệu chuẩn: xem tổng xung và log FC03 trong monitor'
+        : encoder.distance_complete === false ? 'Ước lượng thiếu xung không xác định được chiều quay'
+        : 'Chiều suy ra từ lệnh motor; có sai số khi bánh trượt';
+      if (ready && (encoder.left?.no_pulses || encoder.right?.no_pulses)) {
+        const sides = [encoder.left?.no_pulses ? 'trái' : '', encoder.right?.no_pulses ? 'phải' : ''].filter(Boolean);
+        state += ' · Không có xung bánh ' + sides.join('/') + ' khi đang có lệnh chạy';
+      }
+      $('encoderState').textContent = state;
+      $('hudEncoderState').textContent = ready && !calibrated
+        ? 'Chưa hiệu chuẩn · xung ' + $('encoderPulses').textContent : state;
+    }
+
     async function refreshTelemetry() {
       if (telemetryBusy) return;
       telemetryBusy = true;
@@ -156,6 +199,7 @@ inline constexpr char kL298nWebPage[] = R"html(
         const response = await fetch('/api/status',{cache:'no-store',signal:controller.signal});
         if (!response.ok) throw new Error(String(response.status));
         const data = await response.json();
+        renderEncoder(data.encoder);
         obstacleDistanceCm = Number.isFinite(data.obstacle_distance_cm)
           ? data.obstacle_distance_cm : 20;
         warningDistanceCm = Number.isFinite(data.warning_distance_cm)
@@ -187,6 +231,7 @@ inline constexpr char kL298nWebPage[] = R"html(
         if ($('obstacleDistanceSetting') && document.activeElement !== $('obstacleDistanceSetting'))
           $('obstacleDistanceSetting').value = String(data.obstacle_distance_cm);
       } catch (_) {
+        renderEncoder(null,true);
         $('distance').textContent = '-- cm';
         $('manualDistance').textContent = '-- cm';
         $('sensorState').textContent = 'Lỗi: mất kết nối trạng thái';

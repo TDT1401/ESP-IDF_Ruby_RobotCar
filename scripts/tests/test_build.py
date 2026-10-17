@@ -1166,78 +1166,38 @@ class BuildOptionTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("CONFIG_OLED_SH1106_128X64", config_header)
 
-    def test_selected_custom_lcd_profile_is_exposed(self):
-        config = json.loads(
-            (ROOT / "main/boards/bread-compact-wifi-lcd/config.json").read_text(
-                encoding="utf-8"
-            )
-        )
-        build_config = next(
-            item
-            for item in config["builds"]
-            if item["name"] == "bread-compact-wifi-lcd-st7735-80x160"
-        )
-        board_config = build._resolve_board_config(
-            "bread-compact-wifi-lcd",
-            config["target"],
-            build_config["sdkconfig_append"],
-            variant_name=build_config["name"],
-        )
-        definitions = build._build_option_definitions(
-            "bread-compact-wifi-lcd",
-            config["target"],
-            board_config,
-            build_config,
-        )
-        display = next(
-            definition
-            for definition in definitions
-            if definition["key"] == "display_model"
-        )
-
-        self.assertEqual(display["default"], "LCD_CUSTOM")
-        self.assertIn(
-            "LCD_CUSTOM",
-            {choice["value"] for choice in display["choices"]},
-        )
-
-    def test_l298n_variants_preserve_display_and_resolve_board(self):
+    def test_bread_compact_wifi_lcd_has_one_complete_build(self):
         board = "bread-compact-wifi-lcd"
         config = json.loads(
             (ROOT / "main/boards" / board / "config.json").read_text(encoding="utf-8")
         )
-        variants = {item["name"]: item for item in config["builds"]}
-        flag = "CONFIG_BREAD_COMPACT_WIFI_LCD_L298N=y"
-        motor_names = {name for name in variants if name.endswith("-l298n")}
-        self.assertEqual(motor_names, {
-            "bread-compact-wifi-lcd-l298n",
-            "bread-compact-wifi-lcd-st7789-240x240-l298n",
-            "bread-compact-wifi-lcd-st7735-80x160-l298n",
-        })
+        self.assertEqual(config["target"], "esp32s3")
+        self.assertEqual(len(config["builds"]), 1)
+        variant = config["builds"][0]
+        self.assertEqual(variant["name"], board)
+        self.assertEqual(
+            set(variant["sdkconfig_append"]),
+            {
+                "CONFIG_LCD_ST7789_240X240=y",
+                "CONFIG_BREAD_COMPACT_WIFI_LCD_L298N=y",
+                "CONFIG_BREAD_COMPACT_WIFI_LCD_FC03=y",
+            },
+        )
         discovered = {
             item["name"] for item in build._collect_variants(idf_version=(6, 1, 0))
             if item["board"] == board
         }
-        self.assertTrue(motor_names <= discovered)
-        for name in motor_names:
-            with self.subTest(name=name):
-                motor = variants[name]
-                original = variants[name.removesuffix("-l298n")]
-                self.assertEqual(
-                    set(motor["sdkconfig_append"]),
-                    set(original["sdkconfig_append"]) | {flag},
-                )
-                self.assertNotIn(flag, original["sdkconfig_append"])
-                self.assertEqual(
-                    build._resolve_board_config(
-                        board, config["target"], motor["sdkconfig_append"], variant_name=name
-                    ),
-                    "CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI_LCD",
-                )
-                with self.assertRaises(ValueError):
-                    build._resolve_board_config(
-                        board, "esp32c3", motor["sdkconfig_append"], variant_name=name
-                    )
+        self.assertEqual(discovered, {board})
+        self.assertEqual(
+            build._resolve_board_config(
+                board, config["target"], variant["sdkconfig_append"], variant_name=board
+            ),
+            "CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI_LCD",
+        )
+        with self.assertRaises(ValueError):
+            build._resolve_board_config(
+                board, "esp32c3", variant["sdkconfig_append"], variant_name=board
+            )
 
     def test_bread_compact_nt26_supports_sh1106(self):
         board_dir = ROOT / "main/boards/bread-compact-nt26"

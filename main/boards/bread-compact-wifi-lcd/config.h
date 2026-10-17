@@ -8,7 +8,7 @@
 
 // Set to 1 to log microphone levels every 2 seconds, then rebuild and flash.
 // Startup configuration and I2S read errors are logged even when this is 0.
-#define MIC_DEBUG 1
+#define MIC_DEBUG 0
 
 // 如果使用 Duplex I2S 模式，请注释下面一行
 #define AUDIO_I2S_METHOD_SIMPLEX
@@ -31,7 +31,12 @@
 
 #endif
 
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03
+// Reserve GPIO48 for the right encoder; do not drive the onboard LED on this pin.
+#define BUILTIN_LED_GPIO GPIO_NUM_NC
+#else
 #define BUILTIN_LED_GPIO GPIO_NUM_48
+#endif
 #define BOOT_BUTTON_GPIO GPIO_NUM_0
 #define TOUCH_BUTTON_GPIO GPIO_NUM_NC
 #define VOLUME_UP_BUTTON_GPIO GPIO_NUM_NC
@@ -320,6 +325,27 @@
 // HC-SR04 uses 5 V power. ECHO must be level-shifted to 3.3 V before this GPIO.
 #define HCSR04_TRIGGER_PIN GPIO_NUM_14
 #define HCSR04_ECHO_PIN GPIO_NUM_39
+#endif
+
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03
+// Keep GPIO19/20 available for native USB. GPIO48's LED driver is disabled above.
+#define FC03_LEFT_GPIO GPIO_NUM_38
+#define FC03_RIGHT_GPIO GPIO_NUM_48
+
+// Calibration: count rising edges during ONE complete WHEEL revolution.
+// Include the gearbox ratio if the encoder disc is on the motor shaft.
+// Zero means unknown: raw pulse counts work, but metres/RPM remain unavailable.
+#define FC03_LEFT_PULSES_PER_REV 22
+#define FC03_RIGHT_PULSES_PER_REV 22
+#define FC03_LEFT_WHEEL_DIAMETER_MM 60.0
+#define FC03_RIGHT_WHEEL_DIAMETER_MM 60.0
+
+// PCNT rejects pulses shorter than this (ESP32-S3: keep <= 12000 ns).
+#define FC03_GLITCH_FILTER_NS 10000
+// Continue inferring the previous direction briefly after PWM stops (coasting).
+#define FC03_COAST_MS 500
+// Log both counters every 2 seconds in monitor; set to 0 after calibration.
+#define FC03_DEBUG 1
 #endif
 
 #ifndef DISPLAY_SPI_CLOCK_HZ

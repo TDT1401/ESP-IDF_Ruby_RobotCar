@@ -11,24 +11,25 @@ ESP32-S3-N16R8 board with an I2S microphone, MAX98357A amplifier, and SPI TFT di
 - Autonomous obstacle avoidance.
 - Manual web control with a HUD.
 - Web control at `http://<IP-address>:8080`.
-- Real-time distance measurement.
+- Real-time obstacle distance measurement.
+- Optional two FC-03 encoders: wheel pulses, RPM and estimated travel distance.
 - Telegram integration.
 
 ## Components
 
-| Quantity | Component                    | Notes              |
-| -------- | ---------------------------- | ------------------ |
-| 1        | Chassis                      |                    |
-| 4        | DC motors                    |                    |
-| 4        | Wheels                       |                    |
-| 1        | L298N motor driver            |                    |
-| 1        | Speaker                      |                    |
-| 1        | MAX98357A amplifier module   | Speaker amplifier  |
-| 1        | I2S microphone               |                    |
-| 1        | ESP32-S3 board               | ESP32-S3-N16R8     |
-| 1        | SPI TFT display              |                    |
-| 2        | 18650 cells                  | 3.7 V per cell     |
-| 1        | Power switch                 |                    |
+| Quantity | Component                  | Notes             |
+| -------- | -------------------------- | ----------------- |
+| 1        | Chassis                    |                   |
+| 4        | DC motors                  |                   |
+| 4        | Wheels                     |                   |
+| 1        | L298N motor driver         |                   |
+| 1        | Speaker                    |                   |
+| 1        | MAX98357A amplifier module | Speaker amplifier |
+| 1        | I2S microphone             |                   |
+| 1        | ESP32-S3 board             | ESP32-S3-N16R8    |
+| 1        | SPI TFT display            |                   |
+| 2        | 18650 cells                | 3.7 V per cell    |
+| 1        | Power switch               |                   |
 
 ## Wiring
 
@@ -47,16 +48,16 @@ Connect the ESP32-S3, all modules, and the motor supply to a common GND. Use the
 
 ### MAX98357A amplifier
 
-| MAX98357A pin | Connection   |
-| ------------- | ------------ |
-| VIN           | 5V           |
-| GND           | GND          |
-| DIN           | GPIO7        |
-| BCLK          | GPIO15       |
-| LRC           | GPIO16       |
+| MAX98357A pin | Connection    |
+| ------------- | ------------- |
+| VIN           | 5V            |
+| GND           | GND           |
+| DIN           | GPIO7         |
+| BCLK          | GPIO15        |
+| LRC           | GPIO16        |
 | `+` / `-`     | Speaker leads |
-| SD            | Leave open   |
-| GAIN          | Leave open   |
+| SD            | Leave open    |
+| GAIN          | Leave open    |
 
 ### SPI TFT display
 
@@ -73,17 +74,17 @@ Connect the ESP32-S3, all modules, and the motor supply to a common GND. Use the
 
 ### L298N motor driver
 
-| Motor channel | L298N pin | Connection          | Function            |
-| ------------- | --------- | ------------------- | ------------------- |
-| Left          | ENA       | GPIO8               | Left motor PWM      |
-| Left          | IN1       | GPIO9               | Left motor direction |
-| Left          | IN2       | GPIO10              | Left motor direction |
-| Right         | IN3       | GPIO11              | Right motor direction |
-| Right         | IN4       | GPIO12              | Right motor direction |
-| Right         | ENB       | GPIO13              | Right motor PWM     |
-| Power         | GND       | Common GND          | Motor supply ground |
-| Left          | OUT1, OUT2 | Two left motor wires | Motor output        |
-| Right         | OUT3, OUT4 | Two right motor wires | Motor output       |
+| Motor channel | L298N pin  | Connection            | Function              |
+| ------------- | ---------- | --------------------- | --------------------- |
+| Left          | ENA        | GPIO8                 | Left motor PWM        |
+| Left          | IN1        | GPIO9                 | Left motor direction  |
+| Left          | IN2        | GPIO10                | Left motor direction  |
+| Right         | IN3        | GPIO11                | Right motor direction |
+| Right         | IN4        | GPIO12                | Right motor direction |
+| Right         | ENB        | GPIO13                | Right motor PWM       |
+| Power         | GND        | Common GND            | Motor supply ground   |
+| Left          | OUT1, OUT2 | Two left motor wires  | Motor output          |
+| Right         | OUT3, OUT4 | Two right motor wires | Motor output          |
 
 - Remove the `ENA`/`ENB` jumpers. Never connect 5 V to an ESP32-S3 GPIO.
 - Power the motors from a separate supply through the L298N and connect its GND to common GND.
@@ -91,7 +92,7 @@ Connect the ESP32-S3, all modules, and the motor supply to a common GND. Use the
 
 ### HC-SR04 ultrasonic sensor
 
-The HC-SR04 is enabled in variants ending in `-l298n`.
+The single `bread-compact-wifi-lcd` build enables the HC-SR04 and L298N.
 
 | HC-SR04 pin | ESP32-S3 pin | Notes                                           |
 | ----------- | ------------ | ----------------------------------------------- |
@@ -102,12 +103,29 @@ The HC-SR04 is enabled in variants ending in `-l298n`.
 
 For the `ECHO` pin, a voltage divider can use a 1 kΩ resistor from ECHO to GPIO39 and a 2 kΩ resistor from GPIO39 to GND. Never connect the 5 V `ECHO` signal directly to the ESP32-S3.
 
+### FC-03 wheel encoders
+
+| FC-03 pin | Left wheel | Right wheel |
+| --------- | ---------- | ----------- |
+| VCC       | 3V3        | 3V3         |
+| GND       | Common GND | Common GND  |
+| D0 / DO   | GPIO38     | GPIO48      |
+| A0 / AO   | Leave open | Leave open  |
+
+D0 must use 3.3 V logic. The onboard LED on GPIO48 is disabled when FC-03 is enabled.
+Calibration is in [config.h](config.h): `FC03_LEFT_PULSES_PER_REV` and
+`FC03_RIGHT_PULSES_PER_REV` set pulses per wheel revolution;
+`FC03_LEFT_WHEEL_DIAMETER_MM` and `FC03_RIGHT_WHEEL_DIAMETER_MM` set the outside
+wheel diameters in millimetres. Both wheels are set to **22 pulses/rev** and **60 mm**.
+
 ## Build and Flash
 
-The build command below selects **“Hi ESP”** as the wake word.
+Use ESP-IDF 6.1 (minimum 6.0.1). This is the only build command for this board: it selects
+the ST7789 240×240 display, L298N, HC-SR04, both FC-03 counters, and **“Hi ESP”** as the
+wake word. The firmware name is `bread-compact-wifi-lcd`.
 
 ```sh
-python scripts/build.py bread-compact-wifi-lcd --name bread-compact-wifi-lcd-st7789-240x240-l298n --wake-word wn9_hiesp
+python scripts/build.py bread-compact-wifi-lcd --language vi-VN --wake-word wn9_hiesp
 ```
 
 After the build completes, connect the ESP32-S3 to your computer and flash the firmware:

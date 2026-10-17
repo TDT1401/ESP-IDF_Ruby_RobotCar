@@ -282,6 +282,38 @@ std::string StatusMessage() {
     message += "<b>" + std::to_string(motor.active_speed_percent) + "%</b>\n";
     message += L298nTelegramText::kSavedSpeedLabel;
     message += std::to_string(motor.speed_percent) + "%\n";
+    if (motor.encoder.enabled) {
+        const auto& encoder = motor.encoder;
+        message += "FC-03: ";
+        if (!encoder.ready) {
+            message += std::string("lỗi ") + esp_err_to_name(encoder.error) + "\n";
+        } else {
+            message += "xung trái/phải <b>" + std::to_string(encoder.left.pulses) + "/" +
+                       std::to_string(encoder.right.pulses) + "</b>\n";
+            if (encoder.calibrated) {
+                char measured[256];
+                snprintf(measured, sizeof(measured),
+                         "RPM trái/phải: %.1f / %.1f\n"
+                         "Quãng đường bánh trái/phải: %.3f / %.3f m\n"
+                         "Xe đã đi (ước lượng từ lúc bật): <b>%.3f m</b>\n",
+                         encoder.left.rpm, encoder.right.rpm, encoder.left.distance_m,
+                         encoder.right.distance_m, encoder.travel_m);
+                message += measured;
+                if (!encoder.distance_complete)
+                    message += "⚠ Quãng đường thiếu xung không xác định được chiều quay.\n";
+            } else {
+                message += "Chưa hiệu chuẩn số xung/vòng và đường kính bánh trong config.h.\n";
+            }
+            if (encoder.left.no_pulses || encoder.right.no_pulses) {
+                message += "⚠ Có lệnh chạy nhưng không có xung: ";
+                if (encoder.left.no_pulses)
+                    message += "trái ";
+                if (encoder.right.no_pulses)
+                    message += "phải";
+                message += ". Kiểm tra cảm biến hoặc motor.\n";
+            }
+        }
+    }
     message += L298nTelegramText::kEmotionLabel;
     message += emotion_text;
     if (motor.gesture_active)

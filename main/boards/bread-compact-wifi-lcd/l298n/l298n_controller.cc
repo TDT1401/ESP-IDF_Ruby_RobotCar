@@ -213,9 +213,9 @@ public:
 
     L298nMotorStatus Snapshot() {
         std::lock_guard lock(mutex_);
-        const bool distance_fresh = sensor_valid_ &&
-                                    esp_timer_get_time() - last_sensor_update_us_ <=
-                                        kSensorStaleMs * 1000LL;
+        const bool distance_fresh =
+            sensor_valid_ &&
+            esp_timer_get_time() - last_sensor_update_us_ <= kSensorStaleMs * 1000LL;
         return {MotionName(motion_),
                 speed_percent_,
                 moving_ ? ActiveSpeedLocked() : 0,
@@ -233,7 +233,8 @@ public:
                 distance_fresh ? measured_distance_cm_ : -1,
                 distance_fresh,
                 avoid_state_ == AvoidState::kBlocked,
-                fault_};
+                fault_,
+                encoder_.Snapshot()};
     }
 
     void SetWebConnected(bool connected) {
@@ -535,6 +536,7 @@ private:
     // Only short state/GPIO operations hold the mutex: no sleeps, JSON, logging,
     // networking or Application::Schedule calls inside it.
     std::mutex mutex_;
+    Fc03Encoder encoder_;
     esp_timer_handle_t timer_ = nullptr;
 #ifdef CONFIG_PM_ENABLE
     esp_pm_lock_handle_t sleep_lock_ = nullptr;
@@ -619,9 +621,10 @@ private:
         }
 #ifdef CONFIG_PM_ENABLE
         ESP_ERROR_CHECK(esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "l298n", &sleep_lock_));
-        ESP_ERROR_CHECK(esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "l298n_web",
-                                           &web_sleep_lock_));
+        ESP_ERROR_CHECK(
+            esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "l298n_web", &web_sleep_lock_));
 #endif
+        encoder_.Initialize();
         esp_timer_create_args_t timer = {};
         timer.callback = [](void* arg) { static_cast<L298nController*>(arg)->Tick(); };
         timer.arg = this;
@@ -896,6 +899,7 @@ private:
     }
 
     void StopOutputsLocked() {
+        encoder_.SetDrive(0, 0, esp_timer_get_time());
         // Disable both bridges before touching any direction pin. Attempt every
         // output even if an earlier operation fails. Stop means coast, not brake.
         Check(ledc_stop(kMode, kLeftChannel, 0));
@@ -928,11 +932,11 @@ private:
     }
 
     bool ApplyWebDriveLocked(int left, int right) {
-        const bool direction_changed =
-            (left != 0 && web_left_output_percent_ != 0 &&
-             (left < 0) != (web_left_output_percent_ < 0)) ||
-            (right != 0 && web_right_output_percent_ != 0 &&
-             (right < 0) != (web_right_output_percent_ < 0));
+        encoder_.Update(esp_timer_get_time());
+        const bool direction_changed = (left != 0 && web_left_output_percent_ != 0 &&
+                                        (left < 0) != (web_left_output_percent_ < 0)) ||
+                                       (right != 0 && web_right_output_percent_ != 0 &&
+                                        (right < 0) != (web_right_output_percent_ < 0));
         if (direction_changed)
             StopOutputsLocked();
 
@@ -974,6 +978,7 @@ private:
         if (ok) {
             web_left_output_percent_ = left;
             web_right_output_percent_ = right;
+            encoder_.SetDrive(left, right, esp_timer_get_time());
         }
         return ok;
     }
@@ -1022,16 +1027,23 @@ private:
     bool ApplyDirectionLocked() {
         bool left_forward = motion_ == Motion::kForward || motion_ == Motion::kRight;
         bool right_forward = motion_ == Motion::kForward || motion_ == Motion::kLeft;
+        // Keep logical wheel signs before applying physical motor wiring inversion.
+        const int encoder_left = left_forward ? 1 : -1;
+        const int encoder_right = right_forward ? 1 : -1;
+        encoder_.Update(esp_timer_get_time());
 #ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N_INVERT_LEFT
         left_forward = !left_forward;
 #endif
 #ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N_INVERT_RIGHT
         right_forward = !right_forward;
 #endif
-        return Check(gpio_set_level(MOTOR_LEFT_IN1_PIN, left_forward)) &&
-               Check(gpio_set_level(MOTOR_LEFT_IN2_PIN, !left_forward)) &&
-               Check(gpio_set_level(MOTOR_RIGHT_IN1_PIN, right_forward)) &&
-               Check(gpio_set_level(MOTOR_RIGHT_IN2_PIN, !right_forward));
+        const bool ok = Check(gpio_set_level(MOTOR_LEFT_IN1_PIN, left_forward)) &&
+                        Check(gpio_set_level(MOTOR_LEFT_IN2_PIN, !left_forward)) &&
+                        Check(gpio_set_level(MOTOR_RIGHT_IN1_PIN, right_forward)) &&
+                        Check(gpio_set_level(MOTOR_RIGHT_IN2_PIN, !right_forward));
+        if (ok)
+            encoder_.SetDrive(encoder_left, encoder_right, esp_timer_get_time());
+        return ok;
     }
 
     static bool MotionAllowed() {
@@ -1043,6 +1055,8 @@ private:
     void Tick() {
         std::lock_guard lock(mutex_);
         const int64_t now = esp_timer_get_time();
+        // Also sample at rest/while joystick owns the outputs, before any early return.
+        encoder_.Update(now);
         if (web_session_ != 0 && (now >= web_deadline_us_ || !MotionAllowed())) {
             EndWebControlLocked();
         }
@@ -1227,6 +1241,7 @@ private:
         bool autonomy_blocked;
         int64_t remaining_ms;
         esp_err_t fault;
+        Fc03EncoderStatus encoder;
         {
             std::lock_guard lock(mutex_);
             const int64_t now = esp_timer_get_time();
@@ -1248,11 +1263,11 @@ private:
             gesture_active = gesture_steps_ != nullptr;
             web_manual = web_manual_;
             fault = fault_;
-            remaining_ms =
-                motion == Motion::kStop ? 0
-                : (moving || web_manual)
-                    ? std::max<int64_t>(0, (deadline_us_ - now + 999) / 1000)
-                    : duration_ms_;
+            encoder = encoder_.Snapshot();
+            remaining_ms = motion == Motion::kStop ? 0
+                           : (moving || web_manual)
+                               ? std::max<int64_t>(0, (deadline_us_ - now + 999) / 1000)
+                               : duration_ms_;
         }
         CJsonUniquePtr json(cJSON_CreateObject());
         if (!json || !cJSON_AddStringToObject(json.get(), "motion", MotionName(motion)) ||
@@ -1262,20 +1277,19 @@ private:
             !cJSON_AddBoolToObject(json.get(), "emotion_motion_active", gesture_active) ||
             !cJSON_AddBoolToObject(json.get(), "web_manual_active", web_manual) ||
             !cJSON_AddStringToObject(json.get(), "autonomy_mode",
-                                    AutonomyModeName(autonomy_mode)) ||
+                                     AutonomyModeName(autonomy_mode)) ||
             !cJSON_AddNumberToObject(json.get(), "follow_distance_cm", follow_distance) ||
             !cJSON_AddNumberToObject(json.get(), "obstacle_distance_cm", obstacle_distance) ||
-            !cJSON_AddNumberToObject(json.get(), "follow_target_cm",
-                                    effective_follow_distance) ||
-            !cJSON_AddNumberToObject(json.get(), "obstacle_stop_cm",
-                                    effective_obstacle_distance) ||
+            !cJSON_AddNumberToObject(json.get(), "follow_target_cm", effective_follow_distance) ||
+            !cJSON_AddNumberToObject(json.get(), "obstacle_stop_cm", effective_obstacle_distance) ||
             !cJSON_AddNumberToObject(json.get(), "measured_distance_cm", measured_distance) ||
             !cJSON_AddBoolToObject(json.get(), "distance_valid", distance_valid) ||
             !cJSON_AddBoolToObject(json.get(), "autonomy_blocked", autonomy_blocked) ||
             !cJSON_AddBoolToObject(json.get(), "moving", moving) ||
             !cJSON_AddBoolToObject(json.get(), "pending", motion != Motion::kStop && !moving) ||
             !cJSON_AddNumberToObject(json.get(), "remaining_ms", remaining_ms) ||
-            !cJSON_AddStringToObject(json.get(), "hardware_error", esp_err_to_name(fault))) {
+            !cJSON_AddStringToObject(json.get(), "hardware_error", esp_err_to_name(fault)) ||
+            !AddFc03EncoderJson(json.get(), encoder)) {
             return std::unexpected("Could not allocate motor status.");
         }
         return json.release();  // Ownership passes to MCP.
@@ -1340,7 +1354,11 @@ private:
             });
         server.AddTool("self.motor.get_state",
                        "Read commanded motor direction, PWM speed, pending/moving status, "
-                       "remaining time and hardware error. No encoder feedback.",
+                       "remaining time and hardware error. Optional FC-03 encoder reports wheel "
+                       "pulses, measured RPM, wheel distance and estimated robot travel since boot "
+                       "in metres. Values are null until calibrated/ready. Direction is inferred "
+                       "from commands; distance_complete=false means unknown-direction pulses "
+                       "were excluded. Wheel slip and coasting cause error; no position feedback.",
                        PropertyList(),
                        [this](const PropertyList&) -> ToolResult { return GetState(); });
         server.AddTool(
@@ -1448,6 +1466,7 @@ private:
 void InitializeL298nController() {
     // Singleton and tool callbacks live for the entire firmware lifetime.
     L298nController::Instance();
+    StartFc03Monitor([]() { return L298nController::Instance().Snapshot().encoder; });
     InitializeHcsr04Sensor([](int distance_cm, bool valid) {
         auto& controller = L298nController::Instance();
         controller.UpdateDistance(distance_cm, valid);

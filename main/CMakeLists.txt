@@ -895,6 +895,7 @@ file(GLOB BOARD_SOURCES
 list(APPEND SOURCES ${BOARD_SOURCES})
 
 if(CONFIG_BREAD_COMPACT_WIFI_LCD_L298N)
+    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/l298n/fc03_encoder.cc")
     list(APPEND SOURCES "boards/bread-compact-wifi-lcd/l298n/hcsr04_sensor.cc")
     list(APPEND SOURCES "boards/bread-compact-wifi-lcd/l298n/l298n_controller.cc")
     list(APPEND SOURCES "boards/bread-compact-wifi-lcd/l298n/l298n_web_server.cc")
@@ -1101,6 +1102,7 @@ idf_component_register(SRCS ${SOURCES}
                         esp_driver_i2c
                         esp_driver_i2s
                         esp_driver_ledc
+                        esp_driver_pcnt
                         esp_driver_jpeg
                         esp_driver_ppa
                         esp_driver_tsens
@@ -1121,11 +1123,9 @@ idf_component_register(SRCS ${SOURCES}
 if(NOT BOARD_NAME)
     set(BOARD_NAME ${BOARD_TYPE})
 endif()
-# Keep the motor hardware variant distinct even when enabled through menuconfig.
-if(CONFIG_BREAD_COMPACT_WIFI_LCD_L298N AND NOT BOARD_NAME MATCHES "-l298n$")
-    set(BOARD_NAME "${BOARD_NAME}-l298n")
-elseif(NOT CMAKE_BUILD_EARLY_EXPANSION AND NOT CONFIG_BREAD_COMPACT_WIFI_LCD_L298N AND BOARD_NAME MATCHES "-l298n$")
-    message(FATAL_ERROR "A -l298n BOARD_NAME requires CONFIG_BREAD_COMPACT_WIFI_LCD_L298N")
+# This board has one release identity with motor, ultrasonic, and encoder support.
+if(CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI_LCD)
+    set(BOARD_NAME "bread-compact-wifi-lcd")
 endif()
 if(NOT CMAKE_BUILD_EARLY_EXPANSION AND NOT BOARD_NAME MATCHES "^[a-z0-9.-]+$")
     message(FATAL_ERROR

@@ -11,7 +11,8 @@ Bo mạch ESP32-S3-N16R8, microphone I2S, MAX98357A và màn hình TFT SPI.
 - Chế độ tự hành né vật cản.
 - Điều khiển thủ công bằng web với chế độ HUD.
 - Điều khiển web tại `http://<IP-robot>:8080`.
-- Đo khoảng cách theo thời gian thực.
+- Đo khoảng cách vật cản theo thời gian thực.
+- Hai FC-03 tùy chọn: đếm xung, đo RPM và ước lượng quãng đường xe đã đi.
 - Telegram.
 
 ## Component
@@ -40,9 +41,9 @@ Nối GND chung giữa ESP32-S3, các module và nguồn motor. Dùng đúng m�
 | --------------- | ------------- |
 | VDD             | 3V3           |
 | GND             | GND           |
-| WS              | GPIO4         |
-| SCK             | GPIO5         |
-| SD              | GPIO6         |
+| WS              | GPIO1         |
+| SCK             | GPIO2         |
+| SD              | GPIO17        |
 | L/R             | GND           |
 
 ### Mạch khuếch đại MAX98357A
@@ -91,7 +92,7 @@ Nối GND chung giữa ESP32-S3, các module và nguồn motor. Dùng đúng m�
 
 ### Cảm biến siêu âm HC-SR04
 
-HC-SR04 được bật cùng các biến thể `-l298n`.
+Bản build duy nhất `bread-compact-wifi-lcd` bật HC-SR04 và L298N.
 
 | Chân HC-SR04 | Chân ESP32-S3 | Ghi chú                                      |
 | ------------ | ------------- | -------------------------------------------- |
@@ -103,12 +104,29 @@ HC-SR04 được bật cùng các biến thể `-l298n`.
 Có thể dùng cầu chia áp cho `ECHO`, ví dụ 1 kΩ từ ECHO đến GPIO39 và 2 kΩ từ GPIO39 xuống GND.
 Không nối trực tiếp `ECHO` 5 V vào ESP32-S3.
 
+### Hai cảm biến bánh xe FC-03
+
+| Chân FC-03 | Bánh trái | Bánh phải |
+| ---------- | --------- | --------- |
+| VCC        | 3V3       | 3V3       |
+| GND        | GND chung | GND chung |
+| D0 / DO    | GPIO38    | GPIO48    |
+| A0 / AO    | Để trống  | Để trống  |
+
+D0 phải ở mức 3,3 V. Khi bật FC-03, LED tích hợp trên GPIO48 không hoạt động.
+Hiệu chuẩn trong [config.h](config.h): `FC03_LEFT_PULSES_PER_REV` và
+`FC03_RIGHT_PULSES_PER_REV` là số xung/vòng bánh; `FC03_LEFT_WHEEL_DIAMETER_MM` và
+`FC03_RIGHT_WHEEL_DIAMETER_MM` là đường kính bánh (mm). Hiện cả hai bánh đặt
+**22 xung/vòng** và **60 mm**.
+
 ## Build và Flash
 
-Lệnh build dưới đây chọn câu đánh thức **“Hi ESP”**.
+Dùng ESP-IDF 6.1 (tối thiểu 6.0.1). Đây là lệnh build duy nhất cho board này: màn
+ST7789 240×240, L298N, HC-SR04, hai FC-03 và câu đánh thức **“Hi ESP”**. Tên firmware
+là `bread-compact-wifi-lcd`.
 
 ```sh
-python scripts/build.py bread-compact-wifi-lcd --name bread-compact-wifi-lcd-st7789-240x240-l298n --wake-word wn9_hiesp
+python scripts/build.py bread-compact-wifi-lcd --language vi-VN --wake-word wn9_hiesp
 ```
 
 Sau khi build xong, kết nối ESP32-S3 với máy tính và flash firmware:

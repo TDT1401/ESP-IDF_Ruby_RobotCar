@@ -142,22 +142,29 @@ esp_err_t Status(httpd_req_t* req) {
     if (req->content_len != 0)
         return Reply(req, "400 Bad Request", "{\"error\":\"Invalid request\"}");
     const auto motor = GetL298nMotorStatus();
-    char body[384];
-    const int length = snprintf(
-        body, sizeof(body),
-        "{\"distance_valid\":%s,\"distance_cm\":%d,\"autonomy_mode\":\"%s\","
-        "\"follow_distance_cm\":%d,\"obstacle_distance_cm\":%d,"
-        "\"follow_target_cm\":%d,\"obstacle_stop_cm\":%d,"
-        "\"warning_distance_cm\":%d,\"moving\":%s,\"motion\":\"%s\","
-        "\"speed_percent\":%d}",
-        motor.distance_valid ? "true" : "false", motor.measured_distance_cm,
-        motor.autonomy_mode, motor.follow_distance_cm, motor.obstacle_distance_cm,
-        motor.follow_target_effective_cm, motor.obstacle_stop_effective_cm,
-        motor.web_warning_effective_cm,
-        motor.moving ? "true" : "false", motor.motion, motor.active_speed_percent);
-    if (length < 0 || static_cast<size_t>(length) >= sizeof(body))
+    using Json = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
+    Json json(cJSON_CreateObject(), cJSON_Delete);
+    if (!json || !cJSON_AddBoolToObject(json.get(), "distance_valid", motor.distance_valid) ||
+        !cJSON_AddNumberToObject(json.get(), "distance_cm", motor.measured_distance_cm) ||
+        !cJSON_AddStringToObject(json.get(), "autonomy_mode", motor.autonomy_mode) ||
+        !cJSON_AddNumberToObject(json.get(), "follow_distance_cm", motor.follow_distance_cm) ||
+        !cJSON_AddNumberToObject(json.get(), "obstacle_distance_cm", motor.obstacle_distance_cm) ||
+        !cJSON_AddNumberToObject(json.get(), "follow_target_cm",
+                                 motor.follow_target_effective_cm) ||
+        !cJSON_AddNumberToObject(json.get(), "obstacle_stop_cm",
+                                 motor.obstacle_stop_effective_cm) ||
+        !cJSON_AddNumberToObject(json.get(), "warning_distance_cm",
+                                 motor.web_warning_effective_cm) ||
+        !cJSON_AddBoolToObject(json.get(), "moving", motor.moving) ||
+        !cJSON_AddStringToObject(json.get(), "motion", motor.motion) ||
+        !cJSON_AddNumberToObject(json.get(), "speed_percent", motor.active_speed_percent) ||
+        !AddFc03EncoderJson(json.get(), motor.encoder))
         return Reply(req, "500 Internal Server Error", "{\"error\":\"Status unavailable\"}");
-    return Reply(req, "200 OK", body);
+    std::unique_ptr<char, decltype(&cJSON_free)> body(cJSON_PrintUnformatted(json.get()),
+                                                      cJSON_free);
+    if (!body)
+        return Reply(req, "500 Internal Server Error", "{\"error\":\"Status unavailable\"}");
+    return Reply(req, "200 OK", body.get());
 }
 
 esp_err_t Autonomy(httpd_req_t* req) {

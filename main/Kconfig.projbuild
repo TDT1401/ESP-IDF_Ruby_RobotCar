@@ -786,15 +786,26 @@ config BREAD_COMPACT_WIFI_LCD_L298N
     depends on BOARD_TYPE_BREAD_COMPACT_WIFI_LCD && IDF_TARGET_ESP32S3
     default n
     help
-        Adds timed movement, speed and stop MCP tools. Select a release
-        variant ending in -l298n. It also adds follow and obstacle-avoidance
-        tools using an HC-SR04. Remove the ENA/ENB jumpers before wiring and
+        Adds timed movement, speed and stop MCP tools. It also adds follow
+        and obstacle-avoidance tools using an HC-SR04. Remove the ENA/ENB jumpers before wiring and
         level-shift the HC-SR04 ECHO signal to 3.3 V.
 
 config BREAD_COMPACT_WIFI_LCD_L298N_INVERT_LEFT
     bool "Invert left motor direction"
     depends on BREAD_COMPACT_WIFI_LCD_L298N
     default n
+
+config BREAD_COMPACT_WIFI_LCD_FC03
+    bool "Two FC-03 wheel encoders on GPIO38/48"
+    depends on BREAD_COMPACT_WIFI_LCD_L298N && IDF_TARGET_ESP32S3
+    default n
+    help
+        Counts the front left/right wheel encoder D0 outputs with PCNT.
+        Requires 3.3 V signals. Disables the onboard LED driver to reserve
+        GPIO48 for the right encoder; GPIO19/20 remain available for native USB.
+        The bread-compact-wifi-lcd build enables this feature.
+        Set wheel diameter and pulses per wheel revolution
+        in the board config.h; zero leaves distance/RPM uncalibrated.
 
 config BREAD_COMPACT_WIFI_LCD_L298N_INVERT_RIGHT
     bool "Invert right motor direction"
