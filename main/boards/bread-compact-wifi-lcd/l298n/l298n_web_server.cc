@@ -158,6 +158,11 @@ esp_err_t Status(httpd_req_t* req) {
         !cJSON_AddBoolToObject(json.get(), "moving", motor.moving) ||
         !cJSON_AddStringToObject(json.get(), "motion", motor.motion) ||
         !cJSON_AddNumberToObject(json.get(), "speed_percent", motor.active_speed_percent) ||
+        !cJSON_AddStringToObject(json.get(), "distance_move_state", motor.distance_move_state) ||
+        !cJSON_AddNumberToObject(json.get(), "distance_move_target_cm",
+                                 motor.distance_move_target_cm) ||
+        !cJSON_AddNumberToObject(json.get(), "distance_move_progress_cm",
+                                 motor.distance_move_progress_cm) ||
         !AddFc03EncoderJson(json.get(), motor.encoder))
         return Reply(req, "500 Internal Server Error", "{\"error\":\"Status unavailable\"}");
     std::unique_ptr<char, decltype(&cJSON_free)> body(cJSON_PrintUnformatted(json.get()),

@@ -12,7 +12,7 @@ ESP32-S3-N16R8 board with an I2S microphone, MAX98357A amplifier, and SPI TFT di
 - Manual web control with a HUD.
 - Web control at `http://<IP-address>:8080`.
 - Real-time obstacle distance measurement.
-- Optional two FC-03 encoders: wheel pulses, RPM and estimated travel distance.
+- Two FC-03 encoders: wheel pulses, RPM and measured forward/backward moves.
 - Telegram integration.
 
 ## Components
@@ -138,6 +138,15 @@ idf.py -p <SERIAL_PORT> flash monitor
 
 - To change the saved Wi-Fi network, hold `BOOT` for about 3 seconds while the device is running, then open `http://192.168.4.1` to configure Wi-Fi again.
 - To enable microphone logging, set `MIC_DEBUG` to `1` in `config.h`, then rebuild and flash the firmware.
+
+To drive forward 50 cm, say “move forward 50 cm” or call MCP
+`self.motor.forward_distance` with `distance_cm=50`; use `self.motor.backward_distance`
+to reverse. The motors stop when both wheels reach the target, or earlier on missing
+pulses, encoder failure, or a 10-second timeout. Forward travel also stops if HC-SR04
+detects a nearby obstacle. `self.motor.get_state` and `/api/status`
+report `distance_move_state`, `distance_move_target_cm`, and `distance_move_progress_cm`.
+The tool returns when motion starts; `completed` confirms the measured target was reached.
+Wheel slip and calibration error can change the real travel distance.
 
 ## Telegram Configuration
 

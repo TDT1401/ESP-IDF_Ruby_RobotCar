@@ -12,7 +12,7 @@ Bo mạch ESP32-S3-N16R8, microphone I2S, MAX98357A và màn hình TFT SPI.
 - Điều khiển thủ công bằng web với chế độ HUD.
 - Điều khiển web tại `http://<IP-robot>:8080`.
 - Đo khoảng cách vật cản theo thời gian thực.
-- Hai FC-03 tùy chọn: đếm xung, đo RPM và ước lượng quãng đường xe đã đi.
+- Hai FC-03: đếm xung, đo RPM và cho phép xe tiến/lùi theo quãng đường.
 - Telegram.
 
 ## Component
@@ -140,6 +140,14 @@ idf.py -p <CONG_SERIAL> flash monitor
 - Để đổi Wi-Fi đã lưu, giữ `BOOT` khoảng 3 giây khi thiết bị đang chạy, sau đó mở
   `http://192.168.4.1` để cấu hình lại.
 - Để bật log microphone, đặt `MIC_DEBUG` thành `1` trong `config.h`, rồi build và flash lại firmware.
+
+Để xe tiến 50 cm, nói “tiến 50 cm” hoặc gọi MCP `self.motor.forward_distance` với
+`distance_cm=50`; lùi dùng `self.motor.backward_distance`. Xe dừng khi cả hai bánh đạt
+mốc đo, hoặc dừng sớm nếu thiếu xung, lỗi encoder hay quá 10 giây. Khi tiến, xe cũng
+dừng nếu HC-SR04 phát hiện vật cản quá gần. `self.motor.get_state`
+và `/api/status` trả `distance_move_state`, `distance_move_target_cm` và
+`distance_move_progress_cm`. Lệnh trả về ngay khi bắt đầu; `completed` mới là đã đạt mốc.
+Số đo có thể lệch quãng đường thực do trượt bánh và sai số hiệu chuẩn.
 
 ## Cấu hình Telegram
 

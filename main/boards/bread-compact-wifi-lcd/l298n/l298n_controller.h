@@ -57,5 +57,8 @@ struct L298nMotorStatus {
     bool autonomy_blocked;
     esp_err_t hardware_error;
     Fc03EncoderStatus encoder;
+    const char* distance_move_state;
+    int distance_move_target_cm;
+    double distance_move_progress_cm;
 };
 L298nMotorStatus GetL298nMotorStatus();

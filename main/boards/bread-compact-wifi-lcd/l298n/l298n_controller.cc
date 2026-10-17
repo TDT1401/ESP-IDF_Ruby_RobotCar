@@ -31,6 +31,7 @@ constexpr int kDefaultSpeedPercent = 75;
 constexpr int kDefaultDurationMs = 1000;
 constexpr int kDefaultTurnDurationMs = 400;
 constexpr int kMaxDurationMs = 10000;
+constexpr int kMaxDistanceMoveCm = 100;
 constexpr int64_t kDirectionDelayUs = 50000;
 constexpr int64_t kTickUs = 10000;
 constexpr int64_t kGestureMaxUs = 2000000;
@@ -69,6 +70,17 @@ int ScaleDistanceForSpeed(int distance_cm, int speed_percent) {
 enum class Motion { kStop, kForward, kBackward, kLeft, kRight };
 enum class Emotion { kNone, kHappy, kSad, kAngry, kSurprised, kThinking, kWinking };
 enum class AutonomyMode { kManual, kFollow, kObstacleAvoidance };
+enum class DistanceMoveState {
+    kIdle,
+    kPending,
+    kMoving,
+    kCompleted,
+    kInterrupted,
+    kTimeout,
+    kNoPulses,
+    kEncoderError,
+    kObstacle
+};
 enum class AvoidState {
     kForward,
     kReverse,
@@ -166,6 +178,29 @@ const char* AutonomyModeName(AutonomyMode mode) {
     }
 }
 
+const char* DistanceMoveStateName(DistanceMoveState state) {
+    switch (state) {
+        case DistanceMoveState::kPending:
+            return "pending";
+        case DistanceMoveState::kMoving:
+            return "moving";
+        case DistanceMoveState::kCompleted:
+            return "completed";
+        case DistanceMoveState::kInterrupted:
+            return "interrupted";
+        case DistanceMoveState::kTimeout:
+            return "timeout";
+        case DistanceMoveState::kNoPulses:
+            return "no_pulses";
+        case DistanceMoveState::kEncoderError:
+            return "encoder_error";
+        case DistanceMoveState::kObstacle:
+            return "obstacle";
+        default:
+            return "idle";
+    }
+}
+
 class L298nController {
 public:
     static L298nController& Instance() {
@@ -234,7 +269,10 @@ public:
                 distance_fresh,
                 avoid_state_ == AvoidState::kBlocked,
                 fault_,
-                encoder_.Snapshot()};
+                encoder_.Snapshot(),
+                DistanceMoveStateName(distance_move_state_),
+                distance_move_target_cm_,
+                distance_move_progress_cm_};
     }
 
     void SetWebConnected(bool connected) {
@@ -537,6 +575,11 @@ private:
     // networking or Application::Schedule calls inside it.
     std::mutex mutex_;
     Fc03Encoder encoder_;
+    DistanceMoveState distance_move_state_ = DistanceMoveState::kIdle;
+    int distance_move_target_cm_ = 0;
+    double distance_move_progress_cm_ = 0;
+    double distance_move_start_left_m_ = 0;
+    double distance_move_start_right_m_ = 0;
     esp_timer_handle_t timer_ = nullptr;
 #ifdef CONFIG_PM_ENABLE
     esp_pm_lock_handle_t sleep_lock_ = nullptr;
@@ -869,12 +912,48 @@ private:
     }
 
     void StopLocked() {
+        if (distance_move_state_ == DistanceMoveState::kPending ||
+            distance_move_state_ == DistanceMoveState::kMoving)
+            distance_move_state_ = DistanceMoveState::kInterrupted;
         gesture_steps_ = nullptr;
         gesture_count_ = 0;
         gesture_index_ = 0;
         gesture_deadline_us_ = 0;
         web_joystick_active_ = false;
         StopOutputsLocked();
+    }
+
+    void UpdateDistanceMoveLocked() {
+        if (distance_move_state_ != DistanceMoveState::kPending &&
+            distance_move_state_ != DistanceMoveState::kMoving)
+            return;
+        const auto encoder = encoder_.Snapshot();
+        if (!encoder.ready || !encoder.calibrated) {
+            distance_move_state_ = DistanceMoveState::kEncoderError;
+            StopLocked();
+            return;
+        }
+        if (distance_move_state_ != DistanceMoveState::kMoving)
+            return;
+        if (motion_ == Motion::kForward && sensor_valid_ &&
+            esp_timer_get_time() - last_sensor_update_us_ <= kSensorStaleMs * 1000LL &&
+            measured_distance_cm_ <= ScaleDistanceForSpeed(obstacle_distance_cm_, speed_percent_)) {
+            distance_move_state_ = DistanceMoveState::kObstacle;
+            StopLocked();
+            return;
+        }
+        const double left_cm =
+            std::max(0.0, (encoder.left.distance_m - distance_move_start_left_m_) * 100.0);
+        const double right_cm =
+            std::max(0.0, (encoder.right.distance_m - distance_move_start_right_m_) * 100.0);
+        distance_move_progress_cm_ = std::min(left_cm, right_cm);
+        if (distance_move_progress_cm_ >= distance_move_target_cm_) {
+            distance_move_state_ = DistanceMoveState::kCompleted;
+            StopLocked();
+        } else if (encoder.left.no_pulses || encoder.right.no_pulses) {
+            distance_move_state_ = DistanceMoveState::kNoPulses;
+            StopLocked();
+        }
     }
 
     void ReleaseWebSleepLockLocked() {
@@ -1057,6 +1136,7 @@ private:
         const int64_t now = esp_timer_get_time();
         // Also sample at rest/while joystick owns the outputs, before any early return.
         encoder_.Update(now);
+        UpdateDistanceMoveLocked();
         if (web_session_ != 0 && (now >= web_deadline_us_ || !MotionAllowed())) {
             EndWebControlLocked();
         }
@@ -1137,6 +1217,9 @@ private:
                 ++gesture_index_;
                 StartGestureStepLocked();
             } else {
+                if (distance_move_state_ == DistanceMoveState::kPending ||
+                    distance_move_state_ == DistanceMoveState::kMoving)
+                    distance_move_state_ = DistanceMoveState::kTimeout;
                 StopLocked();
             }
         } else if (!moving_ && now >= start_at_us_) {
@@ -1145,6 +1228,18 @@ private:
                 return;
             }
             moving_ = true;
+            if (distance_move_state_ == DistanceMoveState::kPending) {
+                encoder_.Update(esp_timer_get_time());
+                const auto encoder = encoder_.Snapshot();
+                if (!encoder.ready) {
+                    distance_move_state_ = DistanceMoveState::kEncoderError;
+                    StopLocked();
+                    return;
+                }
+                distance_move_start_left_m_ = encoder.left.distance_m;
+                distance_move_start_right_m_ = encoder.right.distance_m;
+                distance_move_state_ = DistanceMoveState::kMoving;
+            }
             // Count the requested duration from enabling the motors. A delayed
             // timer must never start a command that has already expired above.
             // Web deadlines are measured from reception, never from motor start.
@@ -1194,6 +1289,43 @@ private:
         return GetState();
     }
 
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03
+    ToolResult MoveDistance(Motion motion, const PropertyList& properties) {
+        const int distance_cm = properties["distance_cm"].value<int>();
+        const int speed = properties["speed_percent"].value<int>();
+        if (distance_cm < 1 || distance_cm > kMaxDistanceMoveCm || speed < -1 || speed > 100) {
+            return std::unexpected("Use distance_cm 1..100 and speed_percent -1..100.");
+        }
+        {
+            std::lock_guard lock(mutex_);
+            if (web_manual_)
+                return std::unexpected(
+                    "Web manual control is active; release it on the web page first.");
+            const auto encoder = encoder_.Snapshot();
+            if (!encoder.ready || !encoder.calibrated) {
+                return std::unexpected(
+                    "FC-03 is unavailable or uncalibrated; cannot move by distance.");
+            }
+            if (fault_ != ESP_OK || !MotionAllowed())
+                return std::unexpected("Movement unavailable or motor hardware error.");
+            const int next_speed = speed >= 0 ? speed : speed_percent_;
+            if (next_speed == 0)
+                return std::unexpected("Set a nonzero motor speed before moving by distance.");
+            DisableAutonomyLocked();
+            manual_override_ = true;
+            pending_emotion_ = Emotion::kNone;
+            StopLocked();
+            speed_percent_ = next_speed;
+            if (!PrepareMotionLocked(motion, kMaxDurationMs))
+                return std::unexpected("Could not keep the motor deadline timer awake.");
+            distance_move_target_cm_ = distance_cm;
+            distance_move_progress_cm_ = 0;
+            distance_move_state_ = DistanceMoveState::kPending;
+        }
+        return GetState();
+    }
+#endif
+
     ToolResult SetSpeed(int speed) {
         const auto error = SetSpeedPercent(speed);
         if (error == ESP_ERR_INVALID_ARG) {
@@ -1242,6 +1374,9 @@ private:
         int64_t remaining_ms;
         esp_err_t fault;
         Fc03EncoderStatus encoder;
+        DistanceMoveState distance_move_state;
+        int distance_move_target_cm;
+        double distance_move_progress_cm;
         {
             std::lock_guard lock(mutex_);
             const int64_t now = esp_timer_get_time();
@@ -1264,6 +1399,9 @@ private:
             web_manual = web_manual_;
             fault = fault_;
             encoder = encoder_.Snapshot();
+            distance_move_state = distance_move_state_;
+            distance_move_target_cm = distance_move_target_cm_;
+            distance_move_progress_cm = distance_move_progress_cm_;
             remaining_ms = motion == Motion::kStop ? 0
                            : (moving || web_manual)
                                ? std::max<int64_t>(0, (deadline_us_ - now + 999) / 1000)
@@ -1289,6 +1427,12 @@ private:
             !cJSON_AddBoolToObject(json.get(), "pending", motion != Motion::kStop && !moving) ||
             !cJSON_AddNumberToObject(json.get(), "remaining_ms", remaining_ms) ||
             !cJSON_AddStringToObject(json.get(), "hardware_error", esp_err_to_name(fault)) ||
+            !cJSON_AddStringToObject(json.get(), "distance_move_state",
+                                     DistanceMoveStateName(distance_move_state)) ||
+            !cJSON_AddNumberToObject(json.get(), "distance_move_target_cm",
+                                     distance_move_target_cm) ||
+            !cJSON_AddNumberToObject(json.get(), "distance_move_progress_cm",
+                                     distance_move_progress_cm) ||
             !AddFc03EncoderJson(json.get(), encoder)) {
             return std::unexpected("Could not allocate motor status.");
         }
@@ -1313,6 +1457,8 @@ private:
                     "Omit duration_ms and speed_percent unless the user specifies them; "
                     "use the firmware defaults instead of asking for these values. "
                     "Automatically stops locally. Replaces previous movement; does not queue. "
+                    "Timed movement only; for centimetres use self.motor.forward_distance or "
+                    "self.motor.backward_distance. "
                     "Result confirms acceptance, not completion. Do not repeat unless asked.",
                 PropertyList({Property("duration_ms", kPropertyTypeInteger, default_duration_ms,
                                        100, kMaxDurationMs),
@@ -1325,6 +1471,31 @@ private:
                  Motion::kForward);
         add_move("self.motor.backward", "Move robot backward (lùi): both wheels backward.",
                  Motion::kBackward);
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03
+        const auto add_distance_move = [this, &server](const char* name, const char* description,
+                                                       Motion motion) {
+            server.AddTool(
+                name,
+                std::string(description) +
+                    " distance_cm is required (1..100 cm of wheel travel, not HC-SR04 range). "
+                    "Stops when each FC-03 wheel reaches the target distance. "
+                    "speed_percent: 1..100 PWM duty, -1 keeps current speed. "
+                    "Forward travel also stops near a detected obstacle. "
+                    "Stops on missing pulses, encoder failure, or a 10-second timeout. "
+                    "Result confirms acceptance, not completion; check distance_move_state and "
+                    "distance_move_progress_cm via self.motor.get_state. Do not repeat unless "
+                    "asked.",
+                PropertyList({Property("distance_cm", kPropertyTypeInteger, 1, kMaxDistanceMoveCm),
+                              Property("speed_percent", kPropertyTypeInteger, -1, -1, 100)}),
+                [this, motion](const PropertyList& properties) -> ToolResult {
+                    return MoveDistance(motion, properties);
+                });
+        };
+        add_distance_move("self.motor.forward_distance",
+                          "Drive forward (tiến) by a measured distance.", Motion::kForward);
+        add_distance_move("self.motor.backward_distance",
+                          "Drive backward (lùi) by a measured distance.", Motion::kBackward);
+#endif
         add_move("self.motor.turn_left",
                  "Rotate robot left in place (xoay trái): left backward, right forward. No angle "
                  "feedback.",
