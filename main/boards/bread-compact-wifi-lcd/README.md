@@ -170,6 +170,8 @@ detects a nearby obstacle. `self.motor.get_state` and `/api/status`
 report `distance_move_state`, `distance_move_target_cm`, and `distance_move_progress_cm`.
 The tool returns when motion starts; `completed` confirms the measured target was reached.
 Wheel slip and calibration error can change the real travel distance.
+Distance moves ramp up from a 60% PWM floor (or the requested speed if lower), then
+begin ramping down over the final 20 cm. Short moves use a triangular speed profile.
 
 ## Telegram Configuration
 

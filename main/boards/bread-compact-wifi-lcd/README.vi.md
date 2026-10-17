@@ -171,6 +171,8 @@ dừng nếu HC-SR04 phát hiện vật cản quá gần. `self.motor.get_state`
 và `/api/status` trả `distance_move_state`, `distance_move_target_cm` và
 `distance_move_progress_cm`. Lệnh trả về ngay khi bắt đầu; `completed` mới là đã đạt mốc.
 Số đo có thể lệch quãng đường thực do trượt bánh và sai số hiệu chuẩn.
+Lệnh chạy theo quãng đường tăng tốc dần từ mức PWM 60% (hoặc tốc độ yêu cầu nếu thấp hơn),
+rồi giảm tốc trong 20 cm cuối. Quãng đường ngắn dùng profile tăng giảm tốc hình tam giác.
 
 ## Cấu hình Telegram
 

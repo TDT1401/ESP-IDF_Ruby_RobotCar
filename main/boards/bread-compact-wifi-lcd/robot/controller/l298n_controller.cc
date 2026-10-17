@@ -9,6 +9,7 @@
 #include <esp_timer.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -32,12 +33,16 @@ constexpr int kDefaultDurationMs = 1000;
 constexpr int kDefaultTurnDurationMs = 400;
 constexpr int kMaxDurationMs = 10000;
 constexpr int kMaxDistanceMoveCm = 100;
+constexpr int kDistanceRampStartSpeedPercent = 60;
+constexpr int kDistanceRampLengthCm = 20;
+constexpr int64_t kDistanceRampUpdateUs = 50000;
 constexpr int64_t kDirectionDelayUs = 50000;
 constexpr int64_t kTickUs = 10000;
 constexpr int64_t kGestureMaxUs = 2000000;
 constexpr int64_t kGestureCooldownUs = 3000000;
 constexpr int kWebTimeoutMs = 600;
 constexpr int kDefaultFollowDistanceCm = 30;
+constexpr int kFollowSpeedPercent = 70;
 constexpr int kDefaultObstacleDistanceCm = 20;
 constexpr int kMinFollowDistanceCm = 10;
 constexpr int kMaxFollowDistanceCm = 200;
@@ -100,26 +105,26 @@ struct GestureStep {
 };
 
 // Timed gestures, not position-controlled moves. Each direction change includes a 50 ms stop.
-constexpr GestureStep kHappyGesture[] = {{Motion::kForward, 180, 55},
-                                         {Motion::kBackward, 180, 55},
-                                         {Motion::kLeft, 140, 55},
-                                         {Motion::kRight, 280, 55},
-                                         {Motion::kLeft, 140, 55}};
+constexpr GestureStep kHappyGesture[] = {{Motion::kForward, 180, 65},
+                                         {Motion::kBackward, 180, 65},
+                                         {Motion::kLeft, 140, 65},
+                                         {Motion::kRight, 280, 65},
+                                         {Motion::kLeft, 140, 65}};
 constexpr GestureStep kSadGesture[] = {{Motion::kBackward, 180, 40}};
 constexpr GestureStep kSurprisedGesture[] = {{Motion::kBackward, 140, 50}};
 constexpr GestureStep kAngryGesture[] = {
-    {Motion::kLeft, 100, 50}, {Motion::kRight, 200, 50}, {Motion::kLeft, 100, 50}};
+    {Motion::kLeft, 150, 60}, {Motion::kRight, 250, 60}, {Motion::kLeft, 150, 60}};
 constexpr GestureStep kThinkingGesture[] = {
-    {Motion::kLeft, 120, 45}, {Motion::kRight, 240, 45}, {Motion::kLeft, 120, 45}};
+    {Motion::kLeft, 170, 55}, {Motion::kRight, 270, 55}, {Motion::kLeft, 170, 55}};
 constexpr GestureStep kWinkingGesture[] = {
-    {Motion::kLeft, 160, 55}, {Motion::kRight, 320, 55}, {Motion::kLeft, 160, 55}};
+    {Motion::kLeft, 200, 60}, {Motion::kRight, 300, 60}, {Motion::kLeft, 200, 60}};
 
 template <size_t N>
 constexpr bool IsValidGesture(const GestureStep (&steps)[N]) {
     int64_t total_us = 0;
     for (const auto& step : steps) {
         if (step.motion == Motion::kStop || step.duration_ms < 100 || step.duration_ms > 400 ||
-            step.speed_percent <= 0 || step.speed_percent > 60)
+            step.speed_percent <= 0 || step.speed_percent > 65)
             return false;
         total_us += static_cast<int64_t>(step.duration_ms) * 1000 + kDirectionDelayUs;
     }
@@ -580,6 +585,8 @@ private:
     double distance_move_progress_cm_ = 0;
     double distance_move_start_left_m_ = 0;
     double distance_move_start_right_m_ = 0;
+    int distance_profile_speed_percent_ = 0;
+    int64_t distance_profile_update_us_ = 0;
     esp_timer_handle_t timer_ = nullptr;
 #ifdef CONFIG_PM_ENABLE
     esp_pm_lock_handle_t sleep_lock_ = nullptr;
@@ -763,14 +770,14 @@ private:
         // target is reached. A stop (including sensor loss) cancels the retreat.
         if (distance_cm < target_distance &&
             (distance_cm <= kFollowReverseTriggerCm || motion_ == Motion::kBackward)) {
-            RefreshAutonomyMotionLocked(Motion::kBackward, kAutonomySpeedPercent);
+            RefreshAutonomyMotionLocked(Motion::kBackward, kFollowSpeedPercent);
             return;
         }
         if (distance_cm <= target_distance + kFollowHysteresisCm) {
             StopLocked();
             return;
         }
-        RefreshAutonomyMotionLocked(Motion::kForward, kAutonomySpeedPercent);
+        RefreshAutonomyMotionLocked(Motion::kForward, kFollowSpeedPercent);
     }
 
     bool AvoidMotionPhaseLocked() const {
@@ -956,6 +963,34 @@ private:
         }
     }
 
+    void UpdateDistanceSpeedProfileLocked(int64_t now) {
+        if (distance_move_state_ != DistanceMoveState::kMoving || !moving_ ||
+            now - distance_profile_update_us_ < kDistanceRampUpdateUs)
+            return;
+
+        const int target_speed = speed_percent_;
+        const int start_speed = std::min(target_speed, kDistanceRampStartSpeedPercent);
+        const double total_distance = distance_move_target_cm_;
+        const double progress = std::clamp(distance_move_progress_cm_, 0.0, total_distance);
+        const double remaining = total_distance - progress;
+        // Short moves get a triangular ramp; longer moves reach the requested speed
+        // and begin slowing down over the final ramp length.
+        const double peak_fraction = std::min(1.0, total_distance / (2.0 * kDistanceRampLengthCm));
+        const double acceleration_fraction = std::min(1.0, progress / kDistanceRampLengthCm);
+        const double deceleration_fraction = std::min(1.0, remaining / kDistanceRampLengthCm);
+        const double ramp_fraction =
+            std::min({peak_fraction, acceleration_fraction, deceleration_fraction});
+        const int next_speed =
+            start_speed +
+            static_cast<int>(std::lround((target_speed - start_speed) * ramp_fraction));
+        distance_profile_update_us_ = now;
+        if (next_speed != distance_profile_speed_percent_) {
+            distance_profile_speed_percent_ = next_speed;
+            if (!ApplySpeedLocked())
+                StopLocked();
+        }
+    }
+
     void ReleaseWebSleepLockLocked() {
 #ifdef CONFIG_PM_ENABLE
         if (web_sleep_lock_held_) {
@@ -1063,6 +1098,9 @@ private:
     }
 
     int ActiveSpeedLocked() const {
+        if (distance_move_state_ == DistanceMoveState::kMoving &&
+            distance_profile_speed_percent_ > 0)
+            return distance_profile_speed_percent_;
         if (web_manual_)
             return web_speed_percent_;
         if (autonomy_mode_ != AutonomyMode::kManual)
@@ -1137,6 +1175,7 @@ private:
         // Also sample at rest/while joystick owns the outputs, before any early return.
         encoder_.Update(now);
         UpdateDistanceMoveLocked();
+        UpdateDistanceSpeedProfileLocked(now);
         if (web_session_ != 0 && (now >= web_deadline_us_ || !MotionAllowed())) {
             EndWebControlLocked();
         }
@@ -1223,11 +1262,10 @@ private:
                 StopLocked();
             }
         } else if (!moving_ && now >= start_at_us_) {
-            if (!ApplyDirectionLocked() || !ApplySpeedLocked()) {
+            if (!ApplyDirectionLocked()) {
                 StopLocked();
                 return;
             }
-            moving_ = true;
             if (distance_move_state_ == DistanceMoveState::kPending) {
                 encoder_.Update(esp_timer_get_time());
                 const auto encoder = encoder_.Snapshot();
@@ -1239,7 +1277,15 @@ private:
                 distance_move_start_left_m_ = encoder.left.distance_m;
                 distance_move_start_right_m_ = encoder.right.distance_m;
                 distance_move_state_ = DistanceMoveState::kMoving;
+                distance_profile_speed_percent_ =
+                    std::min(speed_percent_, kDistanceRampStartSpeedPercent);
+                distance_profile_update_us_ = esp_timer_get_time();
             }
+            if (!ApplySpeedLocked()) {
+                StopLocked();
+                return;
+            }
+            moving_ = true;
             // Count the requested duration from enabling the motors. A delayed
             // timer must never start a command that has already expired above.
             // Web deadlines are measured from reception, never from motor start.
@@ -1320,6 +1366,8 @@ private:
                 return std::unexpected("Could not keep the motor deadline timer awake.");
             distance_move_target_cm_ = distance_cm;
             distance_move_progress_cm_ = 0;
+            distance_profile_speed_percent_ = 0;
+            distance_profile_update_us_ = 0;
             distance_move_state_ = DistanceMoveState::kPending;
         }
         return GetState();
