@@ -40,9 +40,9 @@ Connect the ESP32-S3, all modules, and the motor supply to a common GND. Use the
 | -------------- | ------------ |
 | VDD            | 3V3          |
 | GND            | GND          |
-| WS             | GPIO4        |
-| SCK            | GPIO5        |
-| SD             | GPIO6        |
+| WS             | GPIO1        |
+| SCK            | GPIO2        |
+| SD             | GPIO17       |
 | L/R            | GND          |
 
 ### MAX98357A amplifier
