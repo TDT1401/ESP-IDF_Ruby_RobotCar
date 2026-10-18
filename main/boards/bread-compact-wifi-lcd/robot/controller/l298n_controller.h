@@ -28,6 +28,10 @@ void SetL298nWebConnected(bool connected);
 // ESP_ERR_INVALID_ARG rejects out-of-range values; ESP_FAIL reports a hardware fault.
 esp_err_t SetL298nMotorSpeed(int speed_percent);
 
+// Start an encoder-controlled straight-line move (FC-03 builds only).
+// Distance is 1..100 cm; forward movement also observes the obstacle stop threshold.
+esp_err_t MoveL298nDistance(bool forward, int distance_cm);
+
 // Thread-safe HC-SR04 autonomous modes. Modes are mutually exclusive and RAM-only.
 // Disabling either active mode stops the motors. Manual/web movement also disables autonomy.
 esp_err_t SetL298nFollowMode(bool enabled);

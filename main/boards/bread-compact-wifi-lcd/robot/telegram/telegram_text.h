@@ -106,6 +106,7 @@ inline constexpr char kMotionStopped[] = "⏹️ Đứng yên";
 inline constexpr char kMenu[] =
     "<b>🤖 XiaoMin ROBOT</b>\n"
     "━━━━━━━━━━━━━━━━\n"
+    "⬆️ /forward CM — Tiến theo quãng đường; /backward CM — Lùi theo quãng đường (1-100 cm)\n"
     "<b>📋 DANH SÁCH LỆNH</b>\n\n"
     "🎙️ /wake — Đánh thức XiaoMin để trò chuyện\n"
     "⚙️ /speed — Xem tốc độ; /speed 50 — Đặt PWM 50%\n"
@@ -148,6 +149,16 @@ inline constexpr char kSpeedWebBusy[] =
 inline constexpr char kSpeedHardwareError[] =
     "❌ Có lỗi phần cứng motor khi đặt tốc độ. Gửi /status để kiểm tra, kiểm tra dây nối và khởi "
     "động lại.";
+
+inline constexpr char kDistanceMoveUsage[] =
+    "Dùng <code>/forward CM</code> hoặc <code>/backward CM</code> với CM từ 1 đến 100, ví dụ: "
+    "<code>/forward 30</code>. Lệnh cần hai encoder FC-03 đã được hiệu chuẩn.";
+inline constexpr char kDistanceMoveAccepted[] =
+    "✅ Đã bắt đầu chạy theo quãng đường encoder. Gửi /status để xem tiến độ; motor tự dừng khi đạt mục tiêu.";
+inline constexpr char kDistanceMoveWebBusy[] =
+    "🎮 Web đang giữ quyền điều khiển motor. Hãy trả quyền trên trang web rồi gửi lại lệnh.";
+inline constexpr char kDistanceMoveUnavailable[] =
+    "❌ Không thể chạy theo quãng đường: FC-03 chưa sẵn sàng/hiệu chuẩn, PWM đang bằng 0, hoặc motor không thể chạy. Kiểm tra /status.";
 
 inline constexpr char kFollowUsage[] =
     "Dùng <code>/follow on</code>, <code>/follow off</code> hoặc <code>/follow N</code> với N từ "

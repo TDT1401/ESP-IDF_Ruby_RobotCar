@@ -251,6 +251,17 @@ public:
         return fault_ == ESP_OK ? ESP_OK : ESP_FAIL;
     }
 
+    esp_err_t MoveDistanceFromCommand(bool forward, int distance_cm) {
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03
+        return StartDistanceMoveCommand(forward ? Motion::kForward : Motion::kBackward,
+                                        distance_cm);
+#else
+        (void)forward;
+        (void)distance_cm;
+        return ESP_ERR_NOT_SUPPORTED;
+#endif
+    }
+
     L298nMotorStatus Snapshot() {
         std::lock_guard lock(mutex_);
         const bool distance_fresh =
@@ -1372,6 +1383,35 @@ private:
         }
         return GetState();
     }
+
+    esp_err_t StartDistanceMoveCommand(Motion motion, int distance_cm) {
+        if (distance_cm < 1 || distance_cm > kMaxDistanceMoveCm)
+            return ESP_ERR_INVALID_ARG;
+        std::lock_guard lock(mutex_);
+        if (web_manual_)
+            return ESP_ERR_INVALID_STATE;
+        const auto encoder = encoder_.Snapshot();
+        if (!encoder.ready || !encoder.calibrated)
+            return ESP_ERR_NOT_SUPPORTED;
+        if (fault_ != ESP_OK)
+            return fault_;
+        if (!MotionAllowed())
+            return ESP_ERR_INVALID_STATE;
+        if (speed_percent_ == 0)
+            return ESP_ERR_INVALID_STATE;
+        DisableAutonomyLocked();
+        manual_override_ = true;
+        pending_emotion_ = Emotion::kNone;
+        StopLocked();
+        if (!PrepareMotionLocked(motion, kMaxDurationMs))
+            return ESP_FAIL;
+        distance_move_target_cm_ = distance_cm;
+        distance_move_progress_cm_ = 0;
+        distance_profile_speed_percent_ = 0;
+        distance_profile_update_us_ = 0;
+        distance_move_state_ = DistanceMoveState::kPending;
+        return ESP_OK;
+    }
 #endif
 
     ToolResult SetSpeed(int speed) {
@@ -1718,6 +1758,10 @@ L298nMotorStatus GetL298nMotorStatus() { return L298nController::Instance().Snap
 
 esp_err_t SetL298nMotorSpeed(int speed_percent) {
     return L298nController::Instance().SetSpeedPercent(speed_percent);
+}
+
+esp_err_t MoveL298nDistance(bool forward, int distance_cm) {
+    return L298nController::Instance().MoveDistanceFromCommand(forward, distance_cm);
 }
 
 esp_err_t SetL298nFollowMode(bool enabled) {

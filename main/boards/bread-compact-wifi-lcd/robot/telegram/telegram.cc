@@ -642,6 +642,23 @@ private:
         }
     }
 
+    void HandleDistanceMove(const std::string& argument, bool forward) {
+        int distance_cm = 0;
+        if (!ParseUnsigned(argument, 100, distance_cm) || distance_cm < 1) {
+            Send(L298nTelegramText::kDistanceMoveUsage, true);
+            return;
+        }
+
+        const auto error = MoveL298nDistance(forward, distance_cm);
+        if (error == ESP_OK) {
+            Send(L298nTelegramText::kDistanceMoveAccepted, true);
+        } else if (error == ESP_ERR_INVALID_STATE && GetL298nMotorStatus().web_manual) {
+            Send(L298nTelegramText::kDistanceMoveWebBusy, true);
+        } else {
+            Send(L298nTelegramText::kDistanceMoveUnavailable, true);
+        }
+    }
+
     void HandleAutonomy(const std::string& raw_argument, bool follow) {
         const std::string argument = LowerAscii(raw_argument);
         const char* usage = follow ? L298nTelegramText::kFollowUsage
@@ -714,6 +731,10 @@ private:
             HandleWake();
         else if (command == "/speed")
             HandleSpeed(argument);
+        else if (command == "/forward")
+            HandleDistanceMove(argument, true);
+        else if (command == "/backward")
+            HandleDistanceMove(argument, false);
         else if (command == "/follow")
             HandleAutonomy(argument, true);
         else if (command == "/avoid")
