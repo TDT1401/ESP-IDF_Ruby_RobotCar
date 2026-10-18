@@ -56,14 +56,12 @@ private:
         bool high_watch = false;
         bool low_watch = false;
         uint32_t previous = 0;
-        uint64_t rate_baseline = 0;
         int direction = 0;
         int64_t coast_until_us = 0;
         int64_t drive_started_us = 0;
         int64_t last_pulse_us = 0;
     };
     Counter counters_[2];
-    int64_t rate_at_us_ = 0;
     double completed_travel_m_ = 0;
     double segment_centre_m_ = 0;
     int centre_command_ = 0;

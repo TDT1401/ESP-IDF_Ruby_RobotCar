@@ -106,7 +106,7 @@ inline constexpr char kMotionStopped[] = "⏹️ Đứng yên";
 inline constexpr char kMenu[] =
     "<b>🤖 XiaoMin ROBOT</b>\n"
     "━━━━━━━━━━━━━━━━\n"
-    "⬆️ /forward CM — Tiến theo quãng đường; /backward CM — Lùi theo quãng đường (1-100 cm)\n"
+    "⬆️ /forward CM — Tiến theo quãng đường; /backward CM — Lùi theo quãng đường (1-1000 cm)\n"
     "<b>📋 DANH SÁCH LỆNH</b>\n\n"
     "🎙️ /wake — Đánh thức XiaoMin để trò chuyện\n"
     "⚙️ /speed — Xem tốc độ; /speed 50 — Đặt PWM 50%\n"
@@ -151,7 +151,7 @@ inline constexpr char kSpeedHardwareError[] =
     "động lại.";
 
 inline constexpr char kDistanceMoveUsage[] =
-    "Dùng <code>/forward CM</code> hoặc <code>/backward CM</code> với CM từ 1 đến 100, ví dụ: "
+    "Dùng <code>/forward CM</code> hoặc <code>/backward CM</code> với CM từ 1 đến 1000, ví dụ: "
     "<code>/forward 30</code>. Lệnh cần hai encoder FC-03 đã được hiệu chuẩn.";
 inline constexpr char kDistanceMoveAccepted[] =
     "✅ Đã bắt đầu chạy theo quãng đường encoder. Gửi /status để xem tiến độ; motor tự dừng khi đạt mục tiêu.";

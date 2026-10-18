@@ -158,6 +158,11 @@ esp_err_t Status(httpd_req_t* req) {
         !cJSON_AddBoolToObject(json.get(), "moving", motor.moving) ||
         !cJSON_AddStringToObject(json.get(), "motion", motor.motion) ||
         !cJSON_AddNumberToObject(json.get(), "speed_percent", motor.active_speed_percent) ||
+        !cJSON_AddBoolToObject(json.get(), "speed_pi_calibrated", motor.speed_pi_calibrated) ||
+        !cJSON_AddBoolToObject(json.get(), "speed_pi_active", motor.speed_pi_active) ||
+        !cJSON_AddNumberToObject(json.get(), "speed_pi_target_rpm", motor.speed_pi_target_rpm) ||
+        !cJSON_AddNumberToObject(json.get(), "left_pwm_percent", motor.left_pwm_percent) ||
+        !cJSON_AddNumberToObject(json.get(), "right_pwm_percent", motor.right_pwm_percent) ||
         !cJSON_AddStringToObject(json.get(), "distance_move_state", motor.distance_move_state) ||
         !cJSON_AddNumberToObject(json.get(), "distance_move_target_cm",
                                  motor.distance_move_target_cm) ||

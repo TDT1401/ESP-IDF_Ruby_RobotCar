@@ -28,19 +28,34 @@ constexpr auto kMode = LEDC_LOW_SPEED_MODE;
 constexpr auto kTimer = LEDC_TIMER_1;  // LCD backlight owns timer/channel 0.
 constexpr auto kLeftChannel = LEDC_CHANNEL_1;
 constexpr auto kRightChannel = LEDC_CHANNEL_2;
-constexpr int kDefaultSpeedPercent = 75;
+// Non-HUD motions start at the calibrated, conservative baseline. The speed PI
+// independently adjusts each wheel, while distance moves apply their own ramp.
+constexpr int kDefaultSpeedPercent = 50;
+// Keep the browser HUD's existing default; it is intentionally separate from
+// autonomous and spoken motor commands.
+constexpr int kDefaultWebSpeedPercent = 75;
 constexpr int kDefaultDurationMs = 1000;
 constexpr int kDefaultTurnDurationMs = 400;
 constexpr int kMaxDurationMs = 10000;
-constexpr int kMaxDistanceMoveCm = 100;
+// Allow room-scale travel in one encoder-controlled command while keeping each
+// autonomous move bounded. At the conservative 20 cm/s timeout rate, 10 m gets
+// a 53 s deadline including startup/stopping margin.
+constexpr int kMaxDistanceMoveCm = 1000;
+constexpr int kDistanceMoveTimeoutMarginMs = 3000;
+constexpr int kDistanceMoveTimeoutPerCmMs = 50;
 constexpr int kDistanceMinimumDrivePercent = 50;
 constexpr int kDistanceCrawlSpeedPercent = 45;
 constexpr int kDistanceRampStartSpeedPercent = 50;
 constexpr int kDistanceRampLengthCm = 8;
 constexpr int64_t kDistanceRampUpdateUs = 50000;
-constexpr double kStraightSyncPwmPerCm = 3.0;
-constexpr int kStraightSyncMaxCorrectionPercent = 8;
 constexpr int64_t kDistanceBrakeUs = 100000;
+constexpr int kSpeedPiMinimumPwmPercent = 45;
+constexpr int kSpeedPiStartupPwmPercent = 50;
+constexpr int64_t kSpeedPiStartupUs = 300000;
+constexpr int64_t kSpeedPiUpdateUs = 50000;
+constexpr double kSpeedPiKp = 0.12;
+constexpr double kSpeedPiKi = 0.04;
+constexpr double kSpeedPiIntegralLimit = 300.0;
 constexpr int64_t kDirectionDelayUs = 50000;
 constexpr int64_t kTickUs = 10000;
 constexpr int64_t kGestureMaxUs = 2000000;
@@ -69,12 +84,44 @@ constexpr int kAutonomySpeedPercent = 40;
 constexpr int kAvoidReverseSpeedPercent = 45;
 constexpr int kAutonomyTurnSpeedPercent = 60;
 
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03
+constexpr double kLeftRpmAtPwm50 = FC03_LEFT_RPM_AT_PWM_50;
+constexpr double kLeftRpmAtPwm70 = FC03_LEFT_RPM_AT_PWM_70;
+constexpr double kRightRpmAtPwm50 = FC03_RIGHT_RPM_AT_PWM_50;
+constexpr double kRightRpmAtPwm70 = FC03_RIGHT_RPM_AT_PWM_70;
+constexpr bool kSpeedPiCalibrationValid =
+    kLeftRpmAtPwm50 > 0 && kLeftRpmAtPwm70 > kLeftRpmAtPwm50 && kRightRpmAtPwm50 > 0 &&
+    kRightRpmAtPwm70 > kRightRpmAtPwm50 && FC03_LEFT_PULSES_PER_REV > 0 &&
+    FC03_RIGHT_PULSES_PER_REV > 0 && FC03_LEFT_WHEEL_DIAMETER_MM > 0 &&
+    FC03_RIGHT_WHEEL_DIAMETER_MM > 0;
+#else
+constexpr double kLeftRpmAtPwm50 = 0;
+constexpr double kLeftRpmAtPwm70 = 0;
+constexpr double kRightRpmAtPwm50 = 0;
+constexpr double kRightRpmAtPwm70 = 0;
+constexpr bool kSpeedPiCalibrationValid = false;
+#endif
+
+double CalibratedRpmAtPwm(double pwm, double rpm_at_50, double rpm_at_70) {
+    return rpm_at_50 + (pwm - 50.0) * (rpm_at_70 - rpm_at_50) / 20.0;
+}
+
+double CalibratedPwmForRpm(double rpm, double rpm_at_50, double rpm_at_70) {
+    return 50.0 + (rpm - rpm_at_50) * 20.0 / (rpm_at_70 - rpm_at_50);
+}
+
 int ScaleDistanceForSpeed(int distance_cm, int speed_percent) {
     // Keep the configured distance as the minimum threshold up to 50% PWM, then
     // increase it proportionally. For example, 20 cm at 50% becomes 30 cm at 75%.
     const int scaled_speed = std::max(speed_percent, kReferenceSpeedPercent);
     return (distance_cm * scaled_speed + kReferenceSpeedPercent - 1) /
            kReferenceSpeedPercent;
+}
+
+int DistanceMoveTimeoutMs(int distance_cm) {
+    const int estimated_timeout_ms =
+        kDistanceMoveTimeoutMarginMs + distance_cm * kDistanceMoveTimeoutPerCmMs;
+    return std::max(kMaxDurationMs, estimated_timeout_ms);
 }
 
 enum class Motion { kStop, kForward, kBackward, kLeft, kRight };
@@ -293,7 +340,12 @@ public:
                 encoder_.Snapshot(),
                 DistanceMoveStateName(distance_move_state_),
                 distance_move_target_cm_,
-                distance_move_progress_cm_};
+                distance_move_progress_cm_,
+                kSpeedPiCalibrationValid,
+                speed_pi_active_,
+                speed_pi_target_rpm_,
+                CurrentLeftPwmPercentLocked(),
+                CurrentRightPwmPercentLocked()};
     }
 
     void SetWebConnected(bool connected) {
@@ -601,12 +653,16 @@ private:
     double distance_move_progress_cm_ = 0;
     double distance_move_start_left_m_ = 0;
     double distance_move_start_right_m_ = 0;
-    double straight_start_left_m_ = 0;
-    double straight_start_right_m_ = 0;
     int distance_profile_speed_percent_ = 0;
     int64_t distance_profile_update_us_ = 0;
     bool brake_active_ = false;
     int64_t brake_until_us_ = 0;
+    double speed_pi_integral_[2] = {};
+    int speed_pi_output_percent_[2] = {};
+    double speed_pi_target_rpm_ = 0;
+    int64_t speed_pi_startup_until_us_ = 0;
+    int64_t speed_pi_last_update_us_ = 0;
+    bool speed_pi_active_ = false;
     esp_timer_handle_t timer_ = nullptr;
 #ifdef CONFIG_PM_ENABLE
     esp_pm_lock_handle_t sleep_lock_ = nullptr;
@@ -632,7 +688,7 @@ private:
     uint32_t web_session_ = 0;
     uint32_t web_sequence_ = 0;
     int64_t web_deadline_us_ = 0;
-    int web_speed_percent_ = kDefaultSpeedPercent;
+    int web_speed_percent_ = kDefaultWebSpeedPercent;
     Emotion last_emotion_ = Emotion::kNone;
     Emotion pending_emotion_ = Emotion::kNone;  // One mailbox; no motion queue.
     const GestureStep* gesture_steps_ = nullptr;
@@ -1044,6 +1100,7 @@ private:
 
     void StopOutputsLocked() {
         brake_active_ = false;
+        ResetSpeedPiLocked();
         encoder_.SetDrive(0, 0, esp_timer_get_time());
         // Disable both bridges before touching any direction pin. Attempt every
         // output even if an earlier operation fails. Stop means coast, not brake.
@@ -1068,6 +1125,7 @@ private:
     }
 
     void BeginDistanceBrakeLocked(int64_t now) {
+        ResetSpeedPiLocked();
         encoder_.SetDrive(0, 0, now);
         bool ok = true;
         // L298N brakes dynamically when EN is high and both direction inputs match.
@@ -1093,38 +1151,125 @@ private:
         deadline_us_ = 0;
     }
 
-    bool ApplySpeedLocked() {
-        const uint32_t duty = ActiveSpeedLocked() * 1023 / 100;
-        // These channels have no fade users and all accesses are serialized.
-        return Check(ledc_set_duty(kMode, kLeftChannel, duty)) &&
-               Check(ledc_update_duty(kMode, kLeftChannel)) &&
-               Check(ledc_set_duty(kMode, kRightChannel, duty)) &&
-               Check(ledc_update_duty(kMode, kRightChannel));
+    void ResetSpeedPiLocked() {
+        speed_pi_integral_[0] = 0;
+        speed_pi_integral_[1] = 0;
+        speed_pi_output_percent_[0] = 0;
+        speed_pi_output_percent_[1] = 0;
+        speed_pi_target_rpm_ = 0;
+        speed_pi_startup_until_us_ = 0;
+        speed_pi_last_update_us_ = 0;
+        speed_pi_active_ = false;
     }
 
-    bool ApplyStraightEncoderSyncLocked() {
-        if (!moving_ || web_manual_ ||
-            (motion_ != Motion::kForward && motion_ != Motion::kBackward))
-            return true;
-
-        const auto encoder = encoder_.Snapshot();
-        if (!encoder.ready || !encoder.calibrated)
-            return true;
-
-        const double left_cm = (encoder.left.distance_m - straight_start_left_m_) * 100.0;
-        const double right_cm = (encoder.right.distance_m - straight_start_right_m_) * 100.0;
-        const int correction = std::clamp(
-            static_cast<int>(std::lround((left_cm - right_cm) * kStraightSyncPwmPerCm)),
-            -kStraightSyncMaxCorrectionPercent, kStraightSyncMaxCorrectionPercent);
-        const int base_speed = ActiveSpeedLocked();
-        const int left_speed = std::clamp(base_speed - correction, 0, 100);
-        const int right_speed = std::clamp(base_speed + correction, 0, 100);
-        const uint32_t left_duty = static_cast<uint32_t>(left_speed) * 1023 / 100;
-        const uint32_t right_duty = static_cast<uint32_t>(right_speed) * 1023 / 100;
+    bool ApplyMotorPwmLocked(int left_percent, int right_percent) {
+        const uint32_t left_duty = static_cast<uint32_t>(left_percent) * 1023 / 100;
+        const uint32_t right_duty = static_cast<uint32_t>(right_percent) * 1023 / 100;
         return Check(ledc_set_duty(kMode, kLeftChannel, left_duty)) &&
                Check(ledc_update_duty(kMode, kLeftChannel)) &&
                Check(ledc_set_duty(kMode, kRightChannel, right_duty)) &&
                Check(ledc_update_duty(kMode, kRightChannel));
+    }
+
+    bool ApplySpeedLocked() {
+        const int base_speed = ActiveSpeedLocked();
+        if (speed_pi_active_)
+            return ApplyMotorPwmLocked(speed_pi_output_percent_[0], speed_pi_output_percent_[1]);
+        if (kSpeedPiCalibrationValid && moving_ && speed_pi_startup_until_us_ > 0 &&
+            esp_timer_get_time() < speed_pi_startup_until_us_) {
+            const int kick_speed = std::max(base_speed, kSpeedPiStartupPwmPercent);
+            return ApplyMotorPwmLocked(kick_speed, kick_speed);
+        }
+        return ApplyMotorPwmLocked(base_speed, base_speed);
+    }
+
+    int CurrentPwmPercentLocked(int side) const {
+        if (!moving_)
+            return 0;
+        if (web_manual_)
+            return std::abs(side == 0 ? web_left_output_percent_ : web_right_output_percent_);
+        if (speed_pi_active_)
+            return speed_pi_output_percent_[side];
+        const int base_speed = ActiveSpeedLocked();
+        if (kSpeedPiCalibrationValid && speed_pi_startup_until_us_ > esp_timer_get_time())
+            return std::max(base_speed, kSpeedPiStartupPwmPercent);
+        return base_speed;
+    }
+
+    int CurrentLeftPwmPercentLocked() const {
+        return CurrentPwmPercentLocked(0);
+    }
+
+    int CurrentRightPwmPercentLocked() const {
+        return CurrentPwmPercentLocked(1);
+    }
+
+    void UpdateSpeedPiLocked(int64_t now) {
+        if (!kSpeedPiCalibrationValid || !moving_ || web_manual_ || ActiveSpeedLocked() <= 0) {
+            if (!moving_ || web_manual_)
+                ResetSpeedPiLocked();
+            return;
+        }
+        if (now < speed_pi_startup_until_us_)
+            return;
+        if (speed_pi_last_update_us_ != 0 && now - speed_pi_last_update_us_ < kSpeedPiUpdateUs)
+            return;
+
+        const auto encoder = encoder_.Snapshot();
+        if (!encoder.ready || !encoder.calibrated) {
+            ResetSpeedPiLocked();
+            const int fallback = ActiveSpeedLocked();
+            if (!ApplyMotorPwmLocked(fallback, fallback))
+                StopLocked();
+            return;
+        }
+
+        const double requested_pwm =
+            std::max(ActiveSpeedLocked(), kSpeedPiMinimumPwmPercent);
+        const double left_curve_rpm =
+            CalibratedRpmAtPwm(requested_pwm, kLeftRpmAtPwm50, kLeftRpmAtPwm70);
+        const double right_curve_rpm =
+            CalibratedRpmAtPwm(requested_pwm, kRightRpmAtPwm50, kRightRpmAtPwm70);
+        const double target_rpm = (left_curve_rpm + right_curve_rpm) * 0.5;
+        const double feed_forward[] = {
+            CalibratedPwmForRpm(target_rpm, kLeftRpmAtPwm50, kLeftRpmAtPwm70),
+            CalibratedPwmForRpm(target_rpm, kRightRpmAtPwm50, kRightRpmAtPwm70)};
+        const double measured_rpm[] = {encoder.left.rpm, encoder.right.rpm};
+        int outputs[2] = {};
+        const double dt = speed_pi_last_update_us_ == 0
+                              ? kSpeedPiUpdateUs / 1000000.0
+                              : std::min(0.25, (now - speed_pi_last_update_us_) / 1000000.0);
+
+        for (int i = 0; i < 2; ++i) {
+            if ((i == 0 && encoder.left.no_pulses) || (i == 1 && encoder.right.no_pulses)) {
+                outputs[i] = std::clamp(static_cast<int>(std::lround(feed_forward[i])),
+                                        kSpeedPiMinimumPwmPercent, 100);
+                speed_pi_integral_[i] = 0;
+                continue;
+            }
+            const double error = target_rpm - measured_rpm[i];
+            const double candidate_integral =
+                std::clamp(speed_pi_integral_[i] + error * dt, -kSpeedPiIntegralLimit,
+                           kSpeedPiIntegralLimit);
+            const double raw_output =
+                feed_forward[i] + kSpeedPiKp * error + kSpeedPiKi * candidate_integral;
+            const double limited_output =
+                std::clamp(raw_output, static_cast<double>(kSpeedPiMinimumPwmPercent), 100.0);
+            if (raw_output == limited_output ||
+                (raw_output > 100.0 && error < 0) ||
+                (raw_output < kSpeedPiMinimumPwmPercent && error > 0)) {
+                speed_pi_integral_[i] = candidate_integral;
+            }
+            outputs[i] = static_cast<int>(std::lround(limited_output));
+        }
+
+        speed_pi_target_rpm_ = target_rpm;
+        speed_pi_output_percent_[0] = outputs[0];
+        speed_pi_output_percent_[1] = outputs[1];
+        speed_pi_last_update_us_ = now;
+        speed_pi_active_ = true;
+        if (!ApplyMotorPwmLocked(outputs[0], outputs[1]))
+            StopLocked();
     }
 
     bool ApplyWebDriveLocked(int left, int right) {
@@ -1242,9 +1387,7 @@ private:
                         Check(gpio_set_level(MOTOR_RIGHT_IN2_PIN, !right_forward));
         if (ok)
             encoder_.SetDrive(encoder_left, encoder_right, esp_timer_get_time());
-        const auto encoder = encoder_.Snapshot();
-        straight_start_left_m_ = encoder.left.distance_m;
-        straight_start_right_m_ = encoder.right.distance_m;
+        ResetSpeedPiLocked();
         return ok;
     }
 
@@ -1268,10 +1411,7 @@ private:
         if (brake_active_)
             return;
         UpdateDistanceSpeedProfileLocked(now);
-        if (!ApplyStraightEncoderSyncLocked()) {
-            StopLocked();
-            return;
-        }
+        UpdateSpeedPiLocked(now);
         if (web_session_ != 0 && (now >= web_deadline_us_ || !MotionAllowed())) {
             EndWebControlLocked();
         }
@@ -1374,14 +1514,18 @@ private:
                 distance_move_start_right_m_ = encoder.right.distance_m;
                 distance_move_state_ = DistanceMoveState::kMoving;
                 distance_profile_speed_percent_ =
-                    std::min(speed_percent_, kDistanceRampStartSpeedPercent);
+                    std::max(kDistanceMinimumDrivePercent,
+                             std::min(speed_percent_, kDistanceRampStartSpeedPercent));
                 distance_profile_update_us_ = esp_timer_get_time();
             }
+            moving_ = true;
+            ResetSpeedPiLocked();
+            if (kSpeedPiCalibrationValid)
+                speed_pi_startup_until_us_ = esp_timer_get_time() + kSpeedPiStartupUs;
             if (!ApplySpeedLocked()) {
                 StopLocked();
                 return;
             }
-            moving_ = true;
             // Count the requested duration from enabling the motors. A delayed
             // timer must never start a command that has already expired above.
             // Web deadlines are measured from reception, never from motor start.
@@ -1436,7 +1580,7 @@ private:
         const int distance_cm = properties["distance_cm"].value<int>();
         const int speed = properties["speed_percent"].value<int>();
         if (distance_cm < 1 || distance_cm > kMaxDistanceMoveCm || speed < -1 || speed > 100) {
-            return std::unexpected("Use distance_cm 1..100 and speed_percent -1..100.");
+            return std::unexpected("Use distance_cm 1..1000 and speed_percent -1..100.");
         }
         {
             std::lock_guard lock(mutex_);
@@ -1458,7 +1602,7 @@ private:
             pending_emotion_ = Emotion::kNone;
             StopLocked();
             speed_percent_ = next_speed;
-            if (!PrepareMotionLocked(motion, kMaxDurationMs))
+            if (!PrepareMotionLocked(motion, DistanceMoveTimeoutMs(distance_cm)))
                 return std::unexpected("Could not keep the motor deadline timer awake.");
             distance_move_target_cm_ = distance_cm;
             distance_move_progress_cm_ = 0;
@@ -1488,7 +1632,7 @@ private:
         manual_override_ = true;
         pending_emotion_ = Emotion::kNone;
         StopLocked();
-        if (!PrepareMotionLocked(motion, kMaxDurationMs))
+        if (!PrepareMotionLocked(motion, DistanceMoveTimeoutMs(distance_cm)))
             return ESP_FAIL;
         distance_move_target_cm_ = distance_cm;
         distance_move_progress_cm_ = 0;
@@ -1546,6 +1690,11 @@ private:
         bool autonomy_blocked;
         int64_t remaining_ms;
         esp_err_t fault;
+        bool speed_pi_active;
+        bool speed_pi_calibrated;
+        double speed_pi_target_rpm;
+        int left_pwm_percent;
+        int right_pwm_percent;
         Fc03EncoderStatus encoder;
         DistanceMoveState distance_move_state;
         int distance_move_target_cm;
@@ -1571,6 +1720,11 @@ private:
             gesture_active = gesture_steps_ != nullptr;
             web_manual = web_manual_;
             fault = fault_;
+            speed_pi_calibrated = kSpeedPiCalibrationValid;
+            speed_pi_active = speed_pi_active_;
+            speed_pi_target_rpm = speed_pi_target_rpm_;
+            left_pwm_percent = CurrentLeftPwmPercentLocked();
+            right_pwm_percent = CurrentRightPwmPercentLocked();
             encoder = encoder_.Snapshot();
             distance_move_state = distance_move_state_;
             distance_move_target_cm = distance_move_target_cm_;
@@ -1584,6 +1738,11 @@ private:
         if (!json || !cJSON_AddStringToObject(json.get(), "motion", MotionName(motion)) ||
             !cJSON_AddNumberToObject(json.get(), "speed_percent", speed) ||
             !cJSON_AddNumberToObject(json.get(), "active_speed_percent", active_speed) ||
+            !cJSON_AddBoolToObject(json.get(), "speed_pi_calibrated", speed_pi_calibrated) ||
+            !cJSON_AddBoolToObject(json.get(), "speed_pi_active", speed_pi_active) ||
+            !cJSON_AddNumberToObject(json.get(), "speed_pi_target_rpm", speed_pi_target_rpm) ||
+            !cJSON_AddNumberToObject(json.get(), "left_pwm_percent", left_pwm_percent) ||
+            !cJSON_AddNumberToObject(json.get(), "right_pwm_percent", right_pwm_percent) ||
             !cJSON_AddBoolToObject(json.get(), "emotion_motion_enabled", emotion_enabled) ||
             !cJSON_AddBoolToObject(json.get(), "emotion_motion_active", gesture_active) ||
             !cJSON_AddBoolToObject(json.get(), "web_manual_active", web_manual) ||
@@ -1650,11 +1809,13 @@ private:
             server.AddTool(
                 name,
                 std::string(description) +
-                    " distance_cm is required (1..100 cm of wheel travel, not HC-SR04 range). "
+                    " distance_cm is required (1..1000 cm of wheel travel, not HC-SR04 range). "
                     "Stops when each FC-03 wheel reaches the target distance. "
                     "speed_percent: 1..100 PWM duty, -1 keeps current speed. "
                     "Forward travel also stops near a detected obstacle. "
-                    "Stops on missing pulses, encoder failure, or a 10-second timeout. "
+                    "Stops on missing pulses, encoder failure, or a distance-scaled timeout "
+                    "(at least 10 seconds, 53 seconds maximum). Reverse travel has no rear sensor; "
+                    "ensure the path is clear. "
                     "Result confirms acceptance, not completion; check distance_move_state and "
                     "distance_move_progress_cm via self.motor.get_state. Do not repeat unless "
                     "asked.",

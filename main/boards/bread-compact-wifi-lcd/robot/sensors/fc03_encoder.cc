@@ -36,8 +36,8 @@ bool AddWheel(cJSON* parent, const char* name, const Fc03WheelStatus& wheel, boo
 
 #ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03
 constexpr int kCountLimit = 30000;
-constexpr int64_t kRatePeriodUs = 500000;
 constexpr int64_t kNoPulseTimeoutUs = 2000000;
+constexpr int64_t kRateStaleMinimumUs = 250000;
 constexpr int kPins[] = {FC03_LEFT_GPIO, FC03_RIGHT_GPIO};
 constexpr double kPulsesPerRev[] = {FC03_LEFT_PULSES_PER_REV, FC03_RIGHT_PULSES_PER_REV};
 constexpr double kDiameterMm[] = {FC03_LEFT_WHEEL_DIAMETER_MM, FC03_RIGHT_WHEEL_DIAMETER_MM};
@@ -94,7 +94,6 @@ void Fc03Encoder::Initialize() {
         }
     }
     status_.ready = true;
-    rate_at_us_ = esp_timer_get_time();
     if (!status_.calibrated) {
         ESP_LOGW(kTag,
                  "UNCALIBRATED: turn each wheel exactly 10 revolutions by hand; "
@@ -185,7 +184,6 @@ void Fc03Encoder::Update(int64_t now_us) {
         }
     }
     Fc03WheelStatus* wheels[] = {&status_.left, &status_.right};
-    const bool rate_due = now_us - rate_at_us_ >= kRatePeriodUs;
     bool expiring = false;
     for (int i = 0; i < 2; ++i) {
         if (wheels[i]->command == 0 && counters_[i].direction != 0 &&
@@ -209,8 +207,19 @@ void Fc03Encoder::Update(int64_t now_us) {
         counter.previous = count;
         wheel.pulses += delta;
         wheel.level = gpio_get_level(static_cast<gpio_num_t>(kPins[i]));
-        if (delta != 0)
+        if (delta != 0) {
+            if (counter.last_pulse_us > 0 && now_us > counter.last_pulse_us) {
+                const double sample_hz =
+                    delta * 1000000.0 / (now_us - counter.last_pulse_us);
+                wheel.hz = wheel.hz > 0 ? wheel.hz * 0.5 + sample_hz * 0.5 : sample_hz;
+            }
             counter.last_pulse_us = now_us;
+        } else if (counter.last_pulse_us > 0 && wheel.hz > 0) {
+            const int64_t stale_after_us =
+                std::max(kRateStaleMinimumUs, static_cast<int64_t>(3000000.0 / wheel.hz));
+            if (now_us - counter.last_pulse_us >= stale_after_us)
+                wheel.hz = 0;
+        }
         if (counter.direction == 0 && delta != 0) {
             wheel.unknown_direction_pulses += delta;
             status_.distance_complete = false;
@@ -223,14 +232,8 @@ void Fc03Encoder::Update(int64_t now_us) {
             wheel.distance_m = wheel.pulses * metres_per_pulse;
             segment_centre_m_ += delta * metres_per_pulse * counter.direction / 2.0;
         }
-        if (rate_due) {
-            wheel.hz = (wheel.pulses - counter.rate_baseline) * 1000000.0 / (now_us - rate_at_us_);
-            wheel.rpm = status_.calibrated ? wheel.hz * 60.0 / kPulsesPerRev[i] : 0;
-            counter.rate_baseline = wheel.pulses;
-        }
+        wheel.rpm = status_.calibrated ? wheel.hz * 60.0 / kPulsesPerRev[i] : 0;
     }
-    if (rate_due)
-        rate_at_us_ = now_us;
     // Keep a signed sum for each direction segment. Taking abs on EVERY sample would
     // incorrectly add distance while spinning, because left/right pulses are asynchronous.
     status_.travel_m = completed_travel_m_ + std::abs(segment_centre_m_);
@@ -260,9 +263,14 @@ void Fc03Encoder::SetDrive(int left, int right, int64_t now_us) {
         wheel.no_pulses = false;
         if (commands[i] == 0) {
             counter.coast_until_us = now_us + FC03_COAST_MS * 1000LL;
-        } else if (counter.direction != commands[i]) {
-            FinishSegment();
-            counter.direction = commands[i];
+        } else {
+            counter.last_pulse_us = 0;
+            wheel.hz = 0;
+            wheel.rpm = 0;
+            if (counter.direction != commands[i]) {
+                FinishSegment();
+                counter.direction = commands[i];
+            }
         }
     }
 #else

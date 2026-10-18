@@ -340,6 +340,13 @@
 #define FC03_LEFT_WHEEL_DIAMETER_MM 60.0
 #define FC03_RIGHT_WHEEL_DIAMETER_MM 60.0
 
+// Enter steady wheel RPM at 50% and 70% PWM to enable per-side PI. Measure on the floor,
+// with the normal battery and load, after speed has settled. Zero keeps PI disabled.
+#define FC03_LEFT_RPM_AT_PWM_50 183.3
+#define FC03_LEFT_RPM_AT_PWM_70 280.1
+#define FC03_RIGHT_RPM_AT_PWM_50 172.4
+#define FC03_RIGHT_RPM_AT_PWM_70 269.5
+
 // PCNT rejects pulses shorter than this (ESP32-S3: keep <= 12000 ns).
 #define FC03_GLITCH_FILTER_NS 10000
 // Continue inferring the previous direction briefly after PWM stops (coasting).

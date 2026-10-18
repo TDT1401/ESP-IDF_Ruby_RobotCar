@@ -29,7 +29,7 @@ void SetL298nWebConnected(bool connected);
 esp_err_t SetL298nMotorSpeed(int speed_percent);
 
 // Start an encoder-controlled straight-line move (FC-03 builds only).
-// Distance is 1..100 cm; forward movement also observes the obstacle stop threshold.
+// Distance is 1..1000 cm; forward movement also observes the obstacle stop threshold.
 esp_err_t MoveL298nDistance(bool forward, int distance_cm);
 
 // Thread-safe HC-SR04 autonomous modes. Modes are mutually exclusive and RAM-only.
@@ -64,5 +64,10 @@ struct L298nMotorStatus {
     const char* distance_move_state;
     int distance_move_target_cm;
     double distance_move_progress_cm;
+    bool speed_pi_calibrated;
+    bool speed_pi_active;
+    double speed_pi_target_rpm;
+    int left_pwm_percent;
+    int right_pwm_percent;
 };
 L298nMotorStatus GetL298nMotorStatus();

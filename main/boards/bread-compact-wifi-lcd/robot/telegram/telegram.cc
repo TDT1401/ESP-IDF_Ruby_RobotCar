@@ -644,7 +644,7 @@ private:
 
     void HandleDistanceMove(const std::string& argument, bool forward) {
         int distance_cm = 0;
-        if (!ParseUnsigned(argument, 100, distance_cm) || distance_cm < 1) {
+        if (!ParseUnsigned(argument, 1000, distance_cm) || distance_cm < 1) {
             Send(L298nTelegramText::kDistanceMoveUsage, true);
             return;
         }
