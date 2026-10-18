@@ -8,15 +8,12 @@ namespace L298nTelegramText {
 
 inline constexpr char kDivider[] = "━━━━━━━━━━━━━━━━";
 
-inline constexpr char kStatusHeader[] = "<b>🤖 XiaoMin ROBOT</b>";
+inline constexpr char kStatusHeader[] = "<b>🤖 RUBY · TRẠNG THÁI</b>";
 inline constexpr char kSystemSection[] = "<b>🧠 HỆ THỐNG</b>";
 inline constexpr char kDeviceSection[] = "<b>🔌 THIẾT BỊ</b>";
 inline constexpr char kMotorSection[] = "<b>🚗 ĐỘNG CƠ</b>";
-inline constexpr char kNavigationSection[] = "<b>📡 HC-SR04 / TỰ HÀNH</b>";
+inline constexpr char kNavigationSection[] = "<b>📡 CẢM BIẾN &amp; TỰ HÀNH</b>";
 inline constexpr char kNetworkSection[] = "<b>📶 KẾT NỐI</b>";
-inline constexpr char kStatusFooter[] =
-    "<i>Motor hiển thị lệnh/PWM, không phải tốc độ đo từ bánh xe. Màn hình, motor, loa và mic "
-    "không có đường nhận dạng thiết bị; trạng thái chỉ xác nhận phía firmware.</i>";
 inline constexpr char kStateLabel[] = "• Trạng thái: ";
 inline constexpr char kFirmwareLabel[] = "• Firmware: ";
 inline constexpr char kUptimeLabel[] = "• Hoạt động: ";
@@ -45,7 +42,6 @@ inline constexpr char kWebUnavailableStatus[] = "🌐 Trang điều khiển web 
 inline constexpr char kWebLinkPrefix[] = "🔗 ";
 inline constexpr char kStatusWebLinkPrefix[] = "🌐 ";
 inline constexpr char kWebAddressLabel[] = "📍 Địa chỉ: ";
-inline constexpr char kBootFirmwareLabel[] = "📦 Firmware: ";
 inline constexpr char kHardwareErrorPrefix[] = "❌ ";
 inline constexpr char kDeviceReady[] = "✅ Sẵn sàng";
 inline constexpr char kDeviceActive[] = "✅ Đang hoạt động";
@@ -104,32 +100,24 @@ inline constexpr char kMotionRight[] = "↪️ Xoay phải";
 inline constexpr char kMotionStopped[] = "⏹️ Đứng yên";
 
 inline constexpr char kMenu[] =
-    "<b>🤖 XiaoMin ROBOT</b>\n"
+    "<b>🤖 Ruby · ĐIỀU KHIỂN XE</b>\n"
     "━━━━━━━━━━━━━━━━\n"
-    "⬆️ /forward CM — Tiến theo quãng đường; /backward CM — Lùi theo quãng đường (1-1000 cm)\n"
-    "<b>📋 DANH SÁCH LỆNH</b>\n\n"
-    "🎙️ /wake — Đánh thức XiaoMin để trò chuyện\n"
-    "⚙️ /speed — Xem tốc độ; /speed 50 — Đặt PWM 50%\n"
-    "👣 /follow on|off|CM — Follow; mặc định 30 cm\n"
-    "🧭 /avoid on|off|CM — Tự hành né vật cản; mặc định 20 cm\n"
-    "⏹️ /stop — Dừng motor và tắt tự hành\n"
-    "🔎 /status — Xem trạng thái XiaoMin\n"
-    "🌐 /web — Mở trang điều khiển xe\n"
-    "📖 /menu — Hiển thị menu này\n\n"
-    "<i>Sau khi đánh thức, hãy nói vào mic trên XiaoMin. Điều khiển xe thực hiện trên trang web "
-    "hoặc bằng giọng nói.</i>";
+    "Chọn chức năng bằng các nút bên dưới.\n"
+    "⬆️ Tiến / ⬇️ Lùi: chạm nút rồi nhập khoảng cách bằng cm (1–1000).\n"
+    "🎙️ Đánh thức Ruby để trò chuyện; 🌐 mở trang điều khiển xe.\n"
+    "📊 Trạng thái và các nút tự hành cũng có sẵn bên dưới.";
 
 inline constexpr char kWakeRequested[] =
-    "🎙️ Đã gửi yêu cầu đánh thức. Chờ XiaoMin chuyển sang lắng nghe rồi nói vào mic trên XiaoMin.\n"
-    "Gửi /status để kiểm tra nếu XiaoMin chưa phản hồi.";
+    "🎙️ Đã gửi yêu cầu đánh thức. Chờ Ruby chuyển sang lắng nghe rồi nói vào mic trên Ruby.\n"
+    "Chạm nút 📊 Trạng thái nếu Ruby chưa phản hồi.";
 inline constexpr char kWakeAlreadyListening[] =
-    "👂 XiaoMin đang lắng nghe. Bạn có thể nói vào mic trên XiaoMin.";
+    "👂 Ruby đang lắng nghe. Bạn có thể nói vào mic trên Ruby.";
 inline constexpr char kWakeConnecting[] =
-    "⏳ XiaoMin đang kết nối máy chủ. Hãy chờ XiaoMin chuyển sang lắng nghe.";
+    "⏳ Ruby đang kết nối máy chủ. Hãy chờ Ruby chuyển sang lắng nghe.";
 inline constexpr char kWakeSpeaking[] =
-    "🗣️ XiaoMin đang nói. Hãy chờ XiaoMin nói xong và chuyển sang lắng nghe.";
+    "🗣️ Ruby đang nói. Hãy chờ Ruby nói xong và chuyển sang lắng nghe.";
 inline constexpr char kWakeUnavailable[] =
-    "⚠️ XiaoMin chưa sẵn sàng để đánh thức. Gửi /status để xem trạng thái và thử lại khi XiaoMin sẵn "
+    "⚠️ Ruby chưa sẵn sàng để đánh thức. Chạm nút 📊 Trạng thái để kiểm tra rồi thử lại khi Ruby sẵn "
     "sàng.";
 
 inline constexpr char kSpeedCurrentPrefix[] = "⚙️ Tốc độ đã đặt: ";
@@ -147,18 +135,25 @@ inline constexpr char kSpeedWebBusy[] =
     "🎮 Web đang giữ quyền điều khiển motor. Hãy bấm “Trả về giọng nói” trên web rồi gửi lại "
     "/speed.";
 inline constexpr char kSpeedHardwareError[] =
-    "❌ Có lỗi phần cứng motor khi đặt tốc độ. Gửi /status để kiểm tra, kiểm tra dây nối và khởi "
+    "❌ Có lỗi phần cứng motor khi đặt tốc độ. Chạm nút 📊 Trạng thái để kiểm tra dây nối và khởi "
     "động lại.";
 
 inline constexpr char kDistanceMoveUsage[] =
-    "Dùng <code>/forward CM</code> hoặc <code>/backward CM</code> với CM từ 1 đến 1000, ví dụ: "
-    "<code>/forward 30</code>. Lệnh cần hai encoder FC-03 đã được hiệu chuẩn.";
+    "Khoảng cách phải là số nguyên từ 1 đến 1000 cm. Cần hai encoder FC-03 đã được hiệu chuẩn.";
+inline constexpr char kForwardDistancePrompt[] =
+    "⬆️ Nhập quãng đường muốn tiến bằng cm (1–1000). Ví dụ: <code>100</code>.";
+inline constexpr char kBackwardDistancePrompt[] =
+    "⬇️ Nhập quãng đường muốn lùi bằng cm (1–1000). Ví dụ: <code>100</code>.";
+inline constexpr char kDistanceInputInvalid[] =
+    "Hãy nhập một số nguyên từ 1 đến 1000 cm. Xe chưa bắt đầu chạy.";
+inline constexpr char kDistanceInputExpired[] =
+    "Yêu cầu nhập quãng đường đã hết hạn. Chạm nút Tiến hoặc Lùi để bắt đầu lại.";
 inline constexpr char kDistanceMoveAccepted[] =
-    "✅ Đã bắt đầu chạy theo quãng đường encoder. Gửi /status để xem tiến độ; motor tự dừng khi đạt mục tiêu.";
+    "✅ Đã nhận lệnh chạy theo quãng đường encoder. Motor tự dừng khi đạt mục tiêu.";
 inline constexpr char kDistanceMoveWebBusy[] =
     "🎮 Web đang giữ quyền điều khiển motor. Hãy trả quyền trên trang web rồi gửi lại lệnh.";
 inline constexpr char kDistanceMoveUnavailable[] =
-    "❌ Không thể chạy theo quãng đường: FC-03 chưa sẵn sàng/hiệu chuẩn, PWM đang bằng 0, hoặc motor không thể chạy. Kiểm tra /status.";
+    "❌ Không thể chạy theo quãng đường: FC-03 chưa sẵn sàng/hiệu chuẩn, PWM đang bằng 0, hoặc motor không thể chạy. Chạm nút 📊 Trạng thái để kiểm tra.";
 
 inline constexpr char kFollowUsage[] =
     "Dùng <code>/follow on</code>, <code>/follow off</code> hoặc <code>/follow N</code> với N từ "
@@ -175,12 +170,12 @@ inline constexpr char kWebReadyHeader[] =
     "━━━━━━━━━━━━━━━━\n"
     "✅ Trang điều khiển đã sẵn sàng.\n\n";
 inline constexpr char kWebReadyFooter[] =
-    "\n\n<i>Thiết bị mở link cần truy cập được cùng mạng Wi-Fi hoặc hotspot với XiaoMin.</i>";
+    "\n\n<i>Thiết bị mở link cần truy cập được cùng mạng Wi-Fi hoặc hotspot với Ruby.</i>";
 inline constexpr char kWebWifiDisconnected[] =
     "<b>🌐 ĐIỀU KHIỂN XE</b>\n"
     "━━━━━━━━━━━━━━━━\n"
-    "❌ XiaoMin đã mất kết nối Wi-Fi.\n\n"
-    "Hãy chờ XiaoMin kết nối lại rồi gửi /web lần nữa.";
+    "❌ Ruby đã mất kết nối Wi-Fi.\n\n"
+    "Hãy chờ Ruby kết nối lại rồi gửi /web lần nữa.";
 inline constexpr char kWebServerUnavailable[] =
     "<b>🌐 ĐIỀU KHIỂN XE</b>\n"
     "━━━━━━━━━━━━━━━━\n"
@@ -188,16 +183,14 @@ inline constexpr char kWebServerUnavailable[] =
     "Vui lòng thử lại sau vài giây hoặc kiểm tra log <code>L298nWeb</code>.";
 
 inline constexpr char kBootHeader[] =
-    "<b>🚀 XiaoMin ĐÃ SẴN SÀNG</b>\n"
-    "━━━━━━━━━━━━━━━━\n"
-    "✅ XiaoMin đã khởi động và kết nối Wi-Fi.\n";
-inline constexpr char kIpChangedHeader[] =
-    "<b>🔄 ĐỊA CHỈ XiaoMin ROBOT ĐÃ THAY ĐỔI</b>\n"
-    "━━━━━━━━━━━━━━━━\n"
-    "✅ XiaoMin Robot đã kết nối lại mạng với địa chỉ mới.\n";
+    "<b>🚀 Ruby ĐÃ SẴN SÀNG</b>\n"
+    "━━━━━━━━━━━━━━━━\n";
 inline constexpr char kBootFooter[] =
-    "\n\nGửi /status để xem tình trạng XiaoMin hoặc /menu để xem các lệnh.";
-
+    "\nGửi /status để xem tình trạng XiaoMin hoặc /menu để xem các lệnh.";
+inline constexpr char kIpChangedHeader[] =
+    "<b>🔄 ĐỊA CHỈ Ruby ROBOT ĐÃ THAY ĐỔI</b>\n"
+    "━━━━━━━━━━━━━━━━\n"
+    "✅ Ruby Robot đã kết nối lại mạng với địa chỉ mới.\n";
 inline constexpr char kUnknownCommand[] =
     "<b>❓ LỆNH CHƯA ĐƯỢC HỖ TRỢ</b>\n"
     "━━━━━━━━━━━━━━━━\n"
@@ -205,6 +198,6 @@ inline constexpr char kUnknownCommand[] =
 
 // Telegram reply keyboard. Keep this as valid JSON.
 inline constexpr char kKeyboardJson[] =
-    R"({"keyboard":[["/wake","/stop"],["/follow on","/follow off"],["/avoid on","/avoid off"],["/status","/web"],["/menu"]],"resize_keyboard":true})";
+    R"({"keyboard":[["⬆️ Tiến theo cm","⬇️ Lùi theo cm"],["🎙️ Đánh thức","⏹️ Dừng xe"],["👣 Bật Follow","👣 Tắt Follow"],["🚧 Bật né vật cản","🚧 Tắt né vật cản"],["📊 Trạng thái","🌐 Mở trang web"],["🐢 Tốc độ 50%","🚗 Tốc độ 75%","⚡ Tốc độ 100%"],["📖 Trợ giúp"]],"resize_keyboard":true})";
 
 }  // namespace L298nTelegramText

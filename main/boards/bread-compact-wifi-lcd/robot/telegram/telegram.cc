@@ -11,7 +11,6 @@
 
 #if L298N_TELEGRAM_ENABLED && defined(CONFIG_MBEDTLS_CERTIFICATE_BUNDLE)
 
-#include <esp_app_desc.h>
 #include <esp_crt_bundle.h>
 #include <esp_http_client.h>
 #include <esp_log.h>
@@ -71,78 +70,12 @@ std::string LowerAscii(std::string text) {
 }
 
 bool ParseUnsigned(const std::string& text, int maximum, int& value) {
-    if (text.empty() || text.size() > 3 ||
+    if (text.empty() || text.size() > std::to_string(maximum).size() ||
         text.find_first_not_of("0123456789") != std::string::npos) {
         return false;
     }
     value = std::atoi(text.c_str());
     return value <= maximum;
-}
-
-const char* StateName(DeviceState state) {
-    switch (state) {
-        case kDeviceStateStarting:
-            return L298nTelegramText::kStateStarting;
-        case kDeviceStateWifiConfiguring:
-            return L298nTelegramText::kStateWifiConfiguring;
-        case kDeviceStateIdle:
-            return L298nTelegramText::kStateIdle;
-        case kDeviceStateConnecting:
-            return L298nTelegramText::kStateConnecting;
-        case kDeviceStateListening:
-            return L298nTelegramText::kStateListening;
-        case kDeviceStateSpeaking:
-            return L298nTelegramText::kStateSpeaking;
-        case kDeviceStateNotifying:
-            return L298nTelegramText::kStateNotifying;
-        case kDeviceStateUpgrading:
-            return L298nTelegramText::kStateUpgrading;
-        case kDeviceStateActivating:
-            return L298nTelegramText::kStateActivating;
-        case kDeviceStateAudioTesting:
-            return L298nTelegramText::kStateAudioTesting;
-        case kDeviceStateFatalError:
-            return L298nTelegramText::kStateFatalError;
-        default:
-            return L298nTelegramText::kStateUnknown;
-    }
-}
-
-const char* StateIcon(DeviceState state) {
-    switch (state) {
-        case kDeviceStateIdle:
-            return L298nTelegramText::kStateIconIdle;
-        case kDeviceStateListening:
-            return L298nTelegramText::kStateIconListening;
-        case kDeviceStateSpeaking:
-            return L298nTelegramText::kStateIconSpeaking;
-        case kDeviceStateFatalError:
-            return L298nTelegramText::kStateIconFatalError;
-        case kDeviceStateUpgrading:
-            return L298nTelegramText::kStateIconUpgrading;
-        default:
-            return L298nTelegramText::kStateIconDefault;
-    }
-}
-
-const char* MotionNameVi(const char* motion) {
-    if (strcmp(motion, "forward") == 0)
-        return L298nTelegramText::kMotionForward;
-    if (strcmp(motion, "backward") == 0)
-        return L298nTelegramText::kMotionBackward;
-    if (strcmp(motion, "turn_left") == 0)
-        return L298nTelegramText::kMotionLeft;
-    if (strcmp(motion, "turn_right") == 0)
-        return L298nTelegramText::kMotionRight;
-    return L298nTelegramText::kMotionStopped;
-}
-
-const char* NavigationModeVi(const char* mode) {
-    if (strcmp(mode, "follow") == 0)
-        return L298nTelegramText::kNavigationFollow;
-    if (strcmp(mode, "obstacle_avoidance") == 0)
-        return L298nTelegramText::kNavigationAvoid;
-    return L298nTelegramText::kNavigationManual;
 }
 
 const char* RssiQuality(int rssi) {
@@ -171,201 +104,76 @@ std::string WebMessage() {
 std::string StatusMessage() {
     auto& wifi = WifiManager::GetInstance();
     const auto motor = GetL298nMotorStatus();
-    const auto state = Application::GetInstance().GetDeviceState();
-    auto& board = Board::GetInstance();
-    auto* display = board.GetDisplay();
-    auto* codec = board.GetAudioCodec();
-    const auto uptime = esp_timer_get_time() / 1000000;
     const int rssi = wifi.GetRssi();
-    const bool motor_ok = motor.hardware_error == ESP_OK;
-    const char* control_text = L298nTelegramText::kControlVoice;
-    if (motor.web_manual)
-        control_text = L298nTelegramText::kControlWeb;
-    else if (strcmp(motor.autonomy_mode, "manual") != 0)
-        control_text = L298nTelegramText::kControlAutonomy;
-    const char* motor_state_text = motor.moving    ? L298nTelegramText::kMotorRunning
-                                   : motor.pending ? L298nTelegramText::kMotorPending
-                                                   : L298nTelegramText::kMotorIdle;
-    const char* emotion_text =
-        motor.emotion_enabled ? L298nTelegramText::kEmotionOn : L298nTelegramText::kEmotionOff;
-    const char* wifi_text = wifi.IsConnected() ? L298nTelegramText::kWifiConnected
-                                               : L298nTelegramText::kWifiDisconnected;
-    char uptime_text[64];
-    snprintf(uptime_text, sizeof(uptime_text), L298nTelegramText::kUptimeFormat,
-             static_cast<long long>(uptime / 3600), static_cast<long long>(uptime / 60 % 60),
-             static_cast<long long>(uptime % 60));
+    const bool wifi_connected = wifi.IsConnected();
+    const char* wifi_text = wifi_connected ? L298nTelegramText::kWifiConnected
+                                          : L298nTelegramText::kWifiDisconnected;
+    const int64_t uptime_seconds = esp_timer_get_time() / 1000000;
+    char uptime_text[80];
+    snprintf(uptime_text, sizeof(uptime_text), "%lld giờ %lld phút %lld giây",
+             static_cast<long long>(uptime_seconds / 3600),
+             static_cast<long long>(uptime_seconds / 60 % 60),
+             static_cast<long long>(uptime_seconds % 60));
 
     std::string message;
-    message.reserve(1536);
+    message.reserve(800);
     message += L298nTelegramText::kStatusHeader;
     message += "\n";
     message += L298nTelegramText::kDivider;
-    message += "\n";
-    message += L298nTelegramText::kSystemSection;
-    message += "\n";
-    message += L298nTelegramText::kStateLabel;
-    message += StateIcon(state);
-    message += " <b>";
-    message += StateName(state);
-    message += "</b>\n";
-    message += L298nTelegramText::kFirmwareLabel;
-    message += "<code>";
-    message += esp_app_get_description()->version;
-    message += "</code>\n";
-    message += L298nTelegramText::kUptimeLabel;
-    message += uptime_text;
-
-    message += "\n\n";
-    message += L298nTelegramText::kDeviceSection;
-    message += "\n";
-    message += L298nTelegramText::kDisplayDeviceLabel;
-    if (display == nullptr) {
-        message += L298nTelegramText::kDeviceNoInfo;
-    } else if (!display->IsSetupUICalled() || display->width() <= 0 || display->height() <= 0) {
-        message += L298nTelegramText::kDisplayNotReady;
-    } else {
-        message += L298nTelegramText::kDeviceActive;
-        message += " · " + std::to_string(display->width()) + "x" +
-                   std::to_string(display->height());
-    }
-    message += "\n";
-    message += L298nTelegramText::kMotorDeviceLabel;
-    if (!motor_ok) {
-        message += L298nTelegramText::kHardwareErrorPrefix;
-        message += "Lỗi: ";
-        message += esp_err_to_name(motor.hardware_error);
-    } else {
-        message += motor.moving ? L298nTelegramText::kDeviceActive
-                                : L298nTelegramText::kDeviceReady;
-    }
-    message += "\n";
-    message += L298nTelegramText::kSpeakerDeviceLabel;
-    if (codec == nullptr || codec->output_sample_rate() <= 0) {
-        message += L298nTelegramText::kDeviceNoInfo;
-    } else {
-        message += codec->output_enabled() ? L298nTelegramText::kDeviceActive
-                                           : L298nTelegramText::kDeviceReady;
-        message += " · " + std::to_string(codec->output_sample_rate()) + " Hz";
-    }
-    message += "\n";
-    message += L298nTelegramText::kMicrophoneDeviceLabel;
-    if (codec == nullptr || codec->input_sample_rate() <= 0) {
-        message += L298nTelegramText::kDeviceNoInfo;
-    } else {
-        message += codec->input_enabled() ? L298nTelegramText::kDeviceActive
-                                          : L298nTelegramText::kDeviceReady;
-        message += " · " + std::to_string(codec->input_sample_rate()) + " Hz";
-    }
-    message += "\n";
+    message += "\n\n" + std::string(L298nTelegramText::kNavigationSection) + "\n";
     message += L298nTelegramText::kSr04DeviceLabel;
     if (motor.distance_valid) {
-        message += L298nTelegramText::kDeviceActive;
-        message += " · <b>" + std::to_string(motor.measured_distance_cm) + " cm</b>";
+        message += "<b>" + std::to_string(motor.measured_distance_cm) + " cm</b>\n";
     } else {
         message += L298nTelegramText::kSr04NoEcho;
+        message += "\n";
     }
-
-    message += "\n\n";
-    message += L298nTelegramText::kMotorSection;
-    message += "\n";
-    message += L298nTelegramText::kControlLabel;
-    message += "<b>";
-    message += control_text;
-    message += "</b>\n";
-    message += L298nTelegramText::kDirectionLabel;
-    message += MotionNameVi(motor.motion);
-    message += "\n";
-    message += L298nTelegramText::kMotionStateLabel;
-    message += motor_state_text;
-    message += "\n";
-    message += L298nTelegramText::kActivePwmLabel;
-    message += "<b>" + std::to_string(motor.active_speed_percent) + "%</b>\n";
-    message += L298nTelegramText::kSavedSpeedLabel;
-    message += std::to_string(motor.speed_percent) + "%\n";
-    if (motor.encoder.enabled) {
-        const auto& encoder = motor.encoder;
-        message += "FC-03: ";
-        if (!encoder.ready) {
-            message += std::string("lỗi ") + esp_err_to_name(encoder.error) + "\n";
-        } else {
-            message += "xung trái/phải <b>" + std::to_string(encoder.left.pulses) + "/" +
-                       std::to_string(encoder.right.pulses) + "</b>\n";
-            if (encoder.calibrated) {
-                char measured[256];
-                snprintf(measured, sizeof(measured),
-                         "RPM trái/phải: %.1f / %.1f\n"
-                         "Quãng đường bánh trái/phải: %.3f / %.3f m\n"
-                         "Xe đã đi (ước lượng từ lúc bật): <b>%.3f m</b>\n",
-                         encoder.left.rpm, encoder.right.rpm, encoder.left.distance_m,
-                         encoder.right.distance_m, encoder.travel_m);
-                message += measured;
-                if (!encoder.distance_complete)
-                    message += "⚠ Quãng đường thiếu xung không xác định được chiều quay.\n";
-            } else {
-                message += "Chưa hiệu chuẩn số xung/vòng và đường kính bánh trong config.h.\n";
-            }
-            if (encoder.left.no_pulses || encoder.right.no_pulses) {
-                message += "⚠ Có lệnh chạy nhưng không có xung: ";
-                if (encoder.left.no_pulses)
-                    message += "trái ";
-                if (encoder.right.no_pulses)
-                    message += "phải";
-                message += ". Kiểm tra cảm biến hoặc motor.\n";
-            }
-        }
-    }
-    message += L298nTelegramText::kEmotionLabel;
-    message += emotion_text;
-    if (motor.gesture_active)
-        message += L298nTelegramText::kEmotionActiveSuffix;
-    message += "\n";
-    message += L298nTelegramText::kHardwareLabel;
-    if (motor_ok) {
-        message += L298nTelegramText::kHardwareOk;
-    } else {
-        message += L298nTelegramText::kHardwareErrorPrefix;
-        message += esp_err_to_name(motor.hardware_error);
-    }
-
-    message += "\n\n";
-    message += L298nTelegramText::kNavigationSection;
-    message += "\n";
-    message += L298nTelegramText::kNavigationModeLabel;
-    message += "<b>";
-    message += NavigationModeVi(motor.autonomy_mode);
-    message += "</b>\n";
     message += L298nTelegramText::kFollowDistanceLabel;
     message += std::to_string(motor.follow_distance_cm) + " cm\n";
     message += L298nTelegramText::kObstacleDistanceLabel;
-    message += std::to_string(motor.obstacle_distance_cm) + " cm\n";
-    message += L298nTelegramText::kBlockedLabel;
-    message += motor.autonomy_blocked ? L298nTelegramText::kPathBlocked
-                                      : L298nTelegramText::kPathClear;
+    message += std::to_string(motor.obstacle_distance_cm) + " cm\n\n";
 
+    message += L298nTelegramText::kDivider;
+    message += "\n\n<b>📊 HOẠT ĐỘNG</b>\n";
+    message += "• Xe đã đi (ước lượng từ lúc bật): ";
+    if (!motor.encoder.enabled) {
+        message += "FC-03 chưa bật";
+    } else if (!motor.encoder.ready) {
+        message += std::string("Lỗi: ") + esp_err_to_name(motor.encoder.error);
+    } else if (!motor.encoder.calibrated) {
+        message += "Chưa hiệu chuẩn FC-03";
+    } else {
+        char travel_text[32];
+        snprintf(travel_text, sizeof(travel_text), "<b>%.3f m</b>", motor.encoder.travel_m);
+        message += travel_text;
+        if (!motor.encoder.distance_complete)
+            message += " ⚠️ thiếu xung, số đo có thể chưa đủ";
+    }
+    message += "\n• Hoạt động: ";
+    message += uptime_text;
     message += "\n\n";
-    message += L298nTelegramText::kNetworkSection;
-    message += "\n";
+
+    message += L298nTelegramText::kDivider;
+    message += "\n\n" + std::string(L298nTelegramText::kNetworkSection) + "\n";
     message += L298nTelegramText::kWifiLabel;
     message += wifi_text;
     message += "\n";
     message += L298nTelegramText::kSignalLabel;
-    message += std::to_string(rssi) + L298nTelegramText::kSignalUnitSeparator + RssiQuality(rssi) +
-               "\n";
+    message += std::to_string(rssi) + L298nTelegramText::kSignalUnitSeparator +
+               RssiQuality(rssi) + "\n";
     message += L298nTelegramText::kIpLabel;
     message += "<code>" + wifi.GetIpAddress() + "</code>\n";
     message += L298nTelegramText::kFreeRamLabel;
-    message += std::to_string(esp_get_free_heap_size() / 1024) + L298nTelegramText::kMemoryUnit +
-               "\n";
+    message += std::to_string(esp_get_free_heap_size() / 1024) + L298nTelegramText::kMemoryUnit;
 
-    if (wifi.IsConnected() && IsL298nWebServerRunning()) {
-        message += "\n";
-        message += L298nTelegramText::kStatusWebLinkPrefix;
-        message += "<a href=\"http://" + wifi.GetIpAddress() + ":8080\">" +
-                   L298nTelegramText::kWebOpenText + "</a>";
+    if (wifi_connected && IsL298nWebServerRunning()) {
+        message += "\n\n" + std::string(L298nTelegramText::kStatusWebLinkPrefix);
+        message += "<a href=\"http://" + wifi.GetIpAddress() + ":8080\">";
+        message += L298nTelegramText::kWebOpenText;
+        message += "</a>";
     } else {
-        message += "\n" + std::string(L298nTelegramText::kWebUnavailableStatus);
+        message += "\n\n" + std::string(L298nTelegramText::kWebUnavailableStatus);
     }
-    message += "\n\n" + std::string(L298nTelegramText::kStatusFooter);
     return message;
 }
 
@@ -437,6 +245,8 @@ private:
     int64_t chat_id_ = 0;
     int64_t offset_ = -1;  // Discard the pre-boot backlog before announcing readiness.
     int64_t retry_at_us_ = 0;
+    int64_t distance_prompt_deadline_us_ = 0;
+    int pending_distance_direction_ = 0;  // 1 forward, -1 backward, 0 none.
     bool overflow_ = false;
 
     Telegram() = default;
@@ -565,9 +375,29 @@ private:
         return Json(nullptr, cJSON_Delete);
     }
 
-    bool Send(const std::string& text, bool html = false) {
+    bool Send(const std::string& text, bool html = false, bool add_web_button = false) {
         Json request(cJSON_CreateObject(), cJSON_Delete);
-        Json keyboard(cJSON_Parse(L298nTelegramText::kKeyboardJson), cJSON_Delete);
+        Json keyboard(nullptr, cJSON_Delete);
+        if (add_web_button && IsL298nWebServerRunning()) {
+            keyboard.reset(cJSON_CreateObject());
+            Json row(cJSON_CreateArray(), cJSON_Delete);
+            Json button(cJSON_CreateObject(), cJSON_Delete);
+            const std::string url =
+                "http://" + WifiManager::GetInstance().GetIpAddress() + ":8080";
+            const std::string button_text = L298nTelegramText::kStatusWebLinkPrefix +
+                                            std::string(L298nTelegramText::kWebOpenText);
+            if (!keyboard || !row || !button ||
+                !cJSON_AddStringToObject(button.get(), "text", button_text.c_str()) ||
+                !cJSON_AddStringToObject(button.get(), "url", url.c_str()))
+                return false;
+            cJSON_AddItemToArray(row.get(), button.release());
+            auto* rows = cJSON_AddArrayToObject(keyboard.get(), "inline_keyboard");
+            if (rows == nullptr)
+                return false;
+            cJSON_AddItemToArray(rows, row.release());
+        } else {
+            keyboard.reset(cJSON_Parse(L298nTelegramText::kKeyboardJson));
+        }
         if (!request || !keyboard ||
             !cJSON_AddStringToObject(request.get(), "chat_id", L298N_TELEGRAM_CHAT_ID) ||
             !cJSON_AddStringToObject(request.get(), "text", text.c_str()))
@@ -693,6 +523,74 @@ private:
         }
     }
 
+    void RequestDistanceInput(bool forward) {
+        pending_distance_direction_ = forward ? 1 : -1;
+        distance_prompt_deadline_us_ = esp_timer_get_time() + 60000000;
+        Send(forward ? L298nTelegramText::kForwardDistancePrompt
+                     : L298nTelegramText::kBackwardDistancePrompt,
+             true);
+    }
+
+    bool HandleButton(const std::string& input) {
+        if (input == "⬆️ Tiến theo cm") {
+            RequestDistanceInput(true);
+        } else if (input == "⬇️ Lùi theo cm") {
+            RequestDistanceInput(false);
+        } else if (input == "🎙️ Đánh thức") {
+            pending_distance_direction_ = 0;
+            distance_prompt_deadline_us_ = 0;
+            HandleWake();
+        } else if (input == "⏹️ Dừng xe") {
+            pending_distance_direction_ = 0;
+            distance_prompt_deadline_us_ = 0;
+            StopL298nMotor();
+            Send(L298nTelegramText::kEmergencyStopped, true);
+        } else if (input == "👣 Bật Follow") {
+            pending_distance_direction_ = 0;
+            distance_prompt_deadline_us_ = 0;
+            HandleAutonomy("on", true);
+        } else if (input == "👣 Tắt Follow") {
+            pending_distance_direction_ = 0;
+            distance_prompt_deadline_us_ = 0;
+            HandleAutonomy("off", true);
+        } else if (input == "🚧 Bật né vật cản") {
+            pending_distance_direction_ = 0;
+            distance_prompt_deadline_us_ = 0;
+            HandleAutonomy("on", false);
+        } else if (input == "🚧 Tắt né vật cản") {
+            pending_distance_direction_ = 0;
+            distance_prompt_deadline_us_ = 0;
+            HandleAutonomy("off", false);
+        } else if (input == "📊 Trạng thái") {
+            pending_distance_direction_ = 0;
+            distance_prompt_deadline_us_ = 0;
+            Send(StatusMessage(), true);
+        } else if (input == "🌐 Mở trang web") {
+            pending_distance_direction_ = 0;
+            distance_prompt_deadline_us_ = 0;
+            Send(WebMessage(), true);
+        } else if (input == "🐢 Tốc độ 50%") {
+            pending_distance_direction_ = 0;
+            distance_prompt_deadline_us_ = 0;
+            HandleSpeed("50");
+        } else if (input == "🚗 Tốc độ 75%") {
+            pending_distance_direction_ = 0;
+            distance_prompt_deadline_us_ = 0;
+            HandleSpeed("75");
+        } else if (input == "⚡ Tốc độ 100%") {
+            pending_distance_direction_ = 0;
+            distance_prompt_deadline_us_ = 0;
+            HandleSpeed("100");
+        } else if (input == "📖 Trợ giúp") {
+            pending_distance_direction_ = 0;
+            distance_prompt_deadline_us_ = 0;
+            Send(L298nTelegramText::kMenu, true);
+        } else {
+            return false;
+        }
+        return true;
+    }
+
     void Handle(const cJSON* update) {
         const auto* message = cJSON_GetObjectItemCaseSensitive(update, "message");
         int64_t chat;
@@ -707,6 +605,40 @@ private:
         if (begin == std::string::npos)
             return;
         command.erase(0, begin);
+        const auto last = command.find_last_not_of(" \r\n\t");
+        command.erase(last + 1);
+        if (HandleButton(command))
+            return;
+
+        if (pending_distance_direction_ != 0) {
+            const bool digits_only = !command.empty() &&
+                                     command.find_first_not_of("0123456789") == std::string::npos;
+            if (esp_timer_get_time() >= distance_prompt_deadline_us_) {
+                pending_distance_direction_ = 0;
+                distance_prompt_deadline_us_ = 0;
+                if (digits_only) {
+                    Send(L298nTelegramText::kDistanceInputExpired, true);
+                    return;
+                }
+            } else if (digits_only) {
+                const bool forward = pending_distance_direction_ > 0;
+                pending_distance_direction_ = 0;
+                distance_prompt_deadline_us_ = 0;
+                int distance_cm = 0;
+                if (ParseUnsigned(command, 1000, distance_cm) && distance_cm >= 1) {
+                    HandleDistanceMove(command, forward);
+                } else {
+                    Send(L298nTelegramText::kDistanceInputInvalid, true);
+                }
+                return;
+            } else if (command.empty() || command.front() != '/') {
+                Send(L298nTelegramText::kDistanceInputInvalid, true);
+                return;
+            } else {
+                pending_distance_direction_ = 0;
+                distance_prompt_deadline_us_ = 0;
+            }
+        }
         const auto end = command.find_first_of(" \r\n\t");
         std::string argument;
         if (end != std::string::npos) {
@@ -832,10 +764,8 @@ private:
                 const std::string announcement =
                     std::string(boot_sent ? L298nTelegramText::kIpChangedHeader
                                           : L298nTelegramText::kBootHeader) +
-                    L298nTelegramText::kBootFirmwareLabel + "<code>" +
-                    esp_app_get_description()->version + "</code>\n\n" + WebMessage() +
                     L298nTelegramText::kBootFooter;
-                if (!Send(announcement, true))
+                if (!Send(announcement, true, true))
                     continue;
                 boot_sent = true;
                 announced_ip = ip;
