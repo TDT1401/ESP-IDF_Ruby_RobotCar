@@ -33,9 +33,14 @@ constexpr int kDefaultDurationMs = 1000;
 constexpr int kDefaultTurnDurationMs = 400;
 constexpr int kMaxDurationMs = 10000;
 constexpr int kMaxDistanceMoveCm = 100;
-constexpr int kDistanceRampStartSpeedPercent = 60;
-constexpr int kDistanceRampLengthCm = 20;
+constexpr int kDistanceMinimumDrivePercent = 50;
+constexpr int kDistanceCrawlSpeedPercent = 45;
+constexpr int kDistanceRampStartSpeedPercent = 50;
+constexpr int kDistanceRampLengthCm = 8;
 constexpr int64_t kDistanceRampUpdateUs = 50000;
+constexpr double kStraightSyncPwmPerCm = 3.0;
+constexpr int kStraightSyncMaxCorrectionPercent = 8;
+constexpr int64_t kDistanceBrakeUs = 100000;
 constexpr int64_t kDirectionDelayUs = 50000;
 constexpr int64_t kTickUs = 10000;
 constexpr int64_t kGestureMaxUs = 2000000;
@@ -596,8 +601,12 @@ private:
     double distance_move_progress_cm_ = 0;
     double distance_move_start_left_m_ = 0;
     double distance_move_start_right_m_ = 0;
+    double straight_start_left_m_ = 0;
+    double straight_start_right_m_ = 0;
     int distance_profile_speed_percent_ = 0;
     int64_t distance_profile_update_us_ = 0;
+    bool brake_active_ = false;
+    int64_t brake_until_us_ = 0;
     esp_timer_handle_t timer_ = nullptr;
 #ifdef CONFIG_PM_ENABLE
     esp_pm_lock_handle_t sleep_lock_ = nullptr;
@@ -967,7 +976,12 @@ private:
         distance_move_progress_cm_ = std::min(left_cm, right_cm);
         if (distance_move_progress_cm_ >= distance_move_target_cm_) {
             distance_move_state_ = DistanceMoveState::kCompleted;
-            StopLocked();
+            gesture_steps_ = nullptr;
+            gesture_count_ = 0;
+            gesture_index_ = 0;
+            gesture_deadline_us_ = 0;
+            web_joystick_active_ = false;
+            BeginDistanceBrakeLocked(esp_timer_get_time());
         } else if (encoder.left.no_pulses || encoder.right.no_pulses) {
             distance_move_state_ = DistanceMoveState::kNoPulses;
             StopLocked();
@@ -979,21 +993,26 @@ private:
             now - distance_profile_update_us_ < kDistanceRampUpdateUs)
             return;
 
-        const int target_speed = speed_percent_;
+        const int target_speed = std::max(speed_percent_, kDistanceMinimumDrivePercent);
         const int start_speed = std::min(target_speed, kDistanceRampStartSpeedPercent);
+        const int crawl_speed = std::min(target_speed, kDistanceCrawlSpeedPercent);
         const double total_distance = distance_move_target_cm_;
         const double progress = std::clamp(distance_move_progress_cm_, 0.0, total_distance);
         const double remaining = total_distance - progress;
         // Short moves get a triangular ramp; longer moves reach the requested speed
-        // and begin slowing down over the final ramp length.
+        // and begin slowing down over the final 8 cm.
         const double peak_fraction = std::min(1.0, total_distance / (2.0 * kDistanceRampLengthCm));
         const double acceleration_fraction = std::min(1.0, progress / kDistanceRampLengthCm);
         const double deceleration_fraction = std::min(1.0, remaining / kDistanceRampLengthCm);
-        const double ramp_fraction =
-            std::min({peak_fraction, acceleration_fraction, deceleration_fraction});
-        const int next_speed =
-            start_speed +
-            static_cast<int>(std::lround((target_speed - start_speed) * ramp_fraction));
+        const double acceleration_limit = std::min(peak_fraction, acceleration_fraction);
+        const double deceleration_limit = std::min(peak_fraction, deceleration_fraction);
+        const int accelerating_speed =
+            start_speed + static_cast<int>(std::lround((target_speed - start_speed) *
+                                                       acceleration_limit));
+        const int decelerating_speed =
+            crawl_speed + static_cast<int>(std::lround((target_speed - crawl_speed) *
+                                                       deceleration_limit));
+        const int next_speed = std::min(accelerating_speed, decelerating_speed);
         distance_profile_update_us_ = now;
         if (next_speed != distance_profile_speed_percent_) {
             distance_profile_speed_percent_ = next_speed;
@@ -1024,6 +1043,7 @@ private:
     }
 
     void StopOutputsLocked() {
+        brake_active_ = false;
         encoder_.SetDrive(0, 0, esp_timer_get_time());
         // Disable both bridges before touching any direction pin. Attempt every
         // output even if an earlier operation fails. Stop means coast, not brake.
@@ -1047,12 +1067,63 @@ private:
 #endif
     }
 
+    void BeginDistanceBrakeLocked(int64_t now) {
+        encoder_.SetDrive(0, 0, now);
+        bool ok = true;
+        // L298N brakes dynamically when EN is high and both direction inputs match.
+        ok = Check(gpio_set_level(MOTOR_LEFT_IN1_PIN, 0)) && ok;
+        ok = Check(gpio_set_level(MOTOR_LEFT_IN2_PIN, 0)) && ok;
+        ok = Check(gpio_set_level(MOTOR_RIGHT_IN1_PIN, 0)) && ok;
+        ok = Check(gpio_set_level(MOTOR_RIGHT_IN2_PIN, 0)) && ok;
+        for (auto channel : {kLeftChannel, kRightChannel}) {
+            ok = Check(ledc_set_duty(kMode, channel, 1023)) && ok;
+            ok = Check(ledc_update_duty(kMode, channel)) && ok;
+        }
+        if (!ok) {
+            StopOutputsLocked();
+            return;
+        }
+        brake_active_ = true;
+        brake_until_us_ = now + kDistanceBrakeUs;
+        motion_ = Motion::kStop;
+        moving_ = false;
+        web_left_output_percent_ = 0;
+        web_right_output_percent_ = 0;
+        start_at_us_ = 0;
+        deadline_us_ = 0;
+    }
+
     bool ApplySpeedLocked() {
         const uint32_t duty = ActiveSpeedLocked() * 1023 / 100;
         // These channels have no fade users and all accesses are serialized.
         return Check(ledc_set_duty(kMode, kLeftChannel, duty)) &&
                Check(ledc_update_duty(kMode, kLeftChannel)) &&
                Check(ledc_set_duty(kMode, kRightChannel, duty)) &&
+               Check(ledc_update_duty(kMode, kRightChannel));
+    }
+
+    bool ApplyStraightEncoderSyncLocked() {
+        if (!moving_ || web_manual_ ||
+            (motion_ != Motion::kForward && motion_ != Motion::kBackward))
+            return true;
+
+        const auto encoder = encoder_.Snapshot();
+        if (!encoder.ready || !encoder.calibrated)
+            return true;
+
+        const double left_cm = (encoder.left.distance_m - straight_start_left_m_) * 100.0;
+        const double right_cm = (encoder.right.distance_m - straight_start_right_m_) * 100.0;
+        const int correction = std::clamp(
+            static_cast<int>(std::lround((left_cm - right_cm) * kStraightSyncPwmPerCm)),
+            -kStraightSyncMaxCorrectionPercent, kStraightSyncMaxCorrectionPercent);
+        const int base_speed = ActiveSpeedLocked();
+        const int left_speed = std::clamp(base_speed - correction, 0, 100);
+        const int right_speed = std::clamp(base_speed + correction, 0, 100);
+        const uint32_t left_duty = static_cast<uint32_t>(left_speed) * 1023 / 100;
+        const uint32_t right_duty = static_cast<uint32_t>(right_speed) * 1023 / 100;
+        return Check(ledc_set_duty(kMode, kLeftChannel, left_duty)) &&
+               Check(ledc_update_duty(kMode, kLeftChannel)) &&
+               Check(ledc_set_duty(kMode, kRightChannel, right_duty)) &&
                Check(ledc_update_duty(kMode, kRightChannel));
     }
 
@@ -1171,6 +1242,9 @@ private:
                         Check(gpio_set_level(MOTOR_RIGHT_IN2_PIN, !right_forward));
         if (ok)
             encoder_.SetDrive(encoder_left, encoder_right, esp_timer_get_time());
+        const auto encoder = encoder_.Snapshot();
+        straight_start_left_m_ = encoder.left.distance_m;
+        straight_start_right_m_ = encoder.right.distance_m;
         return ok;
     }
 
@@ -1185,8 +1259,19 @@ private:
         const int64_t now = esp_timer_get_time();
         // Also sample at rest/while joystick owns the outputs, before any early return.
         encoder_.Update(now);
+        if (brake_active_) {
+            if (now >= brake_until_us_)
+                StopOutputsLocked();
+            return;
+        }
         UpdateDistanceMoveLocked();
+        if (brake_active_)
+            return;
         UpdateDistanceSpeedProfileLocked(now);
+        if (!ApplyStraightEncoderSyncLocked()) {
+            StopLocked();
+            return;
+        }
         if (web_session_ != 0 && (now >= web_deadline_us_ || !MotionAllowed())) {
             EndWebControlLocked();
         }
