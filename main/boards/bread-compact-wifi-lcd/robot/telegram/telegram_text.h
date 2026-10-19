@@ -107,7 +107,7 @@ inline constexpr char kMenu[] =
     "🎙️ Đánh thức Ruby để trò chuyện; 🌐 mở trang điều khiển xe.\n"
     "📊 Trạng thái và các nút tự hành cũng có sẵn bên dưới.\n"
     "Canh gác: /guard on hoặc /guard off. Quét khoảng trống: /scan hoặc /scan stop.\n"
-    "Kịch bản: /route F30,L15,S; lưu để chạy lại: /route save F30,L15,S rồi /route run.\n"
+    "Kịch bản: /route F30,L90,S; lưu để chạy lại: /route save F30,L90,S rồi /route run.\n"
     "Tìm xe: /find để phát âm báo, nhấp nháy màn hình và hiện IP.";
 
 inline constexpr char kWakeRequested[] =

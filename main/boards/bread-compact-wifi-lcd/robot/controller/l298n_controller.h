@@ -42,8 +42,9 @@ esp_err_t SetL298nObstacleDistance(int distance_cm);
 esp_err_t SetL298nGuardMode(bool enabled);
 esp_err_t StartL298nSpaceScan();
 void CancelL298nSpaceScan();
-// One RAM-only script shared by web, Telegram and voice: F/B/L/R followed by 1..50
-// centimetres of wheel travel, comma separated, optional terminal S. Up to five moves.
+// One RAM-only script shared by web, Telegram and voice. F/B: 1..50 cm;
+// L/R: 1..180 degrees, comma separated, optional terminal S.
+// Up to five moves.
 esp_err_t SaveL298nRoute(const char* script);
 esp_err_t RunL298nRoute(const char* owner);
 void CancelL298nRoute();
@@ -73,6 +74,8 @@ struct L298nMotorStatus {
     const char* distance_move_state;
     int distance_move_target_cm;
     double distance_move_progress_cm;
+    int turn_target_degrees;
+    double turn_progress_degrees;
     bool speed_pi_calibrated;
     bool speed_pi_active;
     double speed_pi_target_rpm;

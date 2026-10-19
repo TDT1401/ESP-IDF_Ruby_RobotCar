@@ -34,14 +34,14 @@ constexpr auto kMode = LEDC_LOW_SPEED_MODE;
 constexpr auto kTimer = LEDC_TIMER_1;  // LCD backlight owns timer/channel 0.
 constexpr auto kLeftChannel = LEDC_CHANNEL_1;
 constexpr auto kRightChannel = LEDC_CHANNEL_2;
-// Non-HUD motions start at the calibrated, conservative baseline. The speed PI
-// independently adjusts each wheel, while distance moves apply their own ramp.
+// Straight motions start at the calibrated baseline. Turns use their own PWM;
+// the speed PI adjusts straight travel and distance moves use their own ramp.
 constexpr int kDefaultSpeedPercent = 50;
+constexpr int kTurnSpeedPercent = 75;
 // Keep the browser HUD's existing default; it is intentionally separate from
 // autonomous and spoken motor commands.
 constexpr int kDefaultWebSpeedPercent = 75;
 constexpr int kDefaultDurationMs = 1000;
-constexpr int kDefaultTurnDurationMs = 400;
 constexpr int kMaxDurationMs = 10000;
 // Allow room-scale travel in one encoder-controlled command while keeping each
 // autonomous move bounded. At the conservative 20 cm/s timeout rate, 10 m gets
@@ -81,21 +81,22 @@ constexpr int kAvoidClearanceCm = 10;
 constexpr int kAutonomyCommandMs = 180;
 constexpr int kAvoidFirstClearCm = 40;
 constexpr int kAvoidReverseMs = 300;
-constexpr int kAvoidSideTurnMs = 550;
 constexpr int kAvoidSettleMs = 200;  // Flush the SR04 median filter after stopping a turn.
 constexpr int kSensorStaleMs = 250;
 constexpr int kReferenceSpeedPercent = 50;
 constexpr int64_t kProximityWarningPeriodUs = 700000;
 constexpr int kAutonomySpeedPercent = 40;
 constexpr int kAvoidReverseSpeedPercent = 45;
-constexpr int kAutonomyTurnSpeedPercent = 60;
+constexpr int kRouteDriveSpeedPercent = 60;
 constexpr int kGuardChangeCm = 20;
 constexpr int64_t kGuardCooldownUs = 30000000;
-constexpr int kScanTurnMs = 350;
 constexpr int64_t kScanSettleUs = 350000;
 constexpr int kRouteMaxSteps = 5;
 constexpr int kRouteMaxStepCm = 50;
 constexpr int64_t kRouteMaxUs = 60000000;
+constexpr int kDefaultTurnAngleDegrees = 90;
+constexpr int kMaxTurnAngleDegrees = 180;
+constexpr double kPi = 3.14159265358979323846;
 
 #ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03
 constexpr double kLeftRpmAtPwm50 = FC03_LEFT_RPM_AT_PWM_50;
@@ -107,6 +108,7 @@ constexpr bool kSpeedPiCalibrationValid =
     kRightRpmAtPwm70 > kRightRpmAtPwm50 && FC03_LEFT_PULSES_PER_REV > 0 &&
     FC03_RIGHT_PULSES_PER_REV > 0 && FC03_LEFT_WHEEL_DIAMETER_MM > 0 &&
     FC03_RIGHT_WHEEL_DIAMETER_MM > 0;
+static_assert(ROBOT_TRACK_WIDTH_MM > 0);
 #else
 constexpr double kLeftRpmAtPwm50 = 0;
 constexpr double kLeftRpmAtPwm70 = 0;
@@ -192,7 +194,7 @@ const char* RouteStateName(RouteState state) {
 
 struct RouteStep {
     Motion motion;
-    int distance_cm;
+    int value;  // Centimetres for F/B, degrees for L/R.
 };
 
 bool ParseRoute(const char* script, std::array<RouteStep, kRouteMaxSteps>& steps, int& count,
@@ -241,23 +243,24 @@ bool ParseRoute(const char* script, std::array<RouteStep, kRouteMaxSteps>& steps
         }
         if (count >= kRouteMaxSteps || *cursor < '0' || *cursor > '9')
             return false;
-        int distance = 0;
+        int value = 0;
         while (*cursor >= '0' && *cursor <= '9') {
-            distance = distance * 10 + (*cursor++ - '0');
-            if (distance > kRouteMaxStepCm)
+            value = value * 10 + (*cursor++ - '0');
+            if (value > (motion == Motion::kLeft || motion == Motion::kRight ? kMaxTurnAngleDegrees
+                                                                             : kRouteMaxStepCm))
                 return false;
         }
-        if (distance == 0)
+        if (value == 0)
             return false;
         while (*cursor == ' ' || *cursor == '\t')
             ++cursor;
         char item[8];
-        const int size = snprintf(item, sizeof(item), "%s%c%d", count ? "," : "", code, distance);
+        const int size = snprintf(item, sizeof(item), "%s%c%d", count ? "," : "", code, value);
         if (size <= 0 || written + static_cast<size_t>(size) >= normalized.size())
             return false;
         memcpy(normalized.data() + written, item, size);
         written += size;
-        steps[count++] = {motion, distance};
+        steps[count++] = {motion, value};
         if (*cursor == '\0')
             break;
         if (*cursor++ != ',')
@@ -484,6 +487,8 @@ public:
                 DistanceMoveStateName(distance_move_state_),
                 distance_move_target_cm_,
                 distance_move_progress_cm_,
+                turn_target_degrees_,
+                turn_progress_degrees_,
                 kSpeedPiCalibrationValid,
                 speed_pi_active_,
                 speed_pi_target_rpm_,
@@ -613,8 +618,13 @@ public:
                 left = left * 1000 / peak;
                 right = right * 1000 / peak;
             }
-            left = left * speed / 1000;
-            right = right * speed / 1000;
+            // A full sideways stick gets the same turn power as a direction button;
+            // partial deflection still scales the output smoothly.
+            const int drive_speed =
+                joystick_y == 0 && joystick_x != 0 ? std::max(speed, kTurnSpeedPercent) : speed;
+            left = left * drive_speed / 1000;
+            right = right * drive_speed / 1000;
+            web_speed_percent_ = drive_speed;
             if (left == 0 && right == 0) {
                 StopLocked();
             } else {
@@ -741,11 +751,13 @@ public:
 
     esp_err_t StartScan() {
         std::lock_guard lock(mutex_);
+        const auto encoder = encoder_.Snapshot();
         if (web_manual_ || autonomy_mode_ != AutonomyMode::kManual || motion_ != Motion::kStop ||
             gesture_steps_ != nullptr || brake_active_ || response_active_ || fault_ != ESP_OK ||
             speed_percent_ == 0 || !sensor_valid_ ||
             esp_timer_get_time() - last_sensor_update_us_ > kSensorStaleMs * 1000LL ||
-            !MotionAllowed() || ScanActiveLocked() || route_active_)
+            !MotionAllowed() || ScanActiveLocked() || route_active_ || !encoder.ready ||
+            !encoder.calibrated)
             return ESP_ERR_INVALID_STATE;
         guard_baseline_cm_ = -1;
         guard_change_samples_ = 0;
@@ -831,9 +843,9 @@ public:
                                        ScanState::kReturn;
                 const Motion turn = next == ScanState::kTurnRight ? Motion::kRight : Motion::kLeft;
                 scan_state_ = next;
-                autonomy_speed_percent_ = std::min(speed_percent_, kAutonomyTurnSpeedPercent);
-                if (!PrepareMotionLocked(turn, next == ScanState::kTurnRight ? 2 * kScanTurnMs
-                                                                         : kScanTurnMs))
+                if (!PrepareAngleTurnLocked(turn, next == ScanState::kTurnRight
+                                                      ? kMaxTurnAngleDegrees
+                                                      : kDefaultTurnAngleDegrees))
                     CancelScanLocked();
             }
             return;
@@ -972,6 +984,9 @@ private:
     double distance_move_progress_cm_ = 0;
     double distance_move_start_left_m_ = 0;
     double distance_move_start_right_m_ = 0;
+    bool angle_turn_ = false;
+    int turn_target_degrees_ = 0;
+    double turn_progress_degrees_ = 0;
     int distance_profile_speed_percent_ = 0;
     int64_t distance_profile_update_us_ = 0;
     bool brake_active_ = false;
@@ -1080,9 +1095,11 @@ private:
              measured_distance_cm_ <= ScaleDistanceForSpeed(obstacle_distance_cm_, speed_percent_)))
             return false;
         StopLocked();
-        if (!PrepareMotionLocked(step.motion, DistanceMoveTimeoutMs(step.distance_cm)))
+        if (step.motion == Motion::kLeft || step.motion == Motion::kRight)
+            return PrepareAngleTurnLocked(step.motion, step.value);
+        if (!PrepareMotionLocked(step.motion, DistanceMoveTimeoutMs(step.value)))
             return false;
-        distance_move_target_cm_ = step.distance_cm;
+        distance_move_target_cm_ = step.value;
         distance_move_progress_cm_ = 0;
         distance_profile_speed_percent_ = 0;
         distance_profile_update_us_ = 0;
@@ -1191,6 +1208,11 @@ private:
             (!MotionAllowed() || fault_ != ESP_OK || speed_percent_ == 0)) {
             return ESP_ERR_INVALID_STATE;
         }
+        if (requested == AutonomyMode::kObstacleAvoidance) {
+            const auto encoder = encoder_.Snapshot();
+            if (!encoder.ready || !encoder.calibrated)
+                return ESP_ERR_INVALID_STATE;
+        }
         StopLocked();
         pending_emotion_ = Emotion::kNone;
         manual_override_ = requested != AutonomyMode::kManual;
@@ -1262,23 +1284,25 @@ private:
         avoid_sample_distance_cm_ = -1;
     }
 
-    void StartAvoidMotionLocked(AvoidState state, Motion motion, int duration_ms) {
+    // Reverse takes milliseconds; turn phases take degrees.
+    void StartAvoidMotionLocked(AvoidState state, Motion motion, int duration_ms_or_degrees) {
         StopLocked();
         avoid_state_ = state;
         avoid_clear_samples_ = 0;
-        avoid_phase_duration_ms_ = duration_ms;
+        avoid_phase_duration_ms_ = state == AvoidState::kReverse ? duration_ms_or_degrees : 0;
         // Tick starts this clock when the bridge is actually enabled, after direction delay.
         avoid_phase_deadline_us_ = 0;
-        const int speed = state == AvoidState::kReverse ? kAvoidReverseSpeedPercent
-                                                       : kAutonomyTurnSpeedPercent;
-        if (!RefreshAutonomyMotionLocked(motion, speed))
+        const bool started = state == AvoidState::kReverse
+                                 ? RefreshAutonomyMotionLocked(motion, kAvoidReverseSpeedPercent)
+                                 : PrepareAngleTurnLocked(motion, duration_ms_or_degrees);
+        if (!started)
             BlockAvoidLocked();
     }
 
     void FinishAvoidMotionLocked(int64_t now) {
         StopLocked();
         if (avoid_state_ == AvoidState::kReverse) {
-            StartAvoidMotionLocked(AvoidState::kTurnFirst, Motion::kLeft, kAvoidSideTurnMs);
+            StartAvoidMotionLocked(AvoidState::kTurnFirst, Motion::kLeft, kDefaultTurnAngleDegrees);
             return;
         }
         if (avoid_state_ == AvoidState::kTurnFirst)
@@ -1327,7 +1351,19 @@ private:
         }
 
         if (AvoidMotionPhaseLocked()) {
-            // An interrupted scan no longer has a trustworthy timed heading.
+            if (avoid_state_ != AvoidState::kReverse) {
+                if (distance_move_state_ == DistanceMoveState::kCompleted && !brake_active_) {
+                    FinishAvoidMotionLocked(now);
+                    return;
+                }
+                if (distance_move_state_ != DistanceMoveState::kPending &&
+                    distance_move_state_ != DistanceMoveState::kMoving &&
+                    distance_move_state_ != DistanceMoveState::kCompleted) {
+                    BlockAvoidLocked();
+                    return;
+                }
+                return;
+            }
             if (motion_ == Motion::kStop || (moving_ && now >= deadline_us_)) {
                 BlockAvoidLocked();
                 return;
@@ -1336,14 +1372,7 @@ private:
                 FinishAvoidMotionLocked(now);
                 return;
             }
-            Motion motion = Motion::kLeft;
-            if (avoid_state_ == AvoidState::kReverse)
-                motion = Motion::kBackward;
-            else if (avoid_state_ == AvoidState::kTurnSecond)
-                motion = Motion::kRight;
-            const int speed = avoid_state_ == AvoidState::kReverse ? kAvoidReverseSpeedPercent
-                                                                 : kAutonomyTurnSpeedPercent;
-            if (!RefreshAutonomyMotionLocked(motion, speed))
+            if (!RefreshAutonomyMotionLocked(Motion::kBackward, kAvoidReverseSpeedPercent))
                 BlockAvoidLocked();
             return;
         }
@@ -1364,7 +1393,7 @@ private:
                 return;
             }
             // From the left probe to the right probe: cross twice the first turn angle.
-            StartAvoidMotionLocked(AvoidState::kTurnSecond, Motion::kRight, 2 * kAvoidSideTurnMs);
+            StartAvoidMotionLocked(AvoidState::kTurnSecond, Motion::kRight, kMaxTurnAngleDegrees);
             return;
         }
         if (avoid_state_ == AvoidState::kMeasureSecond) {
@@ -1374,7 +1403,7 @@ private:
                 DriveAvoidForwardLocked();
             } else {
                 StartAvoidMotionLocked(AvoidState::kReturnFirst, Motion::kLeft,
-                                       2 * kAvoidSideTurnMs);
+                                       kMaxTurnAngleDegrees);
             }
             return;
         }
@@ -1427,8 +1456,21 @@ private:
             std::max(0.0, (encoder.left.distance_m - distance_move_start_left_m_) * 100.0);
         const double right_cm =
             std::max(0.0, (encoder.right.distance_m - distance_move_start_right_m_) * 100.0);
-        distance_move_progress_cm_ = std::min(left_cm, right_cm);
-        if (distance_move_progress_cm_ >= distance_move_target_cm_) {
+        if (angle_turn_) {
+            // Differential drive: theta = (right travel - left signed travel) / track.
+            // FC-03 counts are unsigned, and opposite wheel signs are commanded here.
+            turn_progress_degrees_ =
+                (left_cm + right_cm) * 10.0 / ROBOT_TRACK_WIDTH_MM * 180.0 / kPi;
+        } else {
+            distance_move_progress_cm_ = std::min(left_cm, right_cm);
+        }
+        // Refuse to declare a centred turn complete from only one encoder.
+        const double per_wheel_target_cm =
+            ROBOT_TRACK_WIDTH_MM / 20.0 * turn_target_degrees_ * kPi / 180.0;
+        const bool turn_complete = turn_progress_degrees_ >= turn_target_degrees_ &&
+                                   left_cm >= per_wheel_target_cm * 0.5 &&
+                                   right_cm >= per_wheel_target_cm * 0.5;
+        if (angle_turn_ ? turn_complete : distance_move_progress_cm_ >= distance_move_target_cm_) {
             distance_move_state_ = DistanceMoveState::kCompleted;
             gesture_steps_ = nullptr;
             gesture_count_ = 0;
@@ -1443,14 +1485,14 @@ private:
     }
 
     void UpdateDistanceSpeedProfileLocked(int64_t now) {
-        if (distance_move_state_ != DistanceMoveState::kMoving || !moving_ ||
+        if (angle_turn_ || distance_move_state_ != DistanceMoveState::kMoving || !moving_ ||
             now - distance_profile_update_us_ < kDistanceRampUpdateUs)
             return;
 
-        const int target_speed = route_active_ ?
-                                     std::min(std::max(speed_percent_, kDistanceMinimumDrivePercent),
-                                              kAutonomyTurnSpeedPercent) :
-                                     std::max(speed_percent_, kDistanceMinimumDrivePercent);
+        const int target_speed =
+            route_active_ ? std::min(std::max(speed_percent_, kDistanceMinimumDrivePercent),
+                                     kRouteDriveSpeedPercent)
+                          : std::max(speed_percent_, kDistanceMinimumDrivePercent);
         const int start_speed = std::min(target_speed, kDistanceRampStartSpeedPercent);
         const int crawl_speed = std::min(target_speed, kDistanceCrawlSpeedPercent);
         const double total_distance = distance_move_target_cm_;
@@ -1574,6 +1616,8 @@ private:
 
     bool ApplySpeedLocked() {
         const int base_speed = ActiveSpeedLocked();
+        if (motion_ == Motion::kLeft || motion_ == Motion::kRight)
+            return ApplyMotorPwmLocked(base_speed, base_speed);
         if (speed_pi_active_)
             return ApplyMotorPwmLocked(speed_pi_output_percent_[0], speed_pi_output_percent_[1]);
         if (kSpeedPiCalibrationValid && moving_ && speed_pi_startup_until_us_ > 0 &&
@@ -1587,8 +1631,10 @@ private:
     int CurrentPwmPercentLocked(int side) const {
         if (!moving_)
             return 0;
-        if (web_manual_)
+        if (web_manual_ && web_joystick_active_)
             return std::abs(side == 0 ? web_left_output_percent_ : web_right_output_percent_);
+        if (motion_ == Motion::kLeft || motion_ == Motion::kRight)
+            return ActiveSpeedLocked();
         if (speed_pi_active_)
             return speed_pi_output_percent_[side];
         const int base_speed = ActiveSpeedLocked();
@@ -1606,8 +1652,10 @@ private:
     }
 
     void UpdateSpeedPiLocked(int64_t now) {
-        if (!kSpeedPiCalibrationValid || !moving_ || web_manual_ || ActiveSpeedLocked() <= 0) {
-            if (!moving_ || web_manual_)
+        const bool turning = motion_ == Motion::kLeft || motion_ == Motion::kRight;
+        if (!kSpeedPiCalibrationValid || !moving_ || web_manual_ || turning ||
+            ActiveSpeedLocked() <= 0) {
+            if (!moving_ || web_manual_ || turning)
                 ResetSpeedPiLocked();
             return;
         }
@@ -1726,13 +1774,13 @@ private:
     }
 
     int ActiveSpeedLocked() const {
+        if ((motion_ == Motion::kLeft || motion_ == Motion::kRight) && !web_joystick_active_)
+            return std::max(web_manual_ ? web_speed_percent_ : speed_percent_, kTurnSpeedPercent);
         if (distance_move_state_ == DistanceMoveState::kMoving &&
             distance_profile_speed_percent_ > 0)
             return distance_profile_speed_percent_;
         if (web_manual_)
             return web_speed_percent_;
-        if (ScanActiveLocked())
-            return std::min(speed_percent_, kAutonomyTurnSpeedPercent);
         if (autonomy_mode_ != AutonomyMode::kManual)
             return autonomy_speed_percent_;
         return gesture_steps_ == nullptr
@@ -1747,9 +1795,27 @@ private:
         sleep_lock_held_ = true;
 #endif
         motion_ = motion;
+        angle_turn_ = false;
+        turn_target_degrees_ = 0;
+        turn_progress_degrees_ = 0;
         duration_ms_ = duration;
         start_at_us_ = esp_timer_get_time() + kDirectionDelayUs;
         deadline_us_ = start_at_us_ + static_cast<int64_t>(duration) * 1000;
+        return true;
+    }
+
+    bool PrepareAngleTurnLocked(Motion motion, int degrees) {
+        const auto encoder = encoder_.Snapshot();
+        if ((motion != Motion::kLeft && motion != Motion::kRight) || degrees < 1 ||
+            degrees > kMaxTurnAngleDegrees || !encoder.ready || !encoder.calibrated ||
+            !PrepareMotionLocked(motion, kMaxDurationMs))
+            return false;
+        angle_turn_ = true;
+        turn_target_degrees_ = degrees;
+        turn_progress_degrees_ = 0;
+        distance_move_target_cm_ = 0;
+        distance_move_progress_cm_ = 0;
+        distance_move_state_ = DistanceMoveState::kPending;
         return true;
     }
 
@@ -1866,11 +1932,13 @@ private:
             }
             if (scan_state_ == ScanState::kTurnLeft || scan_state_ == ScanState::kTurnRight ||
                 scan_state_ == ScanState::kReturn) {
-                if (motion_ == Motion::kStop) {
+                if (distance_move_state_ != DistanceMoveState::kPending &&
+                    distance_move_state_ != DistanceMoveState::kMoving &&
+                    distance_move_state_ != DistanceMoveState::kCompleted) {
                     CancelScanLocked();
                     return;
                 }
-                if (now >= deadline_us_) {
+                if (distance_move_state_ == DistanceMoveState::kCompleted && !brake_active_) {
                     const ScanState completed = scan_state_;
                     StopLocked();
                     if (completed == ScanState::kReturn) {
@@ -1903,6 +1971,18 @@ private:
             return;
         }
         if (autonomy_mode_ == AutonomyMode::kObstacleAvoidance && AvoidMotionPhaseLocked()) {
+            if (avoid_state_ != AvoidState::kReverse) {
+                if (distance_move_state_ == DistanceMoveState::kCompleted && !brake_active_) {
+                    FinishAvoidMotionLocked(now);
+                    return;
+                }
+                if (distance_move_state_ != DistanceMoveState::kPending &&
+                    distance_move_state_ != DistanceMoveState::kMoving &&
+                    distance_move_state_ != DistanceMoveState::kCompleted) {
+                    BlockAvoidLocked();
+                    return;
+                }
+            }
             if (motion_ == Motion::kStop || now >= deadline_us_) {
                 BlockAvoidLocked();
                 return;
@@ -2003,8 +2083,8 @@ private:
             // Web deadlines are measured from reception, never from motor start.
             if (!web_manual_)
                 deadline_us_ = esp_timer_get_time() + static_cast<int64_t>(duration_ms_) * 1000;
-            if (autonomy_mode_ == AutonomyMode::kObstacleAvoidance && AvoidMotionPhaseLocked() &&
-                avoid_phase_deadline_us_ == 0) {
+            if (autonomy_mode_ == AutonomyMode::kObstacleAvoidance &&
+                avoid_state_ == AvoidState::kReverse && avoid_phase_deadline_us_ == 0) {
                 avoid_phase_deadline_us_ = esp_timer_get_time() +
                                           static_cast<int64_t>(avoid_phase_duration_ms_) * 1000;
             }
@@ -2046,6 +2126,32 @@ private:
                     return std::unexpected("Could not keep the motor deadline timer awake.");
                 }
             }
+        }
+        return GetState();
+    }
+
+    ToolResult MoveAngle(Motion motion, const PropertyList& properties) {
+        const int degrees = properties["angle_degrees"].value<int>();
+        if (degrees < 1 || degrees > kMaxTurnAngleDegrees)
+            return std::unexpected("Use angle_degrees 1..180.");
+        {
+            std::lock_guard lock(mutex_);
+            if (web_manual_)
+                return std::unexpected("Release web manual control before turning.");
+            CancelRouteLocked();
+            CancelScanLocked();
+            const auto encoder = encoder_.Snapshot();
+            if (!encoder.ready || !encoder.calibrated)
+                return std::unexpected("Calibrated FC-03 encoders are required for an angle turn.");
+            if (fault_ != ESP_OK || !MotionAllowed() || speed_percent_ == 0)
+                return std::unexpected("Turning is unavailable in the current motor state.");
+            DisableAutonomyLocked();
+            manual_override_ = true;
+            control_owner_ = "voice";
+            pending_emotion_ = Emotion::kNone;
+            StopLocked();
+            if (!PrepareAngleTurnLocked(motion, degrees))
+                return std::unexpected("Could not start the encoder-controlled turn.");
         }
         return GetState();
     }
@@ -2180,6 +2286,8 @@ private:
         DistanceMoveState distance_move_state;
         int distance_move_target_cm;
         double distance_move_progress_cm;
+        int turn_target_degrees;
+        double turn_progress_degrees;
         bool guard_enabled;
         int guard_baseline_cm;
         ScanState scan_state;
@@ -2219,6 +2327,8 @@ private:
             distance_move_state = distance_move_state_;
             distance_move_target_cm = distance_move_target_cm_;
             distance_move_progress_cm = distance_move_progress_cm_;
+            turn_target_degrees = turn_target_degrees_;
+            turn_progress_degrees = turn_progress_degrees_;
             guard_enabled = guard_enabled_;
             guard_baseline_cm = guard_baseline_cm_;
             scan_state = scan_state_;
@@ -2279,6 +2389,8 @@ private:
                                      distance_move_target_cm) ||
             !cJSON_AddNumberToObject(json.get(), "distance_move_progress_cm",
                                      distance_move_progress_cm) ||
+            !cJSON_AddNumberToObject(json.get(), "turn_target_degrees", turn_target_degrees) ||
+            !cJSON_AddNumberToObject(json.get(), "turn_progress_degrees", turn_progress_degrees) ||
             !AddFc03EncoderJson(json.get(), encoder)) {
             return std::unexpected("Could not allocate motor status.");
         }
@@ -2289,9 +2401,7 @@ private:
         auto& server = McpServer::GetInstance();
         const auto add_move = [this, &server](const char* name, const char* description,
                                               Motion motion) {
-            const int default_duration_ms = motion == Motion::kLeft || motion == Motion::kRight
-                                                ? kDefaultTurnDurationMs
-                                                : kDefaultDurationMs;
+            const int default_duration_ms = kDefaultDurationMs;
             server.AddTool(
                 name,
                 std::string(description) + " duration_ms: 100..10000 milliseconds, default " +
@@ -2344,14 +2454,23 @@ private:
         add_distance_move("self.motor.backward_distance",
                           "Drive backward (lùi) by a measured distance.", Motion::kBackward);
 #endif
-        add_move("self.motor.turn_left",
-                 "Rotate robot left in place (xoay trái): left backward, right forward. No angle "
-                 "feedback.",
-                 Motion::kLeft);
-        add_move("self.motor.turn_right",
-                 "Rotate robot right in place (xoay phải): left forward, right backward. No angle "
-                 "feedback.",
-                 Motion::kRight);
+        const auto add_angle_turn = [this, &server](const char* name, const char* description,
+                                                    Motion motion) {
+            server.AddTool(
+                name,
+                std::string(description) +
+                    " angle_degrees: 1..180, default 90. Uses both FC-03 wheel "
+                    "encoders and 75% turn PWM. Stops at the measured angle or on "
+                    "encoder failure/timeout. Result confirms acceptance, not "
+                    "completion; inspect distance_move_state and turn_progress_degrees.",
+                PropertyList({Property("angle_degrees", kPropertyTypeInteger,
+                                       kDefaultTurnAngleDegrees, 1, kMaxTurnAngleDegrees)}),
+                [this, motion](const PropertyList& properties) -> ToolResult {
+                    return MoveAngle(motion, properties);
+                });
+        };
+        add_angle_turn("self.motor.turn_left", "Rotate robot left in place.", Motion::kLeft);
+        add_angle_turn("self.motor.turn_right", "Rotate robot right in place.", Motion::kRight);
         server.AddTool("self.motor.stop",
                        "Stop robot (dừng lại) now and cancel pending movement. Motors coast; speed "
                        "setting is retained. Also disables follow mode, obstacle avoidance, and "
@@ -2377,7 +2496,9 @@ private:
                        "pulses, measured RPM, wheel distance and estimated robot travel since boot "
                        "in metres. Values are null until calibrated/ready. Direction is inferred "
                        "from commands; distance_complete=false means unknown-direction pulses "
-                       "were excluded. Wheel slip and coasting cause error; no position feedback.",
+                       "were excluded. Angle turns report turn_target_degrees and "
+                       "turn_progress_degrees. Wheel slip and coasting cause error; there is no "
+                       "independent heading sensor.",
                        PropertyList(),
                        [this](const PropertyList&) -> ToolResult { return GetState(); });
         server.AddTool(
@@ -2436,15 +2557,15 @@ private:
             "drives left immediately if clearance exceeds both 40 cm and the stop distance. "
             "Otherwise it probes right and chooses the farther safe direction, rechecking "
             "left if it returns there. It stops if neither direction is safe or readings fail. "
-            "Turns are timed, not angle-controlled; there is no rear sensor. "
+            "Turns use calibrated FC-03 wheel encoders; there is no rear sensor. "
             "Enabling disables follow mode. Defaults "
             "off after reboot. distance_cm: 10..100 changes the stop distance before switching "
             "mode; -1 keeps the current distance (20 cm at 50% PWM after reboot). The effective "
             "stop distance scales proportionally above 50% and never falls below the configured "
             "value at lower speeds.",
-            PropertyList({Property("enabled", kPropertyTypeBoolean),
-                          Property("distance_cm", kPropertyTypeInteger, -1, -1,
-                                   kMaxObstacleDistanceCm)}),
+            PropertyList(
+                {Property("enabled", kPropertyTypeBoolean),
+                 Property("distance_cm", kPropertyTypeInteger, -1, -1, kMaxObstacleDistanceCm)}),
             [this](const PropertyList& properties) -> ToolResult {
                 const int distance = properties["distance_cm"].value<int>();
                 if (distance != -1 && distance < kMinObstacleDistanceCm)
@@ -2454,8 +2575,8 @@ private:
                 const auto error = SetObstacleAvoidance(properties["enabled"].value<bool>());
                 if (error != ESP_OK)
                     return std::unexpected(
-                        "Obstacle avoidance is unavailable while web control, a motor fault, or "
-                        "zero speed is active.");
+                        "Obstacle avoidance needs calibrated FC-03 encoders and is unavailable "
+                        "during web control, a motor fault, or zero speed.");
                 return GetState();
             });
         server.AddTool(
@@ -2491,27 +2612,31 @@ private:
             });
         server.AddTool(
             "self.navigation.scan_space",
-            "Start a bounded timed left/center/right HC-SR04 scan, then turn back to the "
+            "Start a bounded left/center/right HC-SR04 scan, then turn back to the "
             "estimated starting heading. Requires a stopped robot outside web/autonomous "
-            "control. Turn angles are not measured; results are an approximate clearance "
+            "control. Turns use FC-03 encoders at 90/180/90 degrees; wheel slip makes the "
+            "result an approximate clearance "
             "diagram, not a map. Read scan_state and scan distances via web status.",
             PropertyList(), [this](const PropertyList&) -> ToolResult {
                 if (StartScan() != ESP_OK)
-                    return std::unexpected("Space scan requires an idle robot.");
+                    return std::unexpected(
+                        "Space scan requires an idle robot and calibrated FC-03 encoders.");
                 return GetState();
             });
         server.AddTool(
             "self.navigation.run_route",
-            "Run a bounded multi-step route. Script syntax: F30,L15,S means forward 30 cm, "
-            "turn left using 15 cm of wheel travel, then stop. B and R mean backward and "
-            "right. Each step is 1..50 cm, up to five moves. FC-03 calibration is required. "
+            "Run a bounded multi-step route. Script syntax: F30,L90,S means forward 30 cm, "
+            "turn left 90 degrees, then stop. B and R mean backward and right. F/B use "
+            "1..50 cm; L/R use 1..180 degrees, up to five moves. FC-03 calibration is required. "
             "Turns are approximate; the rear has no obstacle sensor. Stop interrupts it at "
             "any time. The script remains saved in RAM for web or Telegram replay.",
             PropertyList({Property("script", kPropertyTypeString).SetMaxLength(63)}),
             [this](const PropertyList& properties) -> ToolResult {
                 const auto script = properties["script"].value<std::string>();
                 if (SaveRoute(script.c_str()) != ESP_OK)
-                    return std::unexpected("Use up to five F/B/L/R steps of 1..50 cm, optionally ending in S.");
+                    return std::unexpected(
+                        "Use up to five F/B 1..50 cm and L/R 1..180 degree steps, optionally "
+                        "ending in S.");
                 if (RunRoute("voice") != ESP_OK)
                     return std::unexpected("Route needs an idle robot and calibrated FC-03 encoders.");
                 return GetState();

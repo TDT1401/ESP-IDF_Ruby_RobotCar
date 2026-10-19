@@ -165,8 +165,7 @@ esp_err_t Status(httpd_req_t* req) {
         !cJSON_AddNumberToObject(json.get(), "scan_center_cm", motor.scan_center_cm) ||
         !cJSON_AddNumberToObject(json.get(), "scan_right_cm", motor.scan_right_cm) ||
         !cJSON_AddStringToObject(json.get(), "control_owner", motor.control_owner) ||
-        !cJSON_AddBoolToObject(json.get(), "warning_sound_enabled",
-                               motor.warning_sound_enabled) ||
+        !cJSON_AddBoolToObject(json.get(), "warning_sound_enabled", motor.warning_sound_enabled) ||
         !cJSON_AddStringToObject(json.get(), "route_state", motor.route_state) ||
         !cJSON_AddStringToObject(json.get(), "route_script", motor.route_script.data()) ||
         !cJSON_AddNumberToObject(json.get(), "route_step", motor.route_step) ||
@@ -192,6 +191,9 @@ esp_err_t Status(httpd_req_t* req) {
                                  motor.distance_move_target_cm) ||
         !cJSON_AddNumberToObject(json.get(), "distance_move_progress_cm",
                                  motor.distance_move_progress_cm) ||
+        !cJSON_AddNumberToObject(json.get(), "turn_target_degrees", motor.turn_target_degrees) ||
+        !cJSON_AddNumberToObject(json.get(), "turn_progress_degrees",
+                                 motor.turn_progress_degrees) ||
         !AddFc03EncoderJson(json.get(), motor.encoder))
         return Reply(req, "500 Internal Server Error", "{\"error\":\"Status unavailable\"}");
     std::unique_ptr<char, decltype(&cJSON_free)> body(cJSON_PrintUnformatted(json.get()),
@@ -314,7 +316,9 @@ esp_err_t Route(httpd_req_t* req) {
         error = ESP_OK;
     }
     if (error == ESP_ERR_INVALID_ARG)
-        return Reply(req, "400 Bad Request", "{\"error\":\"Use F30,L15,S; up to five steps of 1..50 cm\"}");
+        return Reply(
+            req, "400 Bad Request",
+            "{\"error\":\"Use F30,L90,S; F/B 1..50 cm, L/R 1..180 degrees, up to five steps\"}");
     if (error != ESP_OK)
         return Reply(req, "409 Conflict", "{\"error\":\"Route unavailable\"}");
     return Reply(req, "200 OK", "{\"ok\":true}");

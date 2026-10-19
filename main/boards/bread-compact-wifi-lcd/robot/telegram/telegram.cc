@@ -745,7 +745,7 @@ private:
                 const std::string script = save_only ? argument.substr(5) : argument;
                 const auto error = SaveL298nRoute(script.c_str());
                 if (error != ESP_OK) {
-                    Send("Sai kịch bản. Ví dụ: /route F30,L15,S; mỗi bước 1–50 cm, tối đa 5 bước.", true);
+                    Send("Sai kịch bản. Ví dụ: /route F30,L90,S; F/B 1–50 cm, L/R 1–180°, tối đa 5 bước.", true);
                 } else if (save_only) {
                     Send("Đã lưu kịch bản. Dùng /route run để chạy.", true);
                 } else {
