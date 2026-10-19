@@ -25,6 +25,7 @@
 #include "../telegram/telegram.h"
 #include "application.h"
 #include "assets/lang_config.h"
+#include "autonomy_decisions.h"
 #include "board.h"
 #include "mcp_server.h"
 
@@ -139,7 +140,7 @@ int DistanceMoveTimeoutMs(int distance_cm) {
     return std::max(kMaxDurationMs, estimated_timeout_ms);
 }
 
-enum class Motion { kStop, kForward, kBackward, kLeft, kRight };
+using Motion = robot_autonomy::Motion;
 enum class Emotion { kNone, kHappy, kSad, kAngry, kSurprised, kThinking, kWinking };
 enum class AutonomyMode { kManual, kFollow, kObstacleAvoidance };
 enum class DistanceMoveState {
@@ -153,17 +154,7 @@ enum class DistanceMoveState {
     kEncoderError,
     kObstacle
 };
-enum class AvoidState {
-    kForward,
-    kReverse,
-    kTurnFirst,
-    kMeasureFirst,
-    kTurnSecond,
-    kMeasureSecond,
-    kReturnFirst,
-    kMeasureChosen,
-    kBlocked
-};
+using AvoidState = robot_autonomy::AvoidPhase;
 enum class ScanState {
     kIdle,
     kCenter,
@@ -449,13 +440,14 @@ public:
         return fault_ == ESP_OK ? ESP_OK : ESP_FAIL;
     }
 
-    esp_err_t MoveDistanceFromCommand(bool forward, int distance_cm) {
+    esp_err_t MoveDistanceFromCommand(bool forward, int distance_cm, const char* owner) {
 #ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03
         return StartDistanceMoveCommand(forward ? Motion::kForward : Motion::kBackward,
-                                        distance_cm);
+                                        distance_cm, owner);
 #else
         (void)forward;
         (void)distance_cm;
+        (void)owner;
         return ESP_ERR_NOT_SUPPORTED;
 #endif
     }
@@ -515,6 +507,10 @@ public:
             CancelScanLocked();
         if (!connected && route_active_ && strcmp(control_owner_, "web") == 0)
             CancelRouteLocked();
+        if (!connected && strcmp(control_owner_, "web") == 0 &&
+            (distance_move_state_ == DistanceMoveState::kPending ||
+             distance_move_state_ == DistanceMoveState::kMoving))
+            StopLocked();
         if (!connected && web_manual_) {
             EndWebControlLocked();
         }
@@ -1216,15 +1212,8 @@ private:
         StopLocked();
         pending_emotion_ = Emotion::kNone;
         manual_override_ = requested != AutonomyMode::kManual;
+        DisableAutonomyLocked();
         autonomy_mode_ = requested;
-        avoid_state_ = AvoidState::kForward;
-        avoid_clear_samples_ = 0;
-        avoid_phase_deadline_us_ = 0;
-        avoid_phase_duration_ms_ = 0;
-        avoid_first_distance_cm_ = -1;
-        avoid_sample_distance_cm_ = -1;
-        valid_sensor_samples_ = 0;
-        invalid_sensor_samples_ = 0;
         return ESP_OK;
     }
 
@@ -1249,24 +1238,14 @@ private:
     }
 
     void UpdateFollowLocked(int distance_cm) {
-        const int target_distance = std::min(follow_distance_cm_, kFollowMaxTargetCm);
         avoid_state_ = AvoidState::kForward;
-        if (distance_cm > kFollowMaxTargetCm) {
+        const auto desired = robot_autonomy::DecideFollowMotion(
+            distance_cm, follow_distance_cm_, motion_ == Motion::kBackward, kFollowMaxTargetCm,
+            kFollowHysteresisCm, kFollowReverseTriggerCm);
+        if (desired == Motion::kStop)
             StopLocked();
-            return;
-        }
-        // Start retreating only at close range, then keep reversing until the effective
-        // target is reached. A stop (including sensor loss) cancels the retreat.
-        if (distance_cm < target_distance &&
-            (distance_cm <= kFollowReverseTriggerCm || motion_ == Motion::kBackward)) {
-            RefreshAutonomyMotionLocked(Motion::kBackward, kFollowSpeedPercent);
-            return;
-        }
-        if (distance_cm <= target_distance + kFollowHysteresisCm) {
-            StopLocked();
-            return;
-        }
-        RefreshAutonomyMotionLocked(Motion::kForward, kFollowSpeedPercent);
+        else
+            RefreshAutonomyMotionLocked(desired, kFollowSpeedPercent);
     }
 
     bool AvoidMotionPhaseLocked() const {
@@ -1325,93 +1304,73 @@ private:
     }
 
     void UpdateObstacleAvoidanceLocked(int distance_cm) {
-        const int forward_speed = speed_percent_;
-        const int stop_distance = ScaleDistanceForSpeed(obstacle_distance_cm_, forward_speed);
+        const int stop_distance = ScaleDistanceForSpeed(obstacle_distance_cm_, speed_percent_);
         const int clear_distance = stop_distance + kAvoidClearanceCm;
         const int64_t now = esp_timer_get_time();
-        if (avoid_state_ == AvoidState::kBlocked) {
-            if (distance_cm > clear_distance) {
-                if (++avoid_clear_samples_ >= 3) {
-                    DriveAvoidForwardLocked();
-                }
-            } else {
-                avoid_clear_samples_ = 0;
-                StopLocked();
-            }
-            return;
-        }
-        if (avoid_state_ == AvoidState::kForward) {
-            if (distance_cm <= stop_distance) {
-                avoid_first_distance_cm_ = -1;
-                StartAvoidMotionLocked(AvoidState::kReverse, Motion::kBackward, kAvoidReverseMs);
-            } else {
-                DriveAvoidForwardLocked();
-            }
-            return;
-        }
-
         if (AvoidMotionPhaseLocked()) {
             if (avoid_state_ != AvoidState::kReverse) {
-                if (distance_move_state_ == DistanceMoveState::kCompleted && !brake_active_) {
+                if (distance_move_state_ == DistanceMoveState::kCompleted && !brake_active_)
                     FinishAvoidMotionLocked(now);
-                    return;
-                }
-                if (distance_move_state_ != DistanceMoveState::kPending &&
-                    distance_move_state_ != DistanceMoveState::kMoving &&
-                    distance_move_state_ != DistanceMoveState::kCompleted) {
+                else if (distance_move_state_ != DistanceMoveState::kPending &&
+                         distance_move_state_ != DistanceMoveState::kMoving &&
+                         distance_move_state_ != DistanceMoveState::kCompleted)
                     BlockAvoidLocked();
-                    return;
-                }
                 return;
             }
-            if (motion_ == Motion::kStop || (moving_ && now >= deadline_us_)) {
+            if (motion_ == Motion::kStop || (moving_ && now >= deadline_us_))
                 BlockAvoidLocked();
-                return;
-            }
-            if (avoid_phase_deadline_us_ != 0 && now >= avoid_phase_deadline_us_) {
+            else if (avoid_phase_deadline_us_ != 0 && now >= avoid_phase_deadline_us_)
                 FinishAvoidMotionLocked(now);
-                return;
-            }
-            if (!RefreshAutonomyMotionLocked(Motion::kBackward, kAvoidReverseSpeedPercent))
+            else if (!RefreshAutonomyMotionLocked(Motion::kBackward, kAvoidReverseSpeedPercent))
                 BlockAvoidLocked();
             return;
         }
 
-        // Measure only while stationary, after allowing old-heading samples to leave the filter.
-        if (now < avoid_phase_deadline_us_)
-            return;
-        avoid_sample_distance_cm_ = avoid_clear_samples_ == 0
-                                        ? distance_cm
-                                        : std::min(avoid_sample_distance_cm_, distance_cm);
-        if (++avoid_clear_samples_ < 2)
-            return;
-        const int measured = avoid_sample_distance_cm_;
-        if (avoid_state_ == AvoidState::kMeasureFirst) {
-            avoid_first_distance_cm_ = measured;
-            if (measured > std::max(kAvoidFirstClearCm, stop_distance)) {
+        int measured = distance_cm;
+        if (avoid_state_ == AvoidState::kBlocked) {
+            avoid_clear_samples_ = distance_cm > clear_distance ? avoid_clear_samples_ + 1 : 0;
+        } else if (avoid_state_ != AvoidState::kForward) {
+            // Probe only after old-heading samples leave the sensor filter.
+            if (now < avoid_phase_deadline_us_)
+                return;
+            avoid_sample_distance_cm_ = avoid_clear_samples_ == 0
+                                            ? distance_cm
+                                            : std::min(avoid_sample_distance_cm_, distance_cm);
+            if (++avoid_clear_samples_ < 2)
+                return;
+            measured = avoid_sample_distance_cm_;
+            if (avoid_state_ == AvoidState::kMeasureFirst)
+                avoid_first_distance_cm_ = measured;
+        }
+        const auto action = robot_autonomy::DecideAvoidAction(
+            avoid_state_, measured, stop_distance, clear_distance, kAvoidFirstClearCm,
+            avoid_clear_samples_, avoid_first_distance_cm_);
+        switch (action) {
+            case robot_autonomy::AvoidAction::kStop:
+                StopLocked();
+                return;
+            case robot_autonomy::AvoidAction::kForward:
                 DriveAvoidForwardLocked();
                 return;
-            }
-            // From the left probe to the right probe: cross twice the first turn angle.
-            StartAvoidMotionLocked(AvoidState::kTurnSecond, Motion::kRight, kMaxTurnAngleDegrees);
-            return;
-        }
-        if (avoid_state_ == AvoidState::kMeasureSecond) {
-            if (std::max(avoid_first_distance_cm_, measured) <= stop_distance) {
-                BlockAvoidLocked();
-            } else if (measured >= avoid_first_distance_cm_) {
-                DriveAvoidForwardLocked();
-            } else {
+            case robot_autonomy::AvoidAction::kReverse:
+                avoid_first_distance_cm_ = -1;
+                StartAvoidMotionLocked(AvoidState::kReverse, Motion::kBackward, kAvoidReverseMs);
+                return;
+            case robot_autonomy::AvoidAction::kTurnRight:
+                // Cross twice the first turn angle to probe the right side.
+                StartAvoidMotionLocked(AvoidState::kTurnSecond, Motion::kRight,
+                                       kMaxTurnAngleDegrees);
+                return;
+            case robot_autonomy::AvoidAction::kTurnLeft:
                 StartAvoidMotionLocked(AvoidState::kReturnFirst, Motion::kLeft,
                                        kMaxTurnAngleDegrees);
-            }
-            return;
+                return;
+            case robot_autonomy::AvoidAction::kBlock:
+                BlockAvoidLocked();
+                return;
+            case robot_autonomy::AvoidAction::kNone:
+                return;
         }
-        // Re-check the chosen left heading after returning; the obstacle may have moved.
-        if (measured > stop_distance)
-            DriveAvoidForwardLocked();
-        else
-            BlockAvoidLocked();
     }
 
     void StopLocked() {
@@ -2197,11 +2156,13 @@ private:
         return GetState();
     }
 
-    esp_err_t StartDistanceMoveCommand(Motion motion, int distance_cm) {
+    esp_err_t StartDistanceMoveCommand(Motion motion, int distance_cm, const char* owner) {
         if (distance_cm < 1 || distance_cm > kMaxDistanceMoveCm)
             return ESP_ERR_INVALID_ARG;
         std::lock_guard lock(mutex_);
         if (web_manual_)
+            return ESP_ERR_INVALID_STATE;
+        if (owner != nullptr && strcmp(owner, "web") == 0 && !web_connected_)
             return ESP_ERR_INVALID_STATE;
         CancelRouteLocked();
         CancelScanLocked();
@@ -2216,7 +2177,7 @@ private:
             return ESP_ERR_INVALID_STATE;
         DisableAutonomyLocked();
         manual_override_ = true;
-        control_owner_ = "telegram";
+        control_owner_ = owner != nullptr && strcmp(owner, "web") == 0 ? "web" : "telegram";
         pending_emotion_ = Emotion::kNone;
         StopLocked();
         if (!PrepareMotionLocked(motion, DistanceMoveTimeoutMs(distance_cm)))
@@ -2685,8 +2646,8 @@ esp_err_t SetL298nMotorSpeed(int speed_percent) {
     return L298nController::Instance().SetSpeedPercent(speed_percent);
 }
 
-esp_err_t MoveL298nDistance(bool forward, int distance_cm) {
-    return L298nController::Instance().MoveDistanceFromCommand(forward, distance_cm);
+esp_err_t MoveL298nDistance(bool forward, int distance_cm, const char* owner) {
+    return L298nController::Instance().MoveDistanceFromCommand(forward, distance_cm, owner);
 }
 
 esp_err_t SetL298nFollowMode(bool enabled) {

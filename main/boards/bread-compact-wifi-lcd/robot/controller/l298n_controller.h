@@ -31,7 +31,7 @@ esp_err_t SetL298nMotorSpeed(int speed_percent);
 
 // Start an encoder-controlled straight-line move (FC-03 builds only).
 // Distance is 1..1000 cm; forward movement also observes the obstacle stop threshold.
-esp_err_t MoveL298nDistance(bool forward, int distance_cm);
+esp_err_t MoveL298nDistance(bool forward, int distance_cm, const char* owner = "telegram");
 
 // Thread-safe HC-SR04 autonomous modes. Modes are mutually exclusive and RAM-only.
 // Disabling either active mode stops the motors. Manual/web movement also disables autonomy.

@@ -3,6 +3,8 @@
 #include <esp_http_server.h>
 #include <esp_log.h>
 #include <esp_netif.h>
+#include <esp_system.h>
+#include <esp_timer.h>
 #include <cJSON.h>
 
 #include <atomic>
@@ -13,6 +15,8 @@
 
 #include "../controller/l298n_controller.h"
 #include "../find_robot.h"
+#include "application.h"
+#include "wifi_manager.h"
 #include "web_page.h"
 
 namespace {
@@ -33,6 +37,18 @@ bool IsControlRequest(httpd_req_t* req) {
     char header[2] = {};
     return httpd_req_get_hdr_value_str(req, "X-Robot-Control", header, sizeof(header)) == ESP_OK &&
            strcmp(header, "1") == 0;
+}
+
+size_t ReceiveBody(httpd_req_t* req, char* body) {
+    size_t received = 0;
+    while (received < req->content_len) {
+        const int count = httpd_req_recv(req, body + received, req->content_len - received);
+        if (count <= 0)
+            return 0;  // No retry loop on timeouts; motor watchdog is independent.
+        received += count;
+    }
+    body[received] = '\0';
+    return received;
 }
 
 esp_err_t Root(httpd_req_t* req) {
@@ -90,14 +106,9 @@ esp_err_t Command(httpd_req_t* req) {
         Reply(req, "400 Bad Request", "{\"error\":\"Invalid request\"}");
         return ESP_FAIL;
     }
-    size_t received = 0;
-    while (received < req->content_len) {
-        const int count = httpd_req_recv(req, body + received, req->content_len - received);
-        if (count <= 0)
-            return ESP_FAIL;  // No retry loop on timeouts; motor watchdog is independent.
-        received += count;
-    }
-    body[received] = '\0';
+    const size_t received = ReceiveBody(req, body);
+    if (received == 0)
+        return ESP_FAIL;
     if (memchr(body, '\0', received) != nullptr)
         return Reply(req, "400 Bad Request", "{\"error\":\"Invalid JSON\"}");
     using Json = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
@@ -149,10 +160,62 @@ esp_err_t Command(httpd_req_t* req) {
     return Reply(req, "200 OK", "{\"ok\":true}");
 }
 
+esp_err_t Action(httpd_req_t* req) {
+    char body[96];
+    if (!IsControlRequest(req) || req->content_len == 0 || req->content_len >= sizeof(body)) {
+        Reply(req, "400 Bad Request", "{\"error\":\"Invalid request\"}");
+        return ESP_FAIL;
+    }
+    const size_t received = ReceiveBody(req, body);
+    if (received == 0)
+        return ESP_FAIL;
+    if (memchr(body, '\0', received) != nullptr)
+        return Reply(req, "400 Bad Request", "{\"error\":\"Invalid JSON\"}");
+    using Json = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
+    Json json(cJSON_ParseWithLengthOpts(body, received + 1, nullptr, true), cJSON_Delete);
+    const auto* action = cJSON_GetObjectItemCaseSensitive(json.get(), "action");
+    if (!cJSON_IsObject(json.get()) || !cJSON_IsString(action))
+        return Reply(req, "400 Bad Request", "{\"error\":\"Invalid action\"}");
+
+    if (strcmp(action->valuestring, "stop") == 0 && cJSON_GetArraySize(json.get()) == 1) {
+        StopL298nMotor();
+        return Reply(req, "200 OK", "{\"ok\":true}");
+    }
+    if (strcmp(action->valuestring, "wake") == 0 && cJSON_GetArraySize(json.get()) == 1) {
+        auto& app = Application::GetInstance();
+        if (app.GetDeviceState() == kDeviceStateListening)
+            return Reply(req, "200 OK", "{\"ok\":true,\"already_listening\":true}");
+        if (app.GetDeviceState() != kDeviceStateIdle)
+            return Reply(req, "409 Conflict", "{\"error\":\"Ruby unavailable\"}");
+        app.Schedule([]() {
+            auto& app = Application::GetInstance();
+            if (app.GetDeviceState() == kDeviceStateIdle)
+                app.WakeWordInvoke("Hi ESP");
+        });
+        return Reply(req, "200 OK", "{\"ok\":true}");
+    }
+
+    const bool set_speed = strcmp(action->valuestring, "speed") == 0;
+    const bool forward = strcmp(action->valuestring, "forward") == 0;
+    const bool backward = strcmp(action->valuestring, "backward") == 0;
+    uint32_t value = 0;
+    if ((!set_speed && !forward && !backward) || cJSON_GetArraySize(json.get()) != 2 ||
+        !ReadInteger(json.get(), set_speed ? "speed" : "distance_cm", set_speed ? 0 : 1,
+                     set_speed ? 100 : 1000, &value))
+        return Reply(req, "400 Bad Request", "{\"error\":\"Invalid action\"}");
+    const auto error = set_speed ? SetL298nMotorSpeed(static_cast<int>(value))
+                                 : MoveL298nDistance(forward, static_cast<int>(value), "web");
+    if (error != ESP_OK)
+        return Reply(req, "409 Conflict", "{\"error\":\"Controller unavailable\"}");
+    return Reply(req, "200 OK", "{\"ok\":true}");
+}
+
 esp_err_t Status(httpd_req_t* req) {
     if (req->content_len != 0)
         return Reply(req, "400 Bad Request", "{\"error\":\"Invalid request\"}");
     const auto motor = GetL298nMotorStatus();
+    auto& wifi = WifiManager::GetInstance();
+    const auto ip = wifi.GetIpAddress();
     using Json = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
     Json json(cJSON_CreateObject(), cJSON_Delete);
     if (!json || !cJSON_AddBoolToObject(json.get(), "distance_valid", motor.distance_valid) ||
@@ -181,6 +244,12 @@ esp_err_t Status(httpd_req_t* req) {
         !cJSON_AddBoolToObject(json.get(), "moving", motor.moving) ||
         !cJSON_AddStringToObject(json.get(), "motion", motor.motion) ||
         !cJSON_AddNumberToObject(json.get(), "speed_percent", motor.active_speed_percent) ||
+        !cJSON_AddNumberToObject(json.get(), "saved_speed_percent", motor.speed_percent) ||
+        !cJSON_AddNumberToObject(json.get(), "uptime_seconds", esp_timer_get_time() / 1000000) ||
+        !cJSON_AddBoolToObject(json.get(), "wifi_connected", wifi.IsConnected()) ||
+        !cJSON_AddNumberToObject(json.get(), "wifi_rssi", wifi.GetRssi()) ||
+        !cJSON_AddStringToObject(json.get(), "ip_address", ip.c_str()) ||
+        !cJSON_AddNumberToObject(json.get(), "free_heap_kb", esp_get_free_heap_size() / 1024) ||
         !cJSON_AddBoolToObject(json.get(), "speed_pi_calibrated", motor.speed_pi_calibrated) ||
         !cJSON_AddBoolToObject(json.get(), "speed_pi_active", motor.speed_pi_active) ||
         !cJSON_AddNumberToObject(json.get(), "speed_pi_target_rpm", motor.speed_pi_target_rpm) ||
@@ -209,14 +278,9 @@ esp_err_t Autonomy(httpd_req_t* req) {
         Reply(req, "400 Bad Request", "{\"error\":\"Invalid request\"}");
         return ESP_FAIL;
     }
-    size_t received = 0;
-    while (received < req->content_len) {
-        const int count = httpd_req_recv(req, body + received, req->content_len - received);
-        if (count <= 0)
-            return ESP_FAIL;
-        received += count;
-    }
-    body[received] = '\0';
+    const size_t received = ReceiveBody(req, body);
+    if (received == 0)
+        return ESP_FAIL;
     if (memchr(body, '\0', received) != nullptr)
         return Reply(req, "400 Bad Request", "{\"error\":\"Invalid JSON\"}");
 
@@ -256,14 +320,9 @@ esp_err_t Configure(httpd_req_t* req) {
         Reply(req, "400 Bad Request", "{\"error\":\"Invalid request\"}");
         return ESP_FAIL;
     }
-    size_t received = 0;
-    while (received < req->content_len) {
-        const int count = httpd_req_recv(req, body + received, req->content_len - received);
-        if (count <= 0)
-            return ESP_FAIL;
-        received += count;
-    }
-    body[received] = '\0';
+    const size_t received = ReceiveBody(req, body);
+    if (received == 0)
+        return ESP_FAIL;
     if (memchr(body, '\0', received) != nullptr)
         return Reply(req, "400 Bad Request", "{\"error\":\"Invalid JSON\"}");
 
@@ -286,14 +345,9 @@ esp_err_t Route(httpd_req_t* req) {
         Reply(req, "400 Bad Request", "{\"error\":\"Invalid request\"}");
         return ESP_FAIL;
     }
-    size_t received = 0;
-    while (received < req->content_len) {
-        const int count = httpd_req_recv(req, body + received, req->content_len - received);
-        if (count <= 0)
-            return ESP_FAIL;
-        received += count;
-    }
-    body[received] = '\0';
+    const size_t received = ReceiveBody(req, body);
+    if (received == 0)
+        return ESP_FAIL;
     if (memchr(body, '\0', received) != nullptr)
         return Reply(req, "400 Bad Request", "{\"error\":\"Invalid JSON\"}");
     using Json = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
@@ -306,12 +360,14 @@ esp_err_t Route(httpd_req_t* req) {
     esp_err_t error = ESP_ERR_INVALID_ARG;
     if (strcmp(action->valuestring, "save") == 0 && cJSON_IsString(script))
         error = SaveL298nRoute(script->valuestring);
-    else if (strcmp(action->valuestring, "run") == 0 && cJSON_IsString(script)) {
-        error = SaveL298nRoute(script->valuestring);
+    else if (strcmp(action->valuestring, "run") == 0) {
+        if (script == nullptr)
+            error = ESP_OK;
+        else if (cJSON_IsString(script))
+            error = SaveL298nRoute(script->valuestring);
         if (error == ESP_OK)
             error = RunL298nRoute("web");
-    }
-    else if (strcmp(action->valuestring, "stop") == 0 && script == nullptr) {
+    } else if (strcmp(action->valuestring, "stop") == 0 && script == nullptr) {
         CancelL298nRoute();
         error = ESP_OK;
     }
@@ -330,7 +386,7 @@ esp_err_t StartServer() {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.server_port = 8080;  // Wi-Fi provisioning keeps port 80.
     config.ctrl_port = 32769;
-    config.max_uri_handlers = 8;
+    config.max_uri_handlers = 9;
     config.max_open_sockets = 2;
     config.lru_purge_enable = true;
     config.stack_size = 6144;
@@ -346,6 +402,7 @@ esp_err_t StartServer() {
         {.uri = "/api/claim", .method = HTTP_POST, .handler = Claim, .user_ctx = nullptr},
         {.uri = "/api/find", .method = HTTP_POST, .handler = Find, .user_ctx = nullptr},
         {.uri = "/api/command", .method = HTTP_POST, .handler = Command, .user_ctx = nullptr},
+        {.uri = "/api/action", .method = HTTP_POST, .handler = Action, .user_ctx = nullptr},
         {.uri = "/api/status", .method = HTTP_GET, .handler = Status, .user_ctx = nullptr},
         {.uri = "/api/config", .method = HTTP_POST, .handler = Configure, .user_ctx = nullptr},
         {.uri = "/api/autonomy", .method = HTTP_POST, .handler = Autonomy, .user_ctx = nullptr},
