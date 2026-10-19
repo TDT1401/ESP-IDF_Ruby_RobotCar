@@ -352,7 +352,7 @@
 // Continue inferring the previous direction briefly after PWM stops (coasting).
 #define FC03_COAST_MS 500
 // Log both counters every 2 seconds in monitor; set to 0 after calibration.
-#define FC03_DEBUG 1
+#define FC03_DEBUG 0
 #endif
 
 #ifndef DISPLAY_SPI_CLOCK_HZ

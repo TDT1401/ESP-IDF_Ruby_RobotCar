@@ -12,6 +12,7 @@
 #include <memory>
 
 #include "../controller/l298n_controller.h"
+#include "../find_robot.h"
 #include "web_page.h"
 
 namespace {
@@ -52,6 +53,16 @@ esp_err_t Claim(httpd_req_t* req) {
     char body[48];
     snprintf(body, sizeof(body), "{\"session\":%lu}", static_cast<unsigned long>(session));
     return Reply(req, "200 OK", body);
+}
+
+esp_err_t Find(httpd_req_t* req) {
+    if (!IsControlRequest(req) || req->content_len != 0) {
+        Reply(req, "400 Bad Request", "{\"error\":\"Invalid request\"}");
+        return ESP_FAIL;
+    }
+    if (FindL298nRobot() != ESP_OK)
+        return Reply(req, "409 Conflict", "{\"error\":\"Robot busy or find cooldown active\"}");
+    return Reply(req, "200 OK", "{\"ok\":true}");
 }
 
 bool ReadInteger(const cJSON* json, const char* key, uint32_t minimum, uint32_t maximum,
@@ -147,6 +158,19 @@ esp_err_t Status(httpd_req_t* req) {
     if (!json || !cJSON_AddBoolToObject(json.get(), "distance_valid", motor.distance_valid) ||
         !cJSON_AddNumberToObject(json.get(), "distance_cm", motor.measured_distance_cm) ||
         !cJSON_AddStringToObject(json.get(), "autonomy_mode", motor.autonomy_mode) ||
+        !cJSON_AddBoolToObject(json.get(), "guard_enabled", motor.guard_enabled) ||
+        !cJSON_AddNumberToObject(json.get(), "guard_baseline_cm", motor.guard_baseline_cm) ||
+        !cJSON_AddStringToObject(json.get(), "scan_state", motor.scan_state) ||
+        !cJSON_AddNumberToObject(json.get(), "scan_left_cm", motor.scan_left_cm) ||
+        !cJSON_AddNumberToObject(json.get(), "scan_center_cm", motor.scan_center_cm) ||
+        !cJSON_AddNumberToObject(json.get(), "scan_right_cm", motor.scan_right_cm) ||
+        !cJSON_AddStringToObject(json.get(), "control_owner", motor.control_owner) ||
+        !cJSON_AddBoolToObject(json.get(), "warning_sound_enabled",
+                               motor.warning_sound_enabled) ||
+        !cJSON_AddStringToObject(json.get(), "route_state", motor.route_state) ||
+        !cJSON_AddStringToObject(json.get(), "route_script", motor.route_script.data()) ||
+        !cJSON_AddNumberToObject(json.get(), "route_step", motor.route_step) ||
+        !cJSON_AddNumberToObject(json.get(), "route_steps", motor.route_steps) ||
         !cJSON_AddNumberToObject(json.get(), "follow_distance_cm", motor.follow_distance_cm) ||
         !cJSON_AddNumberToObject(json.get(), "obstacle_distance_cm", motor.obstacle_distance_cm) ||
         !cJSON_AddNumberToObject(json.get(), "follow_target_cm",
@@ -207,6 +231,16 @@ esp_err_t Autonomy(httpd_req_t* req) {
         error = SetL298nFollowMode(cJSON_IsTrue(enabled));
     else if (strcmp(mode->valuestring, "avoid") == 0)
         error = SetL298nObstacleAvoidance(cJSON_IsTrue(enabled));
+    else if (strcmp(mode->valuestring, "guard") == 0)
+        error = SetL298nGuardMode(cJSON_IsTrue(enabled));
+    else if (strcmp(mode->valuestring, "scan") == 0) {
+        if (cJSON_IsTrue(enabled))
+            error = StartL298nSpaceScan();
+        else {
+            CancelL298nSpaceScan();
+            error = ESP_OK;
+        }
+    }
     else
         return Reply(req, "400 Bad Request", "{\"error\":\"Invalid autonomy mode\"}");
     if (error != ESP_OK)
@@ -244,13 +278,55 @@ esp_err_t Configure(httpd_req_t* req) {
     return Reply(req, "200 OK", "{\"ok\":true}");
 }
 
+esp_err_t Route(httpd_req_t* req) {
+    char body[128];
+    if (!IsControlRequest(req) || req->content_len == 0 || req->content_len >= sizeof(body)) {
+        Reply(req, "400 Bad Request", "{\"error\":\"Invalid request\"}");
+        return ESP_FAIL;
+    }
+    size_t received = 0;
+    while (received < req->content_len) {
+        const int count = httpd_req_recv(req, body + received, req->content_len - received);
+        if (count <= 0)
+            return ESP_FAIL;
+        received += count;
+    }
+    body[received] = '\0';
+    if (memchr(body, '\0', received) != nullptr)
+        return Reply(req, "400 Bad Request", "{\"error\":\"Invalid JSON\"}");
+    using Json = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
+    Json json(cJSON_ParseWithLengthOpts(body, received + 1, nullptr, true), cJSON_Delete);
+    const auto* action = cJSON_GetObjectItemCaseSensitive(json.get(), "action");
+    const auto* script = cJSON_GetObjectItemCaseSensitive(json.get(), "script");
+    if (!cJSON_IsObject(json.get()) || !cJSON_IsString(action) ||
+        cJSON_GetArraySize(json.get()) != (script == nullptr ? 1 : 2))
+        return Reply(req, "400 Bad Request", "{\"error\":\"Invalid route command\"}");
+    esp_err_t error = ESP_ERR_INVALID_ARG;
+    if (strcmp(action->valuestring, "save") == 0 && cJSON_IsString(script))
+        error = SaveL298nRoute(script->valuestring);
+    else if (strcmp(action->valuestring, "run") == 0 && cJSON_IsString(script)) {
+        error = SaveL298nRoute(script->valuestring);
+        if (error == ESP_OK)
+            error = RunL298nRoute("web");
+    }
+    else if (strcmp(action->valuestring, "stop") == 0 && script == nullptr) {
+        CancelL298nRoute();
+        error = ESP_OK;
+    }
+    if (error == ESP_ERR_INVALID_ARG)
+        return Reply(req, "400 Bad Request", "{\"error\":\"Use F30,L15,S; up to five steps of 1..50 cm\"}");
+    if (error != ESP_OK)
+        return Reply(req, "409 Conflict", "{\"error\":\"Route unavailable\"}");
+    return Reply(req, "200 OK", "{\"ok\":true}");
+}
+
 esp_err_t StartServer() {
     if (server != nullptr)
         return ESP_OK;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.server_port = 8080;  // Wi-Fi provisioning keeps port 80.
     config.ctrl_port = 32769;
-    config.max_uri_handlers = 6;
+    config.max_uri_handlers = 8;
     config.max_open_sockets = 2;
     config.lru_purge_enable = true;
     config.stack_size = 6144;
@@ -264,10 +340,12 @@ esp_err_t StartServer() {
     const httpd_uri_t routes[] = {
         {.uri = "/", .method = HTTP_GET, .handler = Root, .user_ctx = nullptr},
         {.uri = "/api/claim", .method = HTTP_POST, .handler = Claim, .user_ctx = nullptr},
+        {.uri = "/api/find", .method = HTTP_POST, .handler = Find, .user_ctx = nullptr},
         {.uri = "/api/command", .method = HTTP_POST, .handler = Command, .user_ctx = nullptr},
         {.uri = "/api/status", .method = HTTP_GET, .handler = Status, .user_ctx = nullptr},
         {.uri = "/api/config", .method = HTTP_POST, .handler = Configure, .user_ctx = nullptr},
         {.uri = "/api/autonomy", .method = HTTP_POST, .handler = Autonomy, .user_ctx = nullptr},
+        {.uri = "/api/route", .method = HTTP_POST, .handler = Route, .user_ctx = nullptr},
     };
     for (const auto& route : routes) {
         error = httpd_register_uri_handler(server, &route);

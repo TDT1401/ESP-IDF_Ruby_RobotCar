@@ -34,6 +34,7 @@
 #include <string>
 
 #include "../controller/l298n_controller.h"
+#include "../find_robot.h"
 #include "../web/web_server.h"
 #include "application.h"
 #include "audio_codec.h"
@@ -131,7 +132,28 @@ std::string StatusMessage() {
     message += L298nTelegramText::kFollowDistanceLabel;
     message += std::to_string(motor.follow_distance_cm) + " cm\n";
     message += L298nTelegramText::kObstacleDistanceLabel;
-    message += std::to_string(motor.obstacle_distance_cm) + " cm\n\n";
+    message += std::to_string(motor.obstacle_distance_cm) + " cm\n";
+    message += "• Canh gác: ";
+    message += motor.guard_enabled ? "đang bật\n" : "đang tắt\n";
+    message += "• Quét: ";
+    message += motor.scan_state;
+    if (strcmp(motor.scan_state, "complete") == 0) {
+        message += " (trái / giữa / phải: " + std::to_string(motor.scan_left_cm) + " / " +
+                   std::to_string(motor.scan_center_cm) + " / " +
+                   std::to_string(motor.scan_right_cm) + " cm, ước lượng)";
+    }
+    message += "\n\n";
+    message += "• Kịch bản: ";
+    message += motor.route_state;
+    if (motor.route_steps > 0) {
+        message += " <code>";
+        message += motor.route_script.data();
+        message += "</code>";
+        if (strcmp(motor.route_state, "running") == 0)
+            message += " (bước " + std::to_string(motor.route_step) + "/" +
+                       std::to_string(motor.route_steps) + ")";
+    }
+    message += "\n\n";
 
     message += L298nTelegramText::kDivider;
     message += "\n\n<b>📊 HOẠT ĐỘNG</b>\n";
@@ -232,6 +254,12 @@ public:
         connected_.store(connected);
         if (task_ != nullptr)
             xTaskNotifyGive(task_);
+    }
+
+    bool QueueAlert(const char* text) {
+        if (text == nullptr || !connected_.load())
+            return false;
+        return QueueMessage(text).has_value();
     }
 
 private:
@@ -659,6 +687,14 @@ private:
             Send(StatusMessage(), true);
         else if (command == "/web")
             Send(WebMessage(), true);
+        else if (command == "/find") {
+            if (!argument.empty())
+                Send("Dùng /find.", true);
+            else if (FindL298nRobot() == ESP_OK)
+                Send("Ruby đang phát âm báo và nhấp nháy màn hình hiển thị IP.", true);
+            else
+                Send("Chưa thể tìm xe: xe đang hoạt động hoặc vừa được gọi. Hãy thử lại sau vài giây.", true);
+        }
         else if (command == "/wake")
             HandleWake();
         else if (command == "/speed")
@@ -671,7 +707,54 @@ private:
             HandleAutonomy(argument, true);
         else if (command == "/avoid")
             HandleAutonomy(argument, false);
-        else if (command == "/stop") {
+        else if (command == "/guard") {
+            const auto option = LowerAscii(argument);
+            if (option != "on" && option != "off")
+                Send("Dùng /guard on hoặc /guard off.", true);
+            else if (SetL298nGuardMode(option == "on") == ESP_OK)
+                Send(option == "on" ? "Đã bật canh gác khi xe đứng yên." :
+                                       "Đã tắt canh gác.", true);
+            else
+                Send("Không thể bật canh gác khi xe đang di chuyển hoặc điều khiển web.", true);
+        } else if (command == "/scan") {
+            const auto option = LowerAscii(argument);
+            if (option == "stop") {
+                CancelL298nSpaceScan();
+                Send("Đã dừng quét.", true);
+            } else if (option.empty() || option == "start") {
+                if (StartL298nSpaceScan() == ESP_OK)
+                    Send("Đã bắt đầu quét trái, giữa, phải. Xem sơ đồ ước lượng trên web.", true);
+                else
+                    Send("Chưa thể quét: xe cần đứng yên và không ở chế độ lái web/tự hành.", true);
+            } else {
+                Send("Dùng /scan hoặc /scan stop.", true);
+            }
+        } else if (command == "/route") {
+            const auto option = LowerAscii(argument);
+            if (option == "stop") {
+                CancelL298nRoute();
+                Send("Đã dừng kịch bản.", true);
+            } else if (option == "run") {
+                Send(RunL298nRoute("telegram") == ESP_OK ?
+                         "Đang chạy kịch bản đã lưu. /stop ngắt ngay." :
+                         "Không thể chạy: cần xe đứng yên và FC-03 đã hiệu chuẩn.", true);
+            } else if (option == "status" || option.empty()) {
+                Send(StatusMessage(), true);
+            } else {
+                const bool save_only = option.rfind("save ", 0) == 0;
+                const std::string script = save_only ? argument.substr(5) : argument;
+                const auto error = SaveL298nRoute(script.c_str());
+                if (error != ESP_OK) {
+                    Send("Sai kịch bản. Ví dụ: /route F30,L15,S; mỗi bước 1–50 cm, tối đa 5 bước.", true);
+                } else if (save_only) {
+                    Send("Đã lưu kịch bản. Dùng /route run để chạy.", true);
+                } else {
+                    Send(RunL298nRoute("telegram") == ESP_OK ?
+                             "Đang chạy kịch bản. /stop ngắt ngay." :
+                             "Đã lưu nhưng chưa thể chạy: cần xe đứng yên và FC-03 đã hiệu chuẩn.", true);
+                }
+            }
+        } else if (command == "/stop") {
             StopL298nMotor();
             Send(L298nTelegramText::kEmergencyStopped, true);
         } else if (command == "/start" || command == "/menu" || command == "/help")
@@ -790,6 +873,8 @@ void InitializeL298nTelegram() { Telegram::Instance().Start(); }
 
 void UpdateL298nTelegramNetwork(bool connected) { Telegram::Instance().SetConnected(connected); }
 
+bool QueueL298nTelegramAlert(const char* text) { return Telegram::Instance().QueueAlert(text); }
+
 #else
 
 #include <esp_log.h>
@@ -803,5 +888,7 @@ void InitializeL298nTelegram() {
 }
 
 void UpdateL298nTelegramNetwork(bool connected) { (void)connected; }
+
+bool QueueL298nTelegramAlert(const char* text) { (void)text; return false; }
 
 #endif

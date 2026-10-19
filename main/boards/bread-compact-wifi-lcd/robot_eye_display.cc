@@ -13,12 +13,16 @@
 #include <esp_log.h>
 #include <esp_random.h>
 #include <esp_timer.h>
+#include <sdkconfig.h>
 
 #include "assets/lang_config.h"
 #include "board.h"
 #include "display/lvgl_display/lvgl_theme.h"
 #include "material_symbols.h"
 #include "wifi_manager.h"
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N
+#include "robot/controller/l298n_controller.h"
+#endif
 
 #define TAG "RobotEyeDisplay"
 
@@ -448,6 +452,29 @@ void RobotEyeDisplay::ShowHappyFor(uint32_t duration_ms) {
     NotifyEmotionMotion();
 }
 
+void RobotEyeDisplay::ShowAlertFor(uint32_t duration_ms) {
+    DisplayLockGuard lock(this);
+    if (!lock || speaking_)
+        return;
+    requested_screen_ = Screen::kEyes;
+    ShowEyesScreen();
+    SetRobotEyeExpression(Expression::kAlert);
+    happy_until_ms_ = NowMs() + std::max<uint32_t>(1, duration_ms);
+    NotifyEmotionMotion();
+}
+
+void RobotEyeDisplay::ShowFindFor(uint32_t duration_ms) {
+    DisplayLockGuard lock(this);
+    if (!lock)
+        return;
+    requested_screen_ = Screen::kEyes;
+    last_find_flash_ms_ = NowMs();
+    find_flash_bright_ = true;
+    ShowScreen(Screen::kFind, duration_ms);
+    if (info_layer_ != nullptr)
+        lv_obj_set_style_bg_color(info_layer_, lv_color_hex(0x17425C), 0);
+}
+
 RobotEyeDisplay::Expression RobotEyeDisplay::InferSentenceExpression(const char* content) {
     const std::string_view text(content);
     for (auto phrase : {"xin lỗi", "rất tiếc", "chia buồn", "i'm sorry", "my condolences"}) {
@@ -653,6 +680,8 @@ void RobotEyeDisplay::ShowScreen(Screen screen, uint32_t duration_ms) {
         ShowEyesScreen();
         return;
     }
+    if (active_screen_ == Screen::kFind && screen != Screen::kFind && info_layer_ != nullptr)
+        lv_obj_set_style_bg_color(info_layer_, lv_color_hex(0x050A12), 0);
     active_screen_ = screen;
     screen_until_ms_ = NowMs() + duration_ms;
     if (info_layer_ != nullptr) {
@@ -681,6 +710,8 @@ void RobotEyeDisplay::ShowScreen(Screen screen, uint32_t duration_ms) {
 }
 
 void RobotEyeDisplay::ShowEyesScreen() {
+    if (active_screen_ == Screen::kFind && info_layer_ != nullptr)
+        lv_obj_set_style_bg_color(info_layer_, lv_color_hex(0x050A12), 0);
     active_screen_ = Screen::kEyes;
     screen_until_ms_ = 0;
     if (info_layer_ != nullptr) {
@@ -975,6 +1006,44 @@ void RobotEyeDisplay::RefreshInfoScreen(uint32_t now, bool force) {
             SetInfoText(MATERIAL_SYMBOLS_DEVICE_THERMOSTAT,
                         active_screen_ == Screen::kWeather ? "WEATHER" : "TEMP", value,
                         weather_label);
+            break;
+        }
+        case Screen::kDrive: {
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N
+            const auto motor = GetL298nMotorStatus();
+            const char* direction = "STOP";
+            if (strcmp(motor.motion, "forward") == 0)
+                direction = "FORWARD";
+            else if (strcmp(motor.motion, "backward") == 0)
+                direction = "BACK";
+            else if (strcmp(motor.motion, "turn_left") == 0)
+                direction = "LEFT";
+            else if (strcmp(motor.motion, "turn_right") == 0)
+                direction = "RIGHT";
+            snprintf(value, sizeof(value), "%s %d%%", direction, motor.active_speed_percent);
+            const char* owner = strcmp(motor.control_owner, "web") == 0 ? "WEB" :
+                                strcmp(motor.control_owner, "telegram") == 0 ? "TELEGRAM" :
+                                strcmp(motor.control_owner, "voice") == 0 ? "VOICE" : "AUTO";
+            char range[20];
+            if (motor.distance_valid)
+                snprintf(range, sizeof(range), "%dcm", motor.measured_distance_cm);
+            else
+                snprintf(range, sizeof(range), "--");
+            const bool warning = motor.distance_valid &&
+                                 motor.measured_distance_cm <
+                                     (motor.web_manual ? motor.web_warning_effective_cm :
+                                                         motor.obstacle_stop_effective_cm);
+            snprintf(detail, sizeof(detail), "SR04 %s  |  %s\nBEEP %s%s", range, owner,
+                     motor.web_manual ? (motor.warning_sound_enabled ? "ON" : "OFF") : "--",
+                     warning ? "  ! NEAR" : "");
+            SetInfoText(MATERIAL_SYMBOLS_WIFI, "RUBY DRIVE", value, detail);
+#endif
+            break;
+        }
+        case Screen::kFind: {
+            auto& wifi = WifiManager::GetInstance();
+            const std::string ip = wifi.IsConnected() ? wifi.GetIpAddress() : "No IP";
+            SetInfoText(MATERIAL_SYMBOLS_WIFI, "FIND RUBY", ip.c_str(), "Ruby is here!");
             break;
         }
         case Screen::kEyes:
@@ -1594,10 +1663,35 @@ void RobotEyeDisplay::UpdateAnimation() {
         return;
     }
     const uint32_t now = NowMs();
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N
+    if (now - last_drive_refresh_ms_ >= 200) {
+        last_drive_refresh_ms_ = now;
+        const auto motor = GetL298nMotorStatus();
+        const bool driving = motor.web_manual || motor.pending || motor.moving ||
+                             strcmp(motor.autonomy_mode, "manual") != 0 ||
+                             strcmp(motor.route_state, "running") == 0 ||
+                             strcmp(motor.scan_state, "scanning") == 0;
+        if (driving) {
+            if (active_screen_ != Screen::kDrive)
+                ShowScreen(Screen::kDrive, 1000);
+            else
+                screen_until_ms_ = now + 1000;
+        } else if (active_screen_ == Screen::kDrive) {
+            ShowEyesScreen();
+        }
+    }
+#endif
     if (active_screen_ != Screen::kEyes) {
         if (screen_until_ms_ != 0 && DeadlineReached(now, screen_until_ms_)) {
             ShowEyesScreen();
         } else {
+            if (active_screen_ == Screen::kFind && info_layer_ != nullptr &&
+                now - last_find_flash_ms_ >= 300) {
+                last_find_flash_ms_ = now;
+                find_flash_bright_ = !find_flash_bright_;
+                lv_obj_set_style_bg_color(info_layer_,
+                                          lv_color_hex(find_flash_bright_ ? 0x17425C : 0x050A12), 0);
+            }
             RenderWeatherScene(now);
             RefreshInfoScreen(now);
             return;

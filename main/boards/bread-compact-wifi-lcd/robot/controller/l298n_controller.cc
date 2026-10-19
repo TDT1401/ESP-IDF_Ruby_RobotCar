@@ -9,17 +9,23 @@
 #include <esp_timer.h>
 
 #include <algorithm>
+#include <array>
+#include <cctype>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
 
 #include "../../config.h"
+#include "../../robot_eye_display.h"
 #include "../sensors/hcsr04_sensor.h"
+#include "../telegram/telegram.h"
 #include "application.h"
 #include "assets/lang_config.h"
+#include "board.h"
 #include "mcp_server.h"
 
 namespace {
@@ -83,6 +89,13 @@ constexpr int64_t kProximityWarningPeriodUs = 700000;
 constexpr int kAutonomySpeedPercent = 40;
 constexpr int kAvoidReverseSpeedPercent = 45;
 constexpr int kAutonomyTurnSpeedPercent = 60;
+constexpr int kGuardChangeCm = 20;
+constexpr int64_t kGuardCooldownUs = 30000000;
+constexpr int kScanTurnMs = 350;
+constexpr int64_t kScanSettleUs = 350000;
+constexpr int kRouteMaxSteps = 5;
+constexpr int kRouteMaxStepCm = 50;
+constexpr int64_t kRouteMaxUs = 60000000;
 
 #ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03
 constexpr double kLeftRpmAtPwm50 = FC03_LEFT_RPM_AT_PWM_50;
@@ -149,6 +162,132 @@ enum class AvoidState {
     kMeasureChosen,
     kBlocked
 };
+enum class ScanState {
+    kIdle,
+    kCenter,
+    kTurnLeft,
+    kLeft,
+    kTurnRight,
+    kRight,
+    kReturn,
+    kComplete,
+    kInterrupted
+};
+enum class RouteState { kEmpty, kSaved, kRunning, kComplete, kInterrupted };
+
+const char* RouteStateName(RouteState state) {
+    switch (state) {
+        case RouteState::kSaved:
+            return "saved";
+        case RouteState::kRunning:
+            return "running";
+        case RouteState::kComplete:
+            return "complete";
+        case RouteState::kInterrupted:
+            return "interrupted";
+        default:
+            return "empty";
+    }
+}
+
+struct RouteStep {
+    Motion motion;
+    int distance_cm;
+};
+
+bool ParseRoute(const char* script, std::array<RouteStep, kRouteMaxSteps>& steps, int& count,
+                std::array<char, 64>& normalized) {
+    if (script == nullptr)
+        return false;
+    size_t length = 0;
+    while (length < normalized.size() && script[length] != '\0')
+        ++length;
+    if (length == 0 || length >= normalized.size())
+        return false;
+    count = 0;
+    size_t written = 0;
+    const char* cursor = script;
+    while (*cursor != '\0') {
+        while (*cursor == ' ' || *cursor == '\t')
+            ++cursor;
+        const char code = static_cast<char>(std::toupper(static_cast<unsigned char>(*cursor++)));
+        if (code == 'S') {
+            while (*cursor == ' ' || *cursor == '\t')
+                ++cursor;
+            if (*cursor != '\0' || count == 0)
+                return false;
+            if (written + 3 > normalized.size())
+                return false;
+            normalized[written++] = ',';
+            normalized[written++] = 'S';
+            break;
+        }
+        Motion motion;
+        switch (code) {
+            case 'F':
+                motion = Motion::kForward;
+                break;
+            case 'B':
+                motion = Motion::kBackward;
+                break;
+            case 'L':
+                motion = Motion::kLeft;
+                break;
+            case 'R':
+                motion = Motion::kRight;
+                break;
+            default:
+                return false;
+        }
+        if (count >= kRouteMaxSteps || *cursor < '0' || *cursor > '9')
+            return false;
+        int distance = 0;
+        while (*cursor >= '0' && *cursor <= '9') {
+            distance = distance * 10 + (*cursor++ - '0');
+            if (distance > kRouteMaxStepCm)
+                return false;
+        }
+        if (distance == 0)
+            return false;
+        while (*cursor == ' ' || *cursor == '\t')
+            ++cursor;
+        char item[8];
+        const int size = snprintf(item, sizeof(item), "%s%c%d", count ? "," : "", code, distance);
+        if (size <= 0 || written + static_cast<size_t>(size) >= normalized.size())
+            return false;
+        memcpy(normalized.data() + written, item, size);
+        written += size;
+        steps[count++] = {motion, distance};
+        if (*cursor == '\0')
+            break;
+        if (*cursor++ != ',')
+            return false;
+        if (*cursor == '\0')
+            return false;
+    }
+    if (count == 0)
+        return false;
+    normalized[written] = '\0';
+    return true;
+}
+
+const char* ScanStateName(ScanState state) {
+    switch (state) {
+        case ScanState::kCenter:
+        case ScanState::kTurnLeft:
+        case ScanState::kLeft:
+        case ScanState::kTurnRight:
+        case ScanState::kRight:
+        case ScanState::kReturn:
+            return "scanning";
+        case ScanState::kComplete:
+            return "complete";
+        case ScanState::kInterrupted:
+            return "interrupted";
+        default:
+            return "idle";
+    }
+}
 
 struct GestureStep {
     Motion motion;
@@ -267,6 +406,8 @@ public:
 
     void Stop() {
         std::lock_guard lock(mutex_);
+        CancelRouteLocked();
+        CancelScanLocked();
         // A spoken stop must not be undone by an emotion in the acknowledgement.
         emotion_enabled_ = false;
         pending_emotion_ = Emotion::kNone;
@@ -286,6 +427,8 @@ public:
         std::lock_guard lock(mutex_);
         if (web_manual_)
             return ESP_ERR_INVALID_STATE;
+        CancelRouteLocked();
+        CancelScanLocked();
         manual_override_ = true;
         pending_emotion_ = Emotion::kNone;
         if (gesture_steps_ != nullptr)
@@ -345,12 +488,28 @@ public:
                 speed_pi_active_,
                 speed_pi_target_rpm_,
                 CurrentLeftPwmPercentLocked(),
-                CurrentRightPwmPercentLocked()};
+                CurrentRightPwmPercentLocked(),
+                guard_enabled_,
+                guard_baseline_cm_,
+                ScanStateName(scan_state_),
+                scan_distances_[0],
+                scan_distances_[1],
+                scan_distances_[2],
+                ControlOwnerLocked(),
+                proximity_warning_enabled_,
+                RouteStateName(route_state_),
+                route_script_,
+                route_active_ ? route_index_ + 1 : 0,
+                route_count_};
     }
 
     void SetWebConnected(bool connected) {
         std::lock_guard lock(mutex_);
         web_connected_ = connected;
+        if (!connected)
+            CancelScanLocked();
+        if (!connected && route_active_ && strcmp(control_owner_, "web") == 0)
+            CancelRouteLocked();
         if (!connected && web_manual_) {
             EndWebControlLocked();
         }
@@ -369,6 +528,8 @@ public:
             EndWebControlLocked();
         if (fault_ != ESP_OK)
             return fault_;
+        CancelRouteLocked();
+        CancelScanLocked();
         DisableAutonomyLocked();
         StopLocked();
         if (fault_ != ESP_OK)
@@ -495,6 +656,8 @@ public:
         const auto next = ParseEmotion(emotion);
         const bool sleep_requested = IsSleepEmotion(emotion);
         std::lock_guard lock(mutex_);
+        if (speaking)
+            CancelScanLocked();
         if (sleep_requested) {
             response_active_ = speaking;
             last_emotion_ = Emotion::kNone;
@@ -526,7 +689,7 @@ public:
         // A changed/neutral expression cancels an old gesture, never a manual command.
         if (gesture_steps_ != nullptr)
             StopLocked();
-        if (emotion_enabled_ && !manual_override_ && !web_manual_ &&
+        if (emotion_enabled_ && !manual_override_ && !web_manual_ && !route_active_ &&
             autonomy_mode_ == AutonomyMode::kManual && motion_ == Motion::kStop &&
             speed_percent_ > 0 && fault_ == ESP_OK && esp_timer_get_time() >= next_gesture_at_us_) {
             pending_emotion_ = next;
@@ -562,11 +725,142 @@ public:
         return ESP_OK;
     }
 
+    esp_err_t SetGuardMode(bool enabled) {
+        std::lock_guard lock(mutex_);
+        if (enabled && (web_manual_ || autonomy_mode_ != AutonomyMode::kManual ||
+                        motion_ != Motion::kStop || ScanActiveLocked() || route_active_ ||
+                        fault_ != ESP_OK ||
+                        !MotionAllowed()))
+            return ESP_ERR_INVALID_STATE;
+        guard_enabled_ = enabled;
+        guard_baseline_cm_ = -1;
+        guard_change_samples_ = 0;
+        guard_alert_pending_ = false;
+        return ESP_OK;
+    }
+
+    esp_err_t StartScan() {
+        std::lock_guard lock(mutex_);
+        if (web_manual_ || autonomy_mode_ != AutonomyMode::kManual || motion_ != Motion::kStop ||
+            gesture_steps_ != nullptr || brake_active_ || response_active_ || fault_ != ESP_OK ||
+            speed_percent_ == 0 || !sensor_valid_ ||
+            esp_timer_get_time() - last_sensor_update_us_ > kSensorStaleMs * 1000LL ||
+            !MotionAllowed() || ScanActiveLocked() || route_active_)
+            return ESP_ERR_INVALID_STATE;
+        guard_baseline_cm_ = -1;
+        guard_change_samples_ = 0;
+        pending_emotion_ = Emotion::kNone;
+        manual_override_ = true;
+        scan_distances_[0] = scan_distances_[1] = scan_distances_[2] = -1;
+        scan_state_ = ScanState::kCenter;
+        scan_phase_deadline_us_ = esp_timer_get_time() + kScanSettleUs;
+        return ESP_OK;
+    }
+
+    void CancelScan() {
+        std::lock_guard lock(mutex_);
+        CancelScanLocked();
+    }
+
+    esp_err_t SaveRoute(const char* script) {
+        std::array<RouteStep, kRouteMaxSteps> steps = {};
+        std::array<char, 64> normalized = {};
+        int count = 0;
+        if (!ParseRoute(script, steps, count, normalized))
+            return ESP_ERR_INVALID_ARG;
+        std::lock_guard lock(mutex_);
+        if (route_active_)
+            return ESP_ERR_INVALID_STATE;
+        route_steps_ = steps;
+        route_count_ = count;
+        route_script_ = normalized;
+        route_state_ = RouteState::kSaved;
+        return ESP_OK;
+    }
+
+    esp_err_t RunRoute(const char* owner) {
+#ifndef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03
+        (void)owner;
+        return ESP_ERR_NOT_SUPPORTED;
+#else
+        std::lock_guard lock(mutex_);
+        const auto encoder = encoder_.Snapshot();
+        if (route_count_ == 0 || route_active_ || web_manual_ ||
+            (owner != nullptr && strcmp(owner, "web") == 0 && !web_connected_) ||
+            autonomy_mode_ != AutonomyMode::kManual || ScanActiveLocked() ||
+            motion_ != Motion::kStop || brake_active_ || response_active_ ||
+            !encoder.ready || !encoder.calibrated || fault_ != ESP_OK ||
+            speed_percent_ == 0 || !MotionAllowed())
+            return ESP_ERR_INVALID_STATE;
+        CancelScanLocked();
+        pending_emotion_ = Emotion::kNone;
+        manual_override_ = true;
+        route_active_ = true;
+        route_state_ = RouteState::kRunning;
+        route_index_ = 0;
+        route_deadline_us_ = esp_timer_get_time() + kRouteMaxUs;
+        control_owner_ = owner != nullptr && strcmp(owner, "telegram") == 0 ? "telegram" :
+                         owner != nullptr && strcmp(owner, "web") == 0 ? "web" : "voice";
+        if (!StartRouteStepLocked()) {
+            CancelRouteLocked();
+            return ESP_FAIL;
+        }
+        return ESP_OK;
+#endif
+    }
+
+    void CancelRoute() {
+        std::lock_guard lock(mutex_);
+        CancelRouteLocked();
+    }
+
     void UpdateDistance(int distance_cm, bool valid) {
         std::lock_guard lock(mutex_);
-        last_sensor_update_us_ = esp_timer_get_time();
+        const int64_t now = esp_timer_get_time();
+        last_sensor_update_us_ = now;
         sensor_valid_ = valid;
         measured_distance_cm_ = valid ? distance_cm : -1;
+        if (scan_state_ == ScanState::kCenter || scan_state_ == ScanState::kLeft ||
+            scan_state_ == ScanState::kRight) {
+            if (now >= scan_phase_deadline_us_) {
+                const int slot = scan_state_ == ScanState::kLeft ? 0 :
+                                 scan_state_ == ScanState::kCenter ? 1 : 2;
+                scan_distances_[slot] = valid ? distance_cm : -1;
+                const ScanState next = scan_state_ == ScanState::kCenter ? ScanState::kTurnLeft :
+                                       scan_state_ == ScanState::kLeft ? ScanState::kTurnRight :
+                                       ScanState::kReturn;
+                const Motion turn = next == ScanState::kTurnRight ? Motion::kRight : Motion::kLeft;
+                scan_state_ = next;
+                autonomy_speed_percent_ = std::min(speed_percent_, kAutonomyTurnSpeedPercent);
+                if (!PrepareMotionLocked(turn, next == ScanState::kTurnRight ? 2 * kScanTurnMs
+                                                                         : kScanTurnMs))
+                    CancelScanLocked();
+            }
+            return;
+        }
+        if (guard_enabled_ && !ScanActiveLocked() && !route_active_ &&
+            autonomy_mode_ == AutonomyMode::kManual &&
+            !web_manual_ && motion_ == Motion::kStop && !response_active_ && MotionAllowed()) {
+            if (!valid) {
+                guard_change_samples_ = 0;
+            } else if (guard_baseline_cm_ < 0) {
+                guard_baseline_cm_ = distance_cm;
+            } else if (std::abs(distance_cm - guard_baseline_cm_) >= kGuardChangeCm) {
+                if (++guard_change_samples_ >= 3 && now >= guard_next_alert_us_) {
+                    guard_alert_distance_cm_ = distance_cm;
+                    guard_alert_pending_ = true;
+                    guard_next_alert_us_ = now + kGuardCooldownUs;
+                    guard_baseline_cm_ = distance_cm;
+                    guard_change_samples_ = 0;
+                }
+            } else {
+                guard_change_samples_ = 0;
+                guard_baseline_cm_ = (3 * guard_baseline_cm_ + distance_cm) / 4;
+            }
+        } else {
+            guard_baseline_cm_ = -1;
+            guard_change_samples_ = 0;
+        }
         if (!valid) {
             valid_sensor_samples_ = 0;
             avoid_clear_samples_ = 0;
@@ -642,6 +936,31 @@ public:
         });
     }
 
+    void ScheduleGuardAlert() {
+        int distance = -1;
+        {
+            std::lock_guard lock(mutex_);
+            if (!guard_alert_pending_)
+                return;
+            guard_alert_pending_ = false;
+            distance = guard_alert_distance_cm_;
+        }
+        Application::GetInstance().Schedule([distance]() {
+            auto& app = Application::GetInstance();
+#if defined(CONFIG_BREAD_COMPACT_WIFI_LCD_ST7735_80X160) || defined(CONFIG_LCD_ST7789_240X240)
+            if (auto* display = Board::GetInstance().GetDisplay())
+                static_cast<RobotEyeDisplay*>(display)->ShowAlertFor(3500);
+#endif
+            if (app.CanEnterSleepMode())
+                app.PlaySound(Lang::Sounds::OGG_POPUP);
+        });
+        char message[160];
+        snprintf(message, sizeof(message),
+                 "⚠️ Ruby: khoảng cách trước xe thay đổi bất thường (%d cm). Chế độ canh gác đang bật.",
+                 distance);
+        QueueL298nTelegramAlert(message);
+    }
+
 private:
     // MCP, HTTP and network callbacks and the timer share this controller.
     // Only short state/GPIO operations hold the mutex: no sleeps, JSON, logging,
@@ -714,6 +1033,76 @@ private:
     bool warning_queued_ = false;
     bool proximity_warning_enabled_ = true;
     int64_t next_warning_at_us_ = 0;
+    bool guard_enabled_ = false;
+    int guard_baseline_cm_ = -1;
+    int guard_change_samples_ = 0;
+    int guard_alert_distance_cm_ = -1;
+    bool guard_alert_pending_ = false;
+    int64_t guard_next_alert_us_ = 0;
+    ScanState scan_state_ = ScanState::kIdle;
+    int scan_distances_[3] = {-1, -1, -1};
+    int64_t scan_phase_deadline_us_ = 0;
+    std::array<RouteStep, kRouteMaxSteps> route_steps_ = {};
+    std::array<char, 64> route_script_ = {};
+    int route_count_ = 0;
+    int route_index_ = 0;
+    int64_t route_deadline_us_ = 0;
+    bool route_active_ = false;
+    RouteState route_state_ = RouteState::kEmpty;
+    const char* control_owner_ = "none";
+
+    const char* ControlOwnerLocked() const {
+        if (web_manual_)
+            return "web";
+        if (route_active_)
+            return control_owner_;
+        if (autonomy_mode_ != AutonomyMode::kManual || ScanActiveLocked())
+            return "automatic";
+        return motion_ != Motion::kStop ? control_owner_ : "none";
+    }
+
+    void CancelRouteLocked() {
+        if (!route_active_)
+            return;
+        route_active_ = false;
+        route_state_ = RouteState::kInterrupted;
+        StopLocked();
+        manual_override_ = response_active_;
+    }
+
+    bool StartRouteStepLocked() {
+        if (route_index_ >= route_count_)
+            return false;
+        const auto& step = route_steps_[route_index_];
+        if (step.motion == Motion::kForward &&
+            (!sensor_valid_ || esp_timer_get_time() - last_sensor_update_us_ >
+                                   kSensorStaleMs * 1000LL ||
+             measured_distance_cm_ <= ScaleDistanceForSpeed(obstacle_distance_cm_, speed_percent_)))
+            return false;
+        StopLocked();
+        if (!PrepareMotionLocked(step.motion, DistanceMoveTimeoutMs(step.distance_cm)))
+            return false;
+        distance_move_target_cm_ = step.distance_cm;
+        distance_move_progress_cm_ = 0;
+        distance_profile_speed_percent_ = 0;
+        distance_profile_update_us_ = 0;
+        distance_move_state_ = DistanceMoveState::kPending;
+        return true;
+    }
+
+    bool ScanActiveLocked() const {
+        return scan_state_ == ScanState::kCenter || scan_state_ == ScanState::kTurnLeft ||
+               scan_state_ == ScanState::kLeft || scan_state_ == ScanState::kTurnRight ||
+               scan_state_ == ScanState::kRight || scan_state_ == ScanState::kReturn;
+    }
+
+    void CancelScanLocked() {
+        if (!ScanActiveLocked())
+            return;
+        scan_state_ = ScanState::kInterrupted;
+        StopLocked();
+        manual_override_ = response_active_;
+    }
 
     L298nController() {
         constexpr uint64_t pins = (1ULL << MOTOR_LEFT_EN_PIN) | (1ULL << MOTOR_LEFT_IN1_PIN) |
@@ -796,6 +1185,8 @@ private:
             return ESP_OK;
         if (web_manual_)
             return ESP_ERR_INVALID_STATE;
+        CancelRouteLocked();
+        CancelScanLocked();
         if (requested != AutonomyMode::kManual &&
             (!MotionAllowed() || fault_ != ESP_OK || speed_percent_ == 0)) {
             return ESP_ERR_INVALID_STATE;
@@ -1018,6 +1409,13 @@ private:
         }
         if (distance_move_state_ != DistanceMoveState::kMoving)
             return;
+        if (route_active_ && motion_ == Motion::kForward &&
+            (!sensor_valid_ || esp_timer_get_time() - last_sensor_update_us_ >
+                                   kSensorStaleMs * 1000LL)) {
+            distance_move_state_ = DistanceMoveState::kInterrupted;
+            StopLocked();
+            return;
+        }
         if (motion_ == Motion::kForward && sensor_valid_ &&
             esp_timer_get_time() - last_sensor_update_us_ <= kSensorStaleMs * 1000LL &&
             measured_distance_cm_ <= ScaleDistanceForSpeed(obstacle_distance_cm_, speed_percent_)) {
@@ -1049,7 +1447,10 @@ private:
             now - distance_profile_update_us_ < kDistanceRampUpdateUs)
             return;
 
-        const int target_speed = std::max(speed_percent_, kDistanceMinimumDrivePercent);
+        const int target_speed = route_active_ ?
+                                     std::min(std::max(speed_percent_, kDistanceMinimumDrivePercent),
+                                              kAutonomyTurnSpeedPercent) :
+                                     std::max(speed_percent_, kDistanceMinimumDrivePercent);
         const int start_speed = std::min(target_speed, kDistanceRampStartSpeedPercent);
         const int crawl_speed = std::min(target_speed, kDistanceCrawlSpeedPercent);
         const double total_distance = distance_move_target_cm_;
@@ -1330,6 +1731,8 @@ private:
             return distance_profile_speed_percent_;
         if (web_manual_)
             return web_speed_percent_;
+        if (ScanActiveLocked())
+            return std::min(speed_percent_, kAutonomyTurnSpeedPercent);
         if (autonomy_mode_ != AutonomyMode::kManual)
             return autonomy_speed_percent_;
         return gesture_steps_ == nullptr
@@ -1360,6 +1763,7 @@ private:
 
     template <size_t N>
     void StartGestureLocked(const GestureStep (&steps)[N], int64_t now) {
+        control_owner_ = "voice";
         gesture_steps_ = steps;
         gesture_count_ = N;
         gesture_index_ = 0;
@@ -1418,11 +1822,70 @@ private:
         const auto state = Application::GetInstance().GetDeviceState();
         if (state == kDeviceStateUpgrading || state == kDeviceStateFatalError ||
             state == kDeviceStateWifiConfiguring) {
+            CancelRouteLocked();
+            CancelScanLocked();
             pending_emotion_ = Emotion::kNone;
             DisableAutonomyLocked();
             if (motion_ != Motion::kStop)
                 StopLocked();
             return;
+        }
+        if (route_active_) {
+            if (fault_ != ESP_OK || now >= route_deadline_us_) {
+                CancelRouteLocked();
+                return;
+            }
+            if (distance_move_state_ == DistanceMoveState::kCompleted) {
+                if (route_index_ + 1 == route_count_) {
+                    route_active_ = false;
+                    route_state_ = RouteState::kComplete;
+                    manual_override_ = response_active_;
+                } else {
+                    ++route_index_;
+                    if (!StartRouteStepLocked())
+                        CancelRouteLocked();
+                }
+                return;
+            }
+            if (distance_move_state_ != DistanceMoveState::kPending &&
+                distance_move_state_ != DistanceMoveState::kMoving) {
+                CancelRouteLocked();
+                return;
+            }
+        }
+        if (ScanActiveLocked()) {
+            if (fault_ != ESP_OK) {
+                CancelScanLocked();
+                return;
+            }
+            if ((scan_state_ == ScanState::kCenter || scan_state_ == ScanState::kLeft ||
+                 scan_state_ == ScanState::kRight) &&
+                now > scan_phase_deadline_us_ + 1000000) {
+                CancelScanLocked();
+                return;
+            }
+            if (scan_state_ == ScanState::kTurnLeft || scan_state_ == ScanState::kTurnRight ||
+                scan_state_ == ScanState::kReturn) {
+                if (motion_ == Motion::kStop) {
+                    CancelScanLocked();
+                    return;
+                }
+                if (now >= deadline_us_) {
+                    const ScanState completed = scan_state_;
+                    StopLocked();
+                    if (completed == ScanState::kReturn) {
+                        scan_state_ = ScanState::kComplete;
+                        manual_override_ = false;
+                    } else {
+                        scan_state_ = completed == ScanState::kTurnLeft ? ScanState::kLeft :
+                                      ScanState::kRight;
+                        scan_phase_deadline_us_ = now + kScanSettleUs;
+                    }
+                    return;
+                }
+            } else {
+                return;  // The sensor callback advances stationary measurement phases.
+            }
         }
         // Web joystick outputs are applied directly from validated commands. Keep the timed
         // direction path active for the four HUD buttons.
@@ -1460,7 +1923,8 @@ private:
         if (motion_ == Motion::kStop) {
             const auto emotion = pending_emotion_;
             pending_emotion_ = Emotion::kNone;
-            if (!emotion_enabled_ || manual_override_ || web_manual_ || !response_active_ ||
+            if (!emotion_enabled_ || manual_override_ || web_manual_ || route_active_ ||
+                !response_active_ ||
                 autonomy_mode_ != AutonomyMode::kManual || state != kDeviceStateSpeaking ||
                 speed_percent_ == 0 || fault_ != ESP_OK ||
                 now < next_gesture_at_us_)
@@ -1498,6 +1962,14 @@ private:
                 StopLocked();
             }
         } else if (!moving_ && now >= start_at_us_) {
+            if (route_active_ && motion_ == Motion::kForward &&
+                (!sensor_valid_ || now - last_sensor_update_us_ > kSensorStaleMs * 1000LL ||
+                 measured_distance_cm_ <=
+                     ScaleDistanceForSpeed(obstacle_distance_cm_, speed_percent_))) {
+                distance_move_state_ = DistanceMoveState::kInterrupted;
+                CancelRouteLocked();
+                return;
+            }
             if (!ApplyDirectionLocked()) {
                 StopLocked();
                 return;
@@ -1551,8 +2023,11 @@ private:
             if (web_manual_)
                 return std::unexpected(
                     "Web manual control is active; release it on the web page first.");
+            CancelRouteLocked();
+            CancelScanLocked();
             DisableAutonomyLocked();
             manual_override_ = true;
+            control_owner_ = "voice";
             pending_emotion_ = Emotion::kNone;
             StopLocked();  // A new movement replaces the previous one, never queues it.
             if (fault_ != ESP_OK) {
@@ -1587,6 +2062,8 @@ private:
             if (web_manual_)
                 return std::unexpected(
                     "Web manual control is active; release it on the web page first.");
+            CancelRouteLocked();
+            CancelScanLocked();
             const auto encoder = encoder_.Snapshot();
             if (!encoder.ready || !encoder.calibrated) {
                 return std::unexpected(
@@ -1599,6 +2076,7 @@ private:
                 return std::unexpected("Set a nonzero motor speed before moving by distance.");
             DisableAutonomyLocked();
             manual_override_ = true;
+            control_owner_ = "voice";
             pending_emotion_ = Emotion::kNone;
             StopLocked();
             speed_percent_ = next_speed;
@@ -1619,6 +2097,8 @@ private:
         std::lock_guard lock(mutex_);
         if (web_manual_)
             return ESP_ERR_INVALID_STATE;
+        CancelRouteLocked();
+        CancelScanLocked();
         const auto encoder = encoder_.Snapshot();
         if (!encoder.ready || !encoder.calibrated)
             return ESP_ERR_NOT_SUPPORTED;
@@ -1630,6 +2110,7 @@ private:
             return ESP_ERR_INVALID_STATE;
         DisableAutonomyLocked();
         manual_override_ = true;
+        control_owner_ = "telegram";
         pending_emotion_ = Emotion::kNone;
         StopLocked();
         if (!PrepareMotionLocked(motion, DistanceMoveTimeoutMs(distance_cm)))
@@ -1699,6 +2180,15 @@ private:
         DistanceMoveState distance_move_state;
         int distance_move_target_cm;
         double distance_move_progress_cm;
+        bool guard_enabled;
+        int guard_baseline_cm;
+        ScanState scan_state;
+        int scan_left_cm, scan_center_cm, scan_right_cm;
+        const char* control_owner;
+        bool warning_sound_enabled;
+        RouteState route_state;
+        std::array<char, 64> route_script;
+        int route_step, route_steps;
         {
             std::lock_guard lock(mutex_);
             const int64_t now = esp_timer_get_time();
@@ -1729,6 +2219,18 @@ private:
             distance_move_state = distance_move_state_;
             distance_move_target_cm = distance_move_target_cm_;
             distance_move_progress_cm = distance_move_progress_cm_;
+            guard_enabled = guard_enabled_;
+            guard_baseline_cm = guard_baseline_cm_;
+            scan_state = scan_state_;
+            scan_left_cm = scan_distances_[0];
+            scan_center_cm = scan_distances_[1];
+            scan_right_cm = scan_distances_[2];
+            control_owner = ControlOwnerLocked();
+            warning_sound_enabled = proximity_warning_enabled_;
+            route_state = route_state_;
+            route_script = route_script_;
+            route_step = route_active_ ? route_index_ + 1 : 0;
+            route_steps = route_count_;
             remaining_ms = motion == Motion::kStop ? 0
                            : (moving || web_manual)
                                ? std::max<int64_t>(0, (deadline_us_ - now + 999) / 1000)
@@ -1748,6 +2250,18 @@ private:
             !cJSON_AddBoolToObject(json.get(), "web_manual_active", web_manual) ||
             !cJSON_AddStringToObject(json.get(), "autonomy_mode",
                                      AutonomyModeName(autonomy_mode)) ||
+            !cJSON_AddBoolToObject(json.get(), "guard_enabled", guard_enabled) ||
+            !cJSON_AddNumberToObject(json.get(), "guard_baseline_cm", guard_baseline_cm) ||
+            !cJSON_AddStringToObject(json.get(), "scan_state", ScanStateName(scan_state)) ||
+            !cJSON_AddNumberToObject(json.get(), "scan_left_cm", scan_left_cm) ||
+            !cJSON_AddNumberToObject(json.get(), "scan_center_cm", scan_center_cm) ||
+            !cJSON_AddNumberToObject(json.get(), "scan_right_cm", scan_right_cm) ||
+            !cJSON_AddStringToObject(json.get(), "control_owner", control_owner) ||
+            !cJSON_AddBoolToObject(json.get(), "warning_sound_enabled", warning_sound_enabled) ||
+            !cJSON_AddStringToObject(json.get(), "route_state", RouteStateName(route_state)) ||
+            !cJSON_AddStringToObject(json.get(), "route_script", route_script.data()) ||
+            !cJSON_AddNumberToObject(json.get(), "route_step", route_step) ||
+            !cJSON_AddNumberToObject(json.get(), "route_steps", route_steps) ||
             !cJSON_AddNumberToObject(json.get(), "follow_distance_cm", follow_distance) ||
             !cJSON_AddNumberToObject(json.get(), "obstacle_distance_cm", obstacle_distance) ||
             !cJSON_AddNumberToObject(json.get(), "follow_target_cm", effective_follow_distance) ||
@@ -1963,6 +2477,45 @@ private:
                        "follow/avoid thresholds, current autonomy mode and blocked state.",
                        PropertyList(),
                        [this](const PropertyList&) -> ToolResult { return GetState(); });
+        server.AddTool(
+            "self.navigation.set_guard_mode",
+            "Enable or disable stationary HC-SR04 guard mode. Three sustained readings at least "
+            "20 cm from its baseline trigger a screen, speaker and configured Telegram alert. "
+            "Alerts have a 30 second cooldown. Monitoring pauses while the robot moves. "
+            "Enabling requires the robot to be stopped and outside web/autonomous control.",
+            PropertyList({Property("enabled", kPropertyTypeBoolean)}),
+            [this](const PropertyList& properties) -> ToolResult {
+                if (SetGuardMode(properties["enabled"].value<bool>()) != ESP_OK)
+                    return std::unexpected("Guard mode requires an idle robot.");
+                return GetState();
+            });
+        server.AddTool(
+            "self.navigation.scan_space",
+            "Start a bounded timed left/center/right HC-SR04 scan, then turn back to the "
+            "estimated starting heading. Requires a stopped robot outside web/autonomous "
+            "control. Turn angles are not measured; results are an approximate clearance "
+            "diagram, not a map. Read scan_state and scan distances via web status.",
+            PropertyList(), [this](const PropertyList&) -> ToolResult {
+                if (StartScan() != ESP_OK)
+                    return std::unexpected("Space scan requires an idle robot.");
+                return GetState();
+            });
+        server.AddTool(
+            "self.navigation.run_route",
+            "Run a bounded multi-step route. Script syntax: F30,L15,S means forward 30 cm, "
+            "turn left using 15 cm of wheel travel, then stop. B and R mean backward and "
+            "right. Each step is 1..50 cm, up to five moves. FC-03 calibration is required. "
+            "Turns are approximate; the rear has no obstacle sensor. Stop interrupts it at "
+            "any time. The script remains saved in RAM for web or Telegram replay.",
+            PropertyList({Property("script", kPropertyTypeString).SetMaxLength(63)}),
+            [this](const PropertyList& properties) -> ToolResult {
+                const auto script = properties["script"].value<std::string>();
+                if (SaveRoute(script.c_str()) != ESP_OK)
+                    return std::unexpected("Use up to five F/B/L/R steps of 1..50 cm, optionally ending in S.");
+                if (RunRoute("voice") != ESP_OK)
+                    return std::unexpected("Route needs an idle robot and calibrated FC-03 encoders.");
+                return GetState();
+            });
     }
 };
 
@@ -1975,6 +2528,7 @@ void InitializeL298nController() {
     InitializeHcsr04Sensor([](int distance_cm, bool valid) {
         auto& controller = L298nController::Instance();
         controller.UpdateDistance(distance_cm, valid);
+        controller.ScheduleGuardAlert();
         controller.ScheduleProximityWarning();
     });
     ESP_ERROR_CHECK(esp_register_shutdown_handler([]() { L298nController::Instance().Stop(); }));
@@ -2025,5 +2579,23 @@ esp_err_t SetL298nFollowDistance(int distance_cm) {
 esp_err_t SetL298nObstacleDistance(int distance_cm) {
     return L298nController::Instance().SetObstacleDistance(distance_cm);
 }
+
+esp_err_t SetL298nGuardMode(bool enabled) {
+    return L298nController::Instance().SetGuardMode(enabled);
+}
+
+esp_err_t StartL298nSpaceScan() { return L298nController::Instance().StartScan(); }
+
+void CancelL298nSpaceScan() { L298nController::Instance().CancelScan(); }
+
+esp_err_t SaveL298nRoute(const char* script) {
+    return L298nController::Instance().SaveRoute(script);
+}
+
+esp_err_t RunL298nRoute(const char* owner) {
+    return L298nController::Instance().RunRoute(owner);
+}
+
+void CancelL298nRoute() { L298nController::Instance().CancelRoute(); }
 
 void StopL298nMotor() { L298nController::Instance().Stop(); }

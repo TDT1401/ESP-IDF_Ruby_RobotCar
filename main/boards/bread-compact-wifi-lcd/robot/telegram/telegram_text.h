@@ -105,7 +105,10 @@ inline constexpr char kMenu[] =
     "Chọn chức năng bằng các nút bên dưới.\n"
     "⬆️ Tiến / ⬇️ Lùi: chạm nút rồi nhập khoảng cách bằng cm (1–1000).\n"
     "🎙️ Đánh thức Ruby để trò chuyện; 🌐 mở trang điều khiển xe.\n"
-    "📊 Trạng thái và các nút tự hành cũng có sẵn bên dưới.";
+    "📊 Trạng thái và các nút tự hành cũng có sẵn bên dưới.\n"
+    "Canh gác: /guard on hoặc /guard off. Quét khoảng trống: /scan hoặc /scan stop.\n"
+    "Kịch bản: /route F30,L15,S; lưu để chạy lại: /route save F30,L15,S rồi /route run.\n"
+    "Tìm xe: /find để phát âm báo, nhấp nháy màn hình và hiện IP.";
 
 inline constexpr char kWakeRequested[] =
     "🎙️ Đã gửi yêu cầu đánh thức. Chờ Ruby chuyển sang lắng nghe rồi nói vào mic trên Ruby.\n"

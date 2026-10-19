@@ -13,6 +13,8 @@ inline constexpr char kL298nWebPage[] = R"html(
   <style>
     :root{color-scheme:dark;--bg:#050711;--panel:#0d1324dd;--panel2:#101a30;--text:#f3f7ff;--muted:#8291ae;--line:#21304d;--cyan:#28d7ff;--blue:#4776ff;--purple:#985cff;--success:#39e58c;--danger:#ff4f70;--shadow:0 24px 70px #0009}
     body.ultra{--bg:#000;--panel:#070a12f2;--panel2:#090e18;--line:#192235}
+    .scan-map{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}.scan-sector{padding:12px 6px;border:1px solid var(--line);border-radius:12px;text-align:center;background:var(--panel2)}.scan-sector strong{display:block;color:var(--cyan);font-size:20px}.feature-card{margin-top:18px;padding:16px;border:1px solid var(--line);border-radius:16px;background:var(--panel2)}.feature-card p{color:var(--muted)}.feature-card button{margin-right:8px}.feature-state{color:var(--cyan);font-weight:700}
+    .feature-card input[type=text]{width:100%;margin:6px 0 12px;padding:11px;border:1px solid var(--line);border-radius:10px;background:#050a14;color:var(--text);font:inherit}
     *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
     body{margin:0;min-height:100vh;overflow-x:hidden;background:radial-gradient(circle at 12% 4%,#1b4fff33,transparent 30%),radial-gradient(circle at 88% 22%,#8d3cff28,transparent 28%),linear-gradient(145deg,#060914,var(--bg) 48%,#070a16);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,sans-serif}
     body:before{position:fixed;inset:0;z-index:-1;background-image:linear-gradient(#5f7ba20c 1px,transparent 1px),linear-gradient(90deg,#5f7ba20c 1px,transparent 1px);background-size:32px 32px;content:"";mask-image:linear-gradient(to bottom,#000,transparent 80%)}
@@ -27,12 +29,16 @@ inline constexpr char kL298nWebPage[] = R"html(
     #status{min-height:50px;margin:19px 0;padding:13px 15px;border:1px solid var(--line);border-radius:13px;background:#060b16a8;color:#adbad0;font-size:13px;line-height:1.55}.actions{display:flex;gap:10px}.actions button{flex:1;font-size:13px;font-weight:750}.primary{border-color:#28d7ff66;background:linear-gradient(135deg,#087fa4,#315bd8);box-shadow:0 8px 24px #197acb35;color:white}
     .manual-head-actions{display:flex;align-items:center;gap:8px}.drive{position:relative;border:1px solid #28d7ff47;border-radius:18px;background:linear-gradient(145deg,#183558,#101b32);box-shadow:0 10px 20px #0005,inset 0 1px #ffffff18;color:#dff8ff;font-size:25px;font-weight:850;touch-action:none;user-select:none;-webkit-user-select:none}.drive:hover:not(:disabled){box-shadow:0 0 20px #28d7ff25,inset 0 1px #ffffff22}.drive small{display:block;margin-top:3px;color:#8eaac8;font-size:10px;font-weight:700;letter-spacing:.5px}.drive.held{transform:scale(.94);border-color:var(--cyan);background:#0a7998;box-shadow:0 0 26px #28d7ff55}.drive.held small{color:#fff}.stop-drive{border-color:#ff4f7066!important;background:linear-gradient(145deg,#7c1731,#3a1020)!important;color:#ffdce4!important}.stop-drive:hover:not(:disabled){box-shadow:0 0 22px #ff4f7038}.speed-label{display:flex;justify-content:space-between;color:#aab8cf;font-size:12px;font-weight:750;letter-spacing:.3px}.speed-label output{color:var(--cyan);font-variant-numeric:tabular-nums}input[type=range]{width:100%;height:5px;margin:18px 0;appearance:none;border-radius:999px;background:linear-gradient(90deg,var(--cyan),var(--purple));accent-color:var(--cyan)}input[type=range]::-webkit-slider-thumb{width:19px;height:19px;appearance:none;border:3px solid #dffaff;border-radius:50%;background:var(--cyan);box-shadow:0 0 15px #28d7ffaa}.hint{margin-top:14px;text-align:center}.status-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:18px 0}.status-card,.config-card{padding:15px;border:1px solid var(--line);border-radius:15px;background:#080e1c}.status-card span,.config-card label{display:block;color:var(--muted);font-size:11px;font-weight:750}.status-card strong{display:block;margin-top:7px;color:#dff8ff;font-size:15px}.config-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}.config-card input{width:100%;margin:10px 0 0;padding:11px;border:1px solid var(--line);border-radius:10px;background:#050a14;color:var(--text);font:inherit}.config-actions{display:flex;align-items:center;gap:12px;margin-top:14px}.config-actions button{min-width:150px}.config-hint{margin:0;color:var(--muted);font-size:11px}
     .landscape-hud{display:none}.hud-topbar{grid-column:1/-1;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 clamp(10px,2vw,26px);border-bottom:1px solid #28d7ff54;background:linear-gradient(90deg,#06132d,#10264a 50%,#06132d);box-shadow:0 8px 28px #00d9ff20}.hud-signal{display:flex;align-items:center;gap:7px;color:#70f6ff;font-size:10px;font-weight:850;letter-spacing:1.2px}.hud-signal:before{width:8px;height:8px;border-radius:50%;background:var(--success);box-shadow:0 0 13px var(--success);content:""}.hud-title{color:#34e8ff;font-size:clamp(14px,2.2vw,23px);font-weight:900;letter-spacing:1.6px;text-align:center;text-shadow:0 0 18px #00d9ffaa}.hud-exit{justify-self:end;padding:7px 11px;border-color:#28d7ff66;background:#0a1c37;color:#79f4ff;font-size:11px;font-weight:850}.hud-bank{position:relative;display:grid;grid-template-rows:auto 1fr;align-items:center;overflow:hidden;padding:clamp(11px,2vw,25px)}.hud-bank:before{position:absolute;inset:8% 3%;border:clamp(8px,1.1vw,15px) solid #253c65;border-top-color:#355787;border-bottom-color:#182b50;border-radius:42% 42% 27% 27%;box-shadow:inset 0 0 35px #0bdcff0c,0 0 34px #0bdcff0b;content:""}.hud-bank:after{position:absolute;inset:13% 7%;border:1px solid #28d7ff2c;border-radius:40% 40% 25% 25%;content:""}.hud-bank-label{position:relative;z-index:1;color:#6fefff;font-size:10px;font-weight:900;letter-spacing:2px;text-align:center;text-shadow:0 0 12px #00d9ff}.hud-controls{position:relative;z-index:1;display:grid;grid-template-columns:1fr 1fr;place-items:center;gap:clamp(8px,2vw,28px)}.hud-drive{width:clamp(68px,12vw,136px);height:clamp(68px,12vw,136px);padding:0;border:2px solid #36dfff7a;border-radius:50%;background:radial-gradient(circle at 40% 32%,#244d79,#0b1c38 58%,#050d1e 70%);box-shadow:inset 0 0 18px #55eaff38,inset 0 -12px 24px #0007,0 0 26px #00d9ff20;color:#9cf7ff;font-size:clamp(26px,4.5vw,49px);text-shadow:0 0 13px #00d9ff}.hud-drive small{font-size:9px}.hud-drive.held{transform:scale(.92);background:radial-gradient(circle,#15a6cb,#07516d 65%,#032335);box-shadow:inset 0 0 20px #fff4,0 0 32px #00d9ffaa}.hud-center{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(5px,1.2vh,12px);padding:8px;text-align:center}.hud-center:before{position:absolute;inset:12% -5% 3%;z-index:0;border:1px solid #28d7ff22;clip-path:polygon(22% 0,78% 0,100% 100%,0 100%);background:linear-gradient(180deg,#10284e45,transparent);content:""}.hud-center>*{position:relative;z-index:1}.hud-kicker{color:#667b9f;font-size:8px;font-weight:900;letter-spacing:2.3px}.hud-heading{color:#20e7ff;font-size:clamp(11px,1.6vw,17px);font-weight:900;letter-spacing:1.8px;text-shadow:0 0 13px #00d9ff}.hud-speed{display:grid;line-height:.9}.hud-speed output{color:#f4fbff;font-size:clamp(40px,8vw,92px);font-weight:900;letter-spacing:-4px;text-shadow:0 0 25px #247dff8a}.hud-speed span{margin-top:7px;color:#5b6e90;font-size:8px;font-weight:850;letter-spacing:2px}.speed-presets{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;width:min(100%,260px)}.speed-preset{padding:8px 6px;border-radius:999px;color:#8397b8;font-size:11px;font-weight:850}.speed-preset.active{border-color:#28d7ff9c;background:linear-gradient(135deg,#087fa4,#315bd8);box-shadow:0 0 18px #28d7ff4a;color:#fff}.hud-distance{display:flex;align-items:baseline;gap:8px;padding:7px 13px;border:1px solid #28d7ff3c;border-radius:999px;background:#031024c7}.hud-distance span{color:#637b9e;font-size:8px;font-weight:900;letter-spacing:1.2px}.hud-distance strong{color:#61f0ff;font-size:clamp(15px,2.4vw,25px);font-variant-numeric:tabular-nums}.hud-stop{min-width:110px;padding:8px 18px;border-color:#ff4f7080;border-radius:999px;background:linear-gradient(145deg,#7c1731,#3a1020);color:#ffdce4;font-size:12px;font-weight:850}.hud-stop small{display:inline;margin-left:5px}
+    .hud-controls{width:min(100%,350px);margin:auto;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(3,auto);gap:clamp(4px,1vw,12px)}
+    .hud-controls .hud-drive{width:min(100%,clamp(44px,min(8vw,18vh),96px));height:auto;aspect-ratio:1}
+    .hud-controls [data-dir="f"]{grid-column:2;grid-row:1}.hud-controls [data-dir="l"]{grid-column:1;grid-row:2}.hud-controls [data-dir="r"]{grid-column:3;grid-row:2}.hud-controls [data-dir="b"]{grid-column:2;grid-row:3}
     body.drive-expanded{overflow:hidden}#manualPanel.drive-expanded{position:fixed;inset:0;z-index:20}#manualPanel:fullscreen,#manualPanel:-webkit-full-screen,#manualPanel.drive-expanded{width:100%;height:100vh;height:100dvh;min-height:0;padding:20px;border:0;border-radius:0;background:radial-gradient(circle at 50% 30%,#13284a,#050711 72%);overflow:auto}
     .mode-card{position:relative;display:grid;min-height:330px;margin-top:25px;padding:30px;place-items:center;overflow:hidden;border:1px solid var(--line);border-radius:22px;background:radial-gradient(circle at 50% 25%,#243b6638,transparent 45%),#070c18;text-align:center}.mode-card:before{position:absolute;inset:14px;border:1px solid #ffffff08;border-radius:16px;content:""}.mode-icon{display:grid;width:88px;height:88px;place-items:center;border:1px solid #28d7ff3b;border-radius:27px;background:linear-gradient(145deg,#172f51,#18152d);box-shadow:0 0 32px #28d7ff1f;font-size:44px}.mode-card strong{font-size:19px;letter-spacing:.1px}.mode-actions{position:relative;z-index:1;display:grid;grid-template-columns:1fr 1fr;gap:12px;width:min(100%,410px);margin-top:22px}.mode-on,.mode-off{min-height:50px;color:white;font-size:12px;font-weight:850;letter-spacing:1px}.mode-on{border-color:#39e58c55;background:linear-gradient(135deg,#128351,#16a86b);box-shadow:0 8px 24px #16a86b25}.mode-off{border-color:#ff4f7055;background:linear-gradient(135deg,#9d2944,#c53755);box-shadow:0 8px 24px #c5375525}footer{padding:22px 8px;color:#576784;font-size:11px;line-height:1.75;text-align:center}
     @media(max-width:720px){main{padding:18px 13px 100px}.brand-copy{display:block}.online{margin-top:5px;width:max-content}.dashboard{display:block}.menu{position:fixed;z-index:10;right:10px;bottom:10px;left:10px;display:grid;grid-template-columns:repeat(3,1fr);padding:7px;border-color:#314462;background:#080d18f2;box-shadow:0 14px 45px #000c}.menu:before{display:none}.menu button{text-align:center}.panel{min-height:520px}}
     @media(max-width:470px){header{align-items:flex-start}.brand-mark{width:44px;height:44px}.online{display:none}.telemetry{width:100%;gap:10px;padding:10px 12px}.sensor-state{font-size:10px}.panel{padding:22px 14px}.manual-head-actions .mode-status{display:none}.mode-actions{grid-template-columns:1fr}.actions{flex-direction:column}.status-grid{grid-template-columns:1fr}.config-grid{grid-template-columns:1fr}.config-actions{align-items:stretch;flex-direction:column}.config-actions button{width:100%}}
     @media(orientation:landscape){#manualPanel:fullscreen,#manualPanel:-webkit-full-screen,#manualPanel.drive-expanded{display:block;padding:0;overflow:hidden;background:radial-gradient(circle at 50% 45%,#0d2a51,#030816 62%,#080922);box-shadow:inset 0 0 90px #000}#manualPanel:fullscreen .panel-head,#manualPanel:-webkit-full-screen .panel-head,#manualPanel.drive-expanded .panel-head,#manualPanel:fullscreen .portrait-manual,#manualPanel:-webkit-full-screen .portrait-manual,#manualPanel.drive-expanded .portrait-manual{display:none}#manualPanel:fullscreen .landscape-hud,#manualPanel:-webkit-full-screen .landscape-hud,#manualPanel.drive-expanded .landscape-hud{display:grid;width:100%;height:100%;min-height:0;grid-template-columns:minmax(0,1fr) minmax(0,.82fr) minmax(0,1fr);grid-template-rows:48px minmax(0,1fr);padding-right:env(safe-area-inset-right);padding-left:env(safe-area-inset-left)}}
     @media(orientation:landscape) and (max-height:500px){.landscape-hud{padding-bottom:16px}.hud-topbar{min-height:40px}.hud-bank{min-width:0;padding:6px}.hud-bank:before{inset:6% 1%;border-width:6px}.hud-bank:after{inset:11% 5%}.hud-controls{gap:clamp(4px,1vw,12px)}.hud-drive{width:clamp(44px,min(10vw,23vh),88px);height:clamp(44px,min(10vw,23vh),88px);font-size:clamp(20px,5vh,32px)}.hud-center{min-width:0;gap:3px;padding:3px}.hud-speed output{font-size:clamp(32px,15vh,58px)}.hud-speed span{margin-top:3px}.speed-presets{gap:3px}.speed-preset{padding:5px 2px}.hud-distance{padding:4px 8px}.hud-stop{min-width:0;padding:5px 10px}#manualPanel:fullscreen .landscape-hud,#manualPanel:-webkit-full-screen .landscape-hud,#manualPanel.drive-expanded .landscape-hud{grid-template-rows:40px minmax(0,1fr)}}
+    @media(orientation:landscape) and (max-height:500px){.hud-controls .hud-drive{width:min(100%,clamp(42px,min(7vw,17vh),72px));height:auto}}
     .landscape-hud{position:relative;padding-bottom:max(24px,env(safe-area-inset-bottom))}.hud-notice{position:absolute;z-index:2;right:10px;bottom:max(5px,env(safe-area-inset-bottom));left:10px;color:#b8cae4;font-size:11px;text-align:center;pointer-events:none}#hudConnect{justify-self:start}#hudConnect:disabled{opacity:1;filter:none;color:var(--success);cursor:default}
     .hud-joystick-bank{grid-template-rows:auto 1fr;min-width:0}.joystick-surface{position:relative;z-index:1;align-self:center;justify-self:center;width:min(38vw,34vh,290px);aspect-ratio:1;border:2px solid #36dfff70;border-radius:50%;background:radial-gradient(circle,#19355a 0 5%,#102343 6% 48%,#0a1830 49% 68%,#12284a 69% 71%,#071126 72%);box-shadow:inset 0 0 35px #38ddff25,0 0 35px #00d9ff20;touch-action:none;user-select:none;-webkit-user-select:none}.joystick-surface:before,.joystick-surface:after{position:absolute;content:"";pointer-events:none}.joystick-surface:before{top:50%;right:9%;left:9%;height:1px;background:#52dfff40}.joystick-surface:after{top:9%;bottom:9%;left:50%;width:1px;background:#52dfff40}.joystick-surface.disabled{opacity:.38;filter:grayscale(.6)}.joystick-handle{position:absolute;z-index:1;top:50%;left:50%;display:grid;width:31%;height:31%;place-items:center;border:2px solid #9bf5ff;border-radius:50%;background:radial-gradient(circle at 35% 28%,#35ddf5,#08759d 62%,#063552);box-shadow:inset 0 2px #fff8,0 0 26px #00d9ffaa;color:#effcff;font-size:clamp(21px,4vh,38px);transform:translate(-50%,-50%);pointer-events:none}.joystick-surface.active .joystick-handle{background:radial-gradient(circle at 35% 28%,#64edff,#087fa4 62%,#063552);box-shadow:inset 0 2px #fff9,0 0 34px #00d9ffff}.joystick-label{position:absolute;z-index:1;color:#78dff3;font-size:9px;font-weight:850;letter-spacing:1px;pointer-events:none}.joystick-label.forward{top:7%;left:50%;transform:translateX(-50%)}.joystick-label.reverse{bottom:7%;left:50%;transform:translateX(-50%)}.joystick-label.left{top:50%;left:5%;transform:translateY(-50%)}.joystick-label.right{top:50%;right:5%;transform:translateY(-50%)}
     @media(orientation:landscape) and (max-height:500px){.joystick-surface{width:min(34vw,43vh,220px)}.joystick-handle{width:30%;height:30%}}
@@ -87,6 +93,10 @@ inline constexpr char kL298nWebPage[] = R"html(
               <div class="config-card"><label for="obstacleDistanceSetting">Ngưỡng né vật cản (cm)</label><input id="obstacleDistanceSetting" type="number" min="10" max="100" step="1" value="20"></div>
             </div>
             <div class="config-actions"><button id="saveConfig" type="button">Lưu thông số</button><p class="config-hint">Áp dụng ngay trong firmware; giá trị sẽ về mặc định sau khi khởi động lại.</p></div>
+            <section class="feature-card"><h3>Canh gác khi đứng yên</h3><p>SR04 theo dõi thay đổi khoảng cách. Khi phát hiện thay đổi, mắt robot, loa và Telegram cảnh báo; mỗi lần cách nhau ít nhất 30 giây.</p><button id="guardOn" type="button">Bật canh gác</button><button id="guardOff" type="button">Tắt</button> <span id="guardState" class="feature-state">Đang tắt</span></section>
+            <section class="feature-card"><h3>Tìm xe</h3><p>Khi xe đứng yên, phát âm báo và nhấp nháy màn hình hiển thị địa chỉ IP trong 6 giây.</p><button id="findRobot" type="button">Tìm xe</button></section>
+            <section class="feature-card"><h3>Quét khoảng trống trước xe</h3><p>Xe quay từng bước để đo trái, giữa, phải, rồi quay về hướng ban đầu theo thời gian. Sơ đồ chỉ là ước lượng, không phải bản đồ chính xác.</p><button id="scanStart" type="button">Bắt đầu quét</button><button id="scanCancel" type="button">Dừng quét</button> <span id="scanState" class="feature-state">Chưa quét</span><div class="scan-map" aria-label="Sơ đồ khoảng cách ước lượng"><div class="scan-sector">Trái<strong id="scanLeft">--</strong></div><div class="scan-sector">Giữa<strong id="scanCenter">--</strong></div><div class="scan-sector">Phải<strong id="scanRight">--</strong></div></div><p id="scanSuggestion">Chỉ gợi ý hướng đi khi cả ba số đo hợp lệ.</p></section>
+            <section class="feature-card"><h3>Lệnh nhiều bước</h3><p>Nhập F30,L15,S = tiến 30 cm, xoay trái theo 15 cm quãng lăn bánh rồi dừng. B = lùi, R = xoay phải. Tối đa 5 bước, mỗi bước 1–50 cm; góc xoay chỉ ước lượng. Cần FC-03 đã hiệu chuẩn; phía sau không có cảm biến vật cản. Kịch bản lưu trong RAM và mất khi khởi động lại.</p><input id="routeScript" type="text" maxlength="63" value="F30,L15,S" aria-label="Kịch bản di chuyển"><div class="mode-actions"><button id="routeSave" type="button">Lưu kịch bản</button><button id="routeRun" type="button">Chạy</button><button id="routeStop" type="button">Dừng kịch bản</button></div><p id="routeState" class="feature-state">Chưa lưu</p></section>
           </div>
           <div class="hud-rotate" aria-live="polite"><div class="hud-rotate-icon">↻</div><strong>Xoay ngang màn hình để trải nghiệm.</strong><p id="hudRotateStatus">Đang kết nối điều khiển xe…</p><div class="hud-rotate-actions"><button id="hudRotateConnect" type="button">Kết nối lại</button><button id="hudRotateExit" type="button">Quay lại</button></div></div>
           <div class="landscape-hud" aria-label="Buồng lái ngang">
@@ -200,6 +210,30 @@ inline constexpr char kL298nWebPage[] = R"html(
         if (!response.ok) throw new Error(String(response.status));
         const data = await response.json();
         renderEncoder(data.encoder);
+        $('guardState').textContent = data.guard_enabled ? 'Đang bật' : 'Đang tắt';
+        const routeLabel = ({empty:'Chưa lưu',saved:'Đã lưu',running:'Đang chạy',
+          complete:'Đã hoàn thành',interrupted:'Đã ngắt'})[data.route_state] || 'Chưa lưu';
+        $('routeState').textContent = routeLabel + (data.route_state === 'running'
+          ? ' · bước ' + data.route_step + '/' + data.route_steps : '');
+        if (document.activeElement !== $('routeScript') && data.route_script)
+          $('routeScript').value = data.route_script;
+        $('scanState').textContent = ({idle:'Chưa quét',scanning:'Đang quét…',
+          complete:'Đã quét xong',interrupted:'Đã dừng'})[data.scan_state] || 'Chưa quét';
+        const scanValues = [data.scan_left_cm,data.scan_center_cm,data.scan_right_cm];
+        ['scanLeft','scanCenter','scanRight'].forEach((id,index) => {
+          $(id).textContent = Number.isFinite(scanValues[index]) && scanValues[index] > 0
+            ? scanValues[index] + ' cm' : '--';
+        });
+        const clear = scanValues.map(value => Number.isFinite(value) && value >= 30 ? value : -1);
+        const widest = Math.max(...clear);
+        const suggested = clear[1] === widest ? 1 : clear.indexOf(widest);
+        $('scanSuggestion').textContent = data.scan_state !== 'complete'
+          ? 'Chờ quét xong để gợi ý hướng.'
+          : scanValues.some(value => !Number.isFinite(value) || value <= 0)
+            ? 'Có hướng không đo được SR04; chưa thể gợi ý đáng tin cậy.'
+          : widest < 0 ? 'Chưa thấy hướng trống đủ 30 cm; không nên tiến.'
+          : 'Gợi ý hướng ' + ['trái','thẳng','phải'][suggested] +
+            ' (ước lượng theo SR04 và thời gian quay).';
         obstacleDistanceCm = Number.isFinite(data.obstacle_distance_cm)
           ? data.obstacle_distance_cm : 20;
         warningDistanceCm = Number.isFinite(data.warning_distance_cm)
@@ -509,6 +543,68 @@ inline constexpr char kL298nWebPage[] = R"html(
       }
     }
 
+    async function setFeature(mode, enabled) {
+      if (autonomyBusy || busy || releasing) return;
+      autonomyBusy = true;
+      $('modeNotice').textContent = 'Đang cập nhật chế độ…';
+      try {
+        if (session) {
+          heldPointer = null; resetJoystick();
+          releasing = true; direction = 'release'; pending = true;
+          await pump();
+          if (session) throw new Error('release failed');
+        }
+        await post('/api/autonomy',JSON.stringify({mode,enabled}));
+        $('modeNotice').textContent = mode === 'guard'
+          ? (enabled ? 'Đã bật canh gác.' : 'Đã tắt canh gác.')
+          : (enabled ? 'Đã bắt đầu quét.' : 'Đã dừng quét.');
+        await refreshTelemetry();
+      } catch (_) {
+        $('modeNotice').textContent = 'Không thể đổi chế độ. Xe phải đứng yên, không ở phiên lái web hoặc chế độ tự hành.';
+      } finally { autonomyBusy = false; render(); }
+    }
+
+    async function findRobot() {
+      const button = $('findRobot');
+      if (button.disabled || busy || releasing || autonomyBusy) return;
+      button.disabled = true;
+      try {
+        if (session) {
+          heldPointer = null; resetJoystick();
+          releasing = true; direction = 'release'; pending = true;
+          await pump();
+          if (session) throw new Error('release failed');
+        }
+        await post('/api/find');
+        $('modeNotice').textContent = 'Ruby đang phát âm báo và nhấp nháy màn hình hiển thị IP.';
+      } catch (_) {
+        $('modeNotice').textContent = 'Chưa thể tìm xe: xe đang hoạt động hoặc vừa được gọi. Hãy thử lại sau vài giây.';
+      } finally { button.disabled = false; }
+    }
+
+    async function routeAction(action) {
+      if (action !== 'stop' && (autonomyBusy || busy || releasing)) return;
+      if (action !== 'stop') autonomyBusy = true;
+      try {
+        if (action === 'run' && session) {
+          heldPointer = null; resetJoystick();
+          releasing = true; direction = 'release'; pending = true;
+          await pump();
+          if (session) throw new Error('release failed');
+        }
+        const body = action === 'save' || action === 'run'
+          ? {action,script:$('routeScript').value.trim()} : {action};
+        await post('/api/route',JSON.stringify(body));
+        $('modeNotice').textContent = action === 'save' ? 'Đã lưu kịch bản trong RAM.' :
+          action === 'run' ? 'Đang chạy kịch bản.' : 'Đã dừng kịch bản.';
+        await refreshTelemetry();
+      } catch (_) {
+        $('modeNotice').textContent = action === 'save'
+          ? 'Kịch bản sai. Dùng F/B/L/R với 1–50 cm, tối đa 5 bước.'
+          : 'Không thể chạy kịch bản. Xe cần đứng yên và FC-03 đã hiệu chuẩn.';
+      } finally { if (action !== 'stop') autonomyBusy = false; render(); }
+    }
+
     async function saveConfiguration() {
       const followDistance = Number($('followDistanceSetting').value);
       const obstacleDistance = Number($('obstacleDistanceSetting').value);
@@ -583,6 +679,14 @@ inline constexpr char kL298nWebPage[] = R"html(
     $('avoidOff').addEventListener('click',() => { void setAutonomy('avoid',false); });
     $('followOn').addEventListener('click',() => { void setAutonomy('follow',true); });
     $('followOff').addEventListener('click',() => { void setAutonomy('follow',false); });
+    $('guardOn').addEventListener('click',() => { void setFeature('guard',true); });
+    $('guardOff').addEventListener('click',() => { void setFeature('guard',false); });
+    $('findRobot').addEventListener('click',() => { void findRobot(); });
+    $('scanStart').addEventListener('click',() => { void setFeature('scan',true); });
+    $('scanCancel').addEventListener('click',() => { void setFeature('scan',false); });
+    $('routeSave').addEventListener('click',() => { void routeAction('save'); });
+    $('routeRun').addEventListener('click',() => { void routeAction('run'); });
+    $('routeStop').addEventListener('click',() => { void routeAction('stop'); });
     if ($('saveConfig')) $('saveConfig').addEventListener('click',() => { void saveConfiguration(); });
     $('hudExit').addEventListener('click',exitHud);
     $('hudRotateExit').addEventListener('click',exitHud);

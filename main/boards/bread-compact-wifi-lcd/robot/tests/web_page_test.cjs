@@ -42,7 +42,9 @@ function setup({fullscreen = 'native'} = {}) {
     'avoidStatus','followStatus','avoidDistance','followDistance','avoidOn','avoidOff','followOn',
     'followOff','expandDrive','hudExit','hudConnect','hudNotice','hudRotateConnect',
     'hudRotateExit','hudRotateStatus','hudDistance','hudWarning','hudSound',
-    'speed50','speed75','speed100'
+    'speed50','speed75','speed100','guardOn','guardOff','guardState','findRobot','scanStart',
+    'scanCancel','scanState','scanLeft','scanCenter','scanRight','scanSuggestion',
+    'routeScript','routeSave','routeRun','routeStop','routeState'
   ]
     .map(id => [id, new Element()]));
   elements.speed = new Input();
@@ -128,6 +130,25 @@ function setup({fullscreen = 'native'} = {}) {
 const settle = () => new Promise(resolve => setImmediate(resolve));
 async function claim(ui) { await ui.elements.claim.emit('click'); await settle(); }
 const lastCommand = ui => ui.requests.filter(x => x.data).at(-1).data;
+
+test('find button requests a signal without claiming motor control', async () => {
+  const ui = setup();
+  await ui.elements.findRobot.emit('click');
+  await settle();
+  assert.equal(ui.requests.filter(x => x.url === '/api/find').length,1);
+  assert.equal(ui.requests.filter(x => x.url === '/api/claim').length,0);
+  assert.equal(ui.elements.findRobot.disabled,false);
+});
+
+test('find button releases a manual session before signaling', async () => {
+  const ui = setup();
+  await claim(ui);
+  await ui.elements.findRobot.emit('click');
+  await settle();
+  const release = ui.requests.findIndex(x => x.url === '/api/command' && x.data.direction === 'release');
+  const find = ui.requests.findIndex(x => x.url === '/api/find');
+  assert.ok(release >= 0 && find > release);
+});
 
 test('opening does not claim or move; four directions stop on release', async () => {
   const ui = setup();
