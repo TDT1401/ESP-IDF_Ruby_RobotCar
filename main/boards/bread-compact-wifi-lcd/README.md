@@ -1,10 +1,12 @@
 # Bread Compact Wi-Fi LCD
 
-**English** | [Tiếng Việt](README.vi.md)
+**English** | [Tiếng Việt](docs/README.vi.md) | [Project overview](../../../README.md)
 
-ESP32-S3-N16R8 board with an I2S microphone, MAX98357A amplifier, and SPI TFT display.
+Board-specific build and hardware manual for the Ruby RobotCar variant. Use this guide for the parts list, wiring, firmware build, flashing, calibration, and optional Telegram setup. For the project overview and learning path, see the [main README](../../../README.md).
 
-## Features
+The configured board uses an ESP32-S3-N16R8, I2S microphone, MAX98357A amplifier, and SPI TFT display.
+
+## Capabilities enabled on this board
 
 - Voice assistant.
 - Follow mode.
@@ -139,7 +141,9 @@ D0 must use 3.3 V logic. The onboard LED on GPIO48 is disabled when FC-03 is ena
 Calibration is in [config.h](config.h): `FC03_LEFT_PULSES_PER_REV` and
 `FC03_RIGHT_PULSES_PER_REV` set pulses per wheel revolution;
 `FC03_LEFT_WHEEL_DIAMETER_MM` and `FC03_RIGHT_WHEEL_DIAMETER_MM` set the outside
-wheel diameters in millimetres. Both wheels are set to **22 pulses/rev** and **60 mm**.
+wheel diameters in millimetres. Current values are **20.3 pulses/rev** for the left wheel,
+**20.8 pulses/rev** for the right wheel, and **60 mm** diameter for both wheels. Recalibrate
+these values for your own encoders and wheels.
 
 ## Build and Flash
 
