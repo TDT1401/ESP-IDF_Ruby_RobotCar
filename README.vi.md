@@ -4,6 +4,8 @@
 
 Dự án học tập về robot di động và firmware ESP32. Ruby RobotCar kết hợp firmware trợ lý giọng nói XiaoZhi với khung xe 4 bánh, giúp bạn tìm hiểu cách phần mềm nhúng kết nối phần cứng, đọc cảm biến và nhận lệnh điều khiển.
 
+![Robot Ruby RobotCar bốn bánh dùng ESP32-S3](docs/ruby_car.png)
+
 Source hiện được cấu hình cho một bộ phần cứng cụ thể: ESP32-S3-N16R8, driver motor L298N, cảm biến siêu âm HC-SR04, hai encoder bánh xe FC-03 và màn hình TFT. Xem [hướng dẫn board bread-compact-wifi-lcd bằng tiếng Việt](main/boards/bread-compact-wifi-lcd/docs/README.vi.md) để lắp ráp và thiết lập.
 
 ## Bắt đầu từ đâu?
