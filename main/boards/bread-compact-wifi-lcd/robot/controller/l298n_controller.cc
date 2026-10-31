@@ -22,6 +22,7 @@
 #include "../../config.h"
 #include "../../robot_eye_display.h"
 #include "../sensors/hcsr04_sensor.h"
+#include "../sensors/mpu6050_imu.h"
 #include "../telegram/telegram.h"
 #include "application.h"
 #include "assets/lang_config.h"
@@ -60,6 +61,19 @@ constexpr int kSpeedPiMinimumPwmPercent = 45;
 constexpr int kSpeedPiStartupPwmPercent = 50;
 constexpr int64_t kSpeedPiStartupUs = 300000;
 constexpr int64_t kSpeedPiUpdateUs = 50000;
+constexpr int64_t kHeadingControlUpdateUs = 50000;
+constexpr int64_t kImuStaleUs = 100000;
+constexpr double kHeadingCorrectionTimeSeconds = 1.5;
+constexpr double kTurningCorrectionTimeSeconds = 8.0;
+constexpr double kHeadingKp = 0.7;   // PWM percent per heading degree.
+constexpr double kHeadingKd = 0.08;  // PWM percent per degree/second.
+constexpr int kHeadingMaxCorrectionPercent = 15;
+constexpr int kTurnMinimumPwmPercent = 55;
+constexpr double kTurnSlowdownWindowDegrees = 25.0;
+constexpr double kTurnKp = 1.0;
+constexpr double kTurnKd = 0.12;
+constexpr double kTurnStopLeadSeconds = 0.025;
+constexpr double kTurnStopLeadMaxDegrees = 4.0;
 constexpr double kSpeedPiKp = 0.12;
 constexpr double kSpeedPiKi = 0.04;
 constexpr double kSpeedPiIntegralLimit = 300.0;
@@ -481,6 +495,13 @@ public:
                 distance_move_progress_cm_,
                 turn_target_degrees_,
                 turn_progress_degrees_,
+                imu_ready_,
+                GetMpu6050Status().error,
+                imu_axis_mismatch_,
+                yaw_degrees_,
+                gyro_z_dps_,
+                heading_hold_active_ && imu_ready_,
+                turn_uses_imu_,
                 kSpeedPiCalibrationValid,
                 speed_pi_active_,
                 speed_pi_target_rpm_,
@@ -983,6 +1004,25 @@ private:
     bool angle_turn_ = false;
     int turn_target_degrees_ = 0;
     double turn_progress_degrees_ = 0;
+    bool turn_uses_imu_ = false;
+    int turn_direction_ = 0;
+    double turn_start_yaw_degrees_ = 0;
+    int turn_pwm_percent_ = kTurnSpeedPercent;
+    bool imu_ready_ = false;
+    bool imu_axis_mismatch_ = false;
+    double yaw_degrees_ = 0;
+    double encoder_yaw_degrees_ = 0;
+    double gyro_z_dps_ = 0;
+    double last_left_signed_m_ = 0;
+    double last_right_signed_m_ = 0;
+    int64_t last_imu_sample_us_ = 0;
+    int64_t last_heading_update_us_ = 0;
+    int64_t last_heading_control_us_ = 0;
+    bool heading_hold_active_ = false;
+    double heading_target_degrees_ = 0;
+    int heading_correction_percent_ = 0;
+    int applied_left_pwm_percent_ = 0;
+    int applied_right_pwm_percent_ = 0;
     int distance_profile_speed_percent_ = 0;
     int64_t distance_profile_update_us_ = 0;
     bool brake_active_ = false;
@@ -1153,6 +1193,7 @@ private:
             esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "l298n_web", &web_sleep_lock_));
 #endif
         encoder_.Initialize();
+        InitializeMpu6050();
         esp_timer_create_args_t timer = {};
         timer.callback = [](void* arg) { static_cast<L298nController*>(arg)->Tick(); };
         timer.arg = this;
@@ -1385,6 +1426,118 @@ private:
         StopOutputsLocked();
     }
 
+    void UpdateYawEstimateLocked(int64_t now) {
+        const auto encoder = encoder_.Snapshot();
+        // Unknown-direction pulses can permanently clear distance_complete. For yaw,
+        // only use signed wheel travel while both wheel directions are commanded.
+        const bool encoder_valid = encoder.ready && encoder.calibrated &&
+                                   encoder.left.command != 0 && encoder.right.command != 0 &&
+                                   !encoder.left.no_pulses && !encoder.right.no_pulses;
+        const double left_delta = encoder.left.signed_distance_m - last_left_signed_m_;
+        const double right_delta = encoder.right.signed_distance_m - last_right_signed_m_;
+        last_left_signed_m_ = encoder.left.signed_distance_m;
+        last_right_signed_m_ = encoder.right.signed_distance_m;
+        const double encoder_delta_degrees =
+            (right_delta - left_delta) * 1000.0 / ROBOT_TRACK_WIDTH_MM * 180.0 / kPi;
+        if (encoder_valid)
+            encoder_yaw_degrees_ += encoder_delta_degrees;
+        else
+            encoder_yaw_degrees_ = yaw_degrees_;
+        const auto imu = GetMpu6050Status();
+        const bool fresh = imu.ready && imu.sampled_at_us > 0 &&
+                           now - imu.sampled_at_us <= kImuStaleUs &&
+                           imu.sampled_at_us - now <= kImuStaleUs;
+        const double dt = last_heading_update_us_ > 0
+                              ? std::clamp((now - last_heading_update_us_) / 1000000.0, 0.0, 0.05)
+                              : kTickUs / 1000000.0;
+        last_heading_update_us_ = now;
+        if (!fresh) {
+            if (encoder_valid)
+                yaw_degrees_ += encoder_delta_degrees;
+            imu_ready_ = false;
+            gyro_z_dps_ = 0;
+            last_imu_sample_us_ = 0;
+            if (turn_uses_imu_ && distance_move_state_ == DistanceMoveState::kMoving) {
+                distance_move_state_ = DistanceMoveState::kInterrupted;
+                StopLocked();
+            }
+            return;
+        }
+        gyro_z_dps_ = imu.gyro_z_dps;
+        if (!imu_ready_) {
+            encoder_yaw_degrees_ = yaw_degrees_;
+            imu_ready_ = true;
+            last_imu_sample_us_ = imu.sampled_at_us;
+            if (heading_hold_active_)
+                heading_target_degrees_ = yaw_degrees_;
+            return;
+        }
+        double gyro_delta_degrees = 0;
+        if (imu.sampled_at_us > last_imu_sample_us_) {
+            const double sample_dt =
+                std::min(0.05, (imu.sampled_at_us - last_imu_sample_us_) / 1000000.0);
+            gyro_delta_degrees = gyro_z_dps_ * sample_dt;
+            last_imu_sample_us_ = imu.sampled_at_us;
+        }
+        const double predicted = yaw_degrees_ + gyro_delta_degrees;
+        const double correction_time =
+            angle_turn_ && (distance_move_state_ == DistanceMoveState::kMoving || brake_active_)
+                ? kTurningCorrectionTimeSeconds
+                : kHeadingCorrectionTimeSeconds;
+        yaw_degrees_ = predicted + (encoder_valid ? dt / (correction_time + dt) *
+                                                        (encoder_yaw_degrees_ - predicted)
+                                                  : 0.0);
+        if (!encoder_valid)
+            encoder_yaw_degrees_ = yaw_degrees_;
+        if (angle_turn_ && turn_uses_imu_) {
+            turn_progress_degrees_ =
+                std::max(0.0, turn_direction_ * (yaw_degrees_ - turn_start_yaw_degrees_));
+        }
+    }
+
+    void UpdateYawControlLocked(int64_t now) {
+        if (last_heading_control_us_ != 0 &&
+            now - last_heading_control_us_ < kHeadingControlUpdateUs)
+            return;
+        last_heading_control_us_ = now;
+        if (!moving_ || !imu_ready_) {
+            if (heading_correction_percent_ != 0 && moving_) {
+                heading_correction_percent_ = 0;
+                if (!ApplySpeedLocked())
+                    StopLocked();
+            }
+            return;
+        }
+        if (angle_turn_ && turn_uses_imu_) {
+            const double remaining = std::max(0.0, turn_target_degrees_ - turn_progress_degrees_);
+            const double rate = std::max(0.0, turn_direction_ * gyro_z_dps_);
+            // Keep full turn power until the final angle window, then approach 55%.
+            const int cruising_pwm = ActiveSpeedLocked();
+            const double speed_fraction =
+                std::clamp(kTurnKp * remaining / kTurnSlowdownWindowDegrees, 0.0, 1.0);
+            const double requested = kTurnMinimumPwmPercent +
+                                     (cruising_pwm - kTurnMinimumPwmPercent) * speed_fraction -
+                                     kTurnKd * rate * (1.0 - speed_fraction);
+            turn_pwm_percent_ = std::clamp(static_cast<int>(std::lround(requested)),
+                                           kTurnMinimumPwmPercent, cruising_pwm);
+            if (!ApplySpeedLocked())
+                StopLocked();
+            return;
+        }
+        if (!heading_hold_active_ || web_joystick_active_ ||
+            (motion_ != Motion::kForward && motion_ != Motion::kBackward))
+            return;
+        const double error = heading_target_degrees_ - yaw_degrees_;
+        const double requested = kHeadingKp * error - kHeadingKd * gyro_z_dps_;
+        heading_correction_percent_ =
+            std::clamp(static_cast<int>(std::lround(requested)), -kHeadingMaxCorrectionPercent,
+                       kHeadingMaxCorrectionPercent);
+        if (std::abs(error) < 0.5 && std::abs(gyro_z_dps_) < 2.0)
+            heading_correction_percent_ = 0;
+        if (!ApplySpeedLocked())
+            StopLocked();
+    }
+
     void UpdateDistanceMoveLocked() {
         if (distance_move_state_ != DistanceMoveState::kPending &&
             distance_move_state_ != DistanceMoveState::kMoving)
@@ -1418,17 +1571,36 @@ private:
         if (angle_turn_) {
             // Differential drive: theta = (right travel - left signed travel) / track.
             // FC-03 counts are unsigned, and opposite wheel signs are commanded here.
-            turn_progress_degrees_ =
-                (left_cm + right_cm) * 10.0 / ROBOT_TRACK_WIDTH_MM * 180.0 / kPi;
+            if (!turn_uses_imu_)
+                turn_progress_degrees_ =
+                    (left_cm + right_cm) * 10.0 / ROBOT_TRACK_WIDTH_MM * 180.0 / kPi;
         } else {
             distance_move_progress_cm_ = std::min(left_cm, right_cm);
         }
         // Refuse to declare a centred turn complete from only one encoder.
         const double per_wheel_target_cm =
             ROBOT_TRACK_WIDTH_MM / 20.0 * turn_target_degrees_ * kPi / 180.0;
-        const bool turn_complete = turn_progress_degrees_ >= turn_target_degrees_ &&
-                                   left_cm >= per_wheel_target_cm * 0.5 &&
-                                   right_cm >= per_wheel_target_cm * 0.5;
+        const double signed_imu_progress =
+            turn_direction_ * (yaw_degrees_ - turn_start_yaw_degrees_);
+        const double encoder_turn_progress =
+            (left_cm + right_cm) * 10.0 / ROBOT_TRACK_WIDTH_MM * 180.0 / kPi;
+        if (angle_turn_ && turn_uses_imu_ && signed_imu_progress < -5.0 &&
+            encoder_turn_progress > 10.0) {
+            // A reversed sensor Z axis must not command a full timeout-length spin.
+            imu_axis_mismatch_ = true;
+            distance_move_state_ = DistanceMoveState::kInterrupted;
+            StopLocked();
+            return;
+        }
+        const double rate = std::max(0.0, turn_direction_ * gyro_z_dps_);
+        const double lead = std::min(kTurnStopLeadMaxDegrees, rate * kTurnStopLeadSeconds);
+        const bool turn_complete = turn_uses_imu_
+                                       ? turn_progress_degrees_ >= turn_target_degrees_ ||
+                                             (turn_progress_degrees_ > 0 && rate > 5.0 &&
+                                              turn_target_degrees_ - turn_progress_degrees_ <= lead)
+                                       : turn_progress_degrees_ >= turn_target_degrees_ &&
+                                             left_cm >= per_wheel_target_cm * 0.5 &&
+                                             right_cm >= per_wheel_target_cm * 0.5;
         if (angle_turn_ ? turn_complete : distance_move_progress_cm_ >= distance_move_target_cm_) {
             distance_move_state_ = DistanceMoveState::kCompleted;
             gesture_steps_ = nullptr;
@@ -1502,8 +1674,16 @@ private:
 
     void StopOutputsLocked() {
         brake_active_ = false;
+        SetMpu6050MotorActive(false);
         ResetSpeedPiLocked();
+        heading_hold_active_ = false;
+        heading_correction_percent_ = 0;
+        applied_left_pwm_percent_ = 0;
+        applied_right_pwm_percent_ = 0;
         encoder_.SetDrive(0, 0, esp_timer_get_time());
+        // A slipped wheel must not drag the resting heading back toward wheel odometry.
+        if (imu_ready_)
+            encoder_yaw_degrees_ = yaw_degrees_;
         // Disable both bridges before touching any direction pin. Attempt every
         // output even if an earlier operation fails. Stop means coast, not brake.
         Check(ledc_stop(kMode, kLeftChannel, 0));
@@ -1528,6 +1708,8 @@ private:
 
     void BeginDistanceBrakeLocked(int64_t now) {
         ResetSpeedPiLocked();
+        heading_hold_active_ = false;
+        heading_correction_percent_ = 0;
         encoder_.SetDrive(0, 0, now);
         bool ok = true;
         // L298N brakes dynamically when EN is high and both direction inputs match.
@@ -1567,24 +1749,43 @@ private:
     bool ApplyMotorPwmLocked(int left_percent, int right_percent) {
         const uint32_t left_duty = static_cast<uint32_t>(left_percent) * 1023 / 100;
         const uint32_t right_duty = static_cast<uint32_t>(right_percent) * 1023 / 100;
-        return Check(ledc_set_duty(kMode, kLeftChannel, left_duty)) &&
-               Check(ledc_update_duty(kMode, kLeftChannel)) &&
-               Check(ledc_set_duty(kMode, kRightChannel, right_duty)) &&
-               Check(ledc_update_duty(kMode, kRightChannel));
+        const bool ok = Check(ledc_set_duty(kMode, kLeftChannel, left_duty)) &&
+                        Check(ledc_update_duty(kMode, kLeftChannel)) &&
+                        Check(ledc_set_duty(kMode, kRightChannel, right_duty)) &&
+                        Check(ledc_update_duty(kMode, kRightChannel));
+        if (ok) {
+            applied_left_pwm_percent_ = left_percent;
+            applied_right_pwm_percent_ = right_percent;
+        }
+        return ok;
     }
 
     bool ApplySpeedLocked() {
         const int base_speed = ActiveSpeedLocked();
-        if (motion_ == Motion::kLeft || motion_ == Motion::kRight)
-            return ApplyMotorPwmLocked(base_speed, base_speed);
-        if (speed_pi_active_)
-            return ApplyMotorPwmLocked(speed_pi_output_percent_[0], speed_pi_output_percent_[1]);
-        if (kSpeedPiCalibrationValid && moving_ && speed_pi_startup_until_us_ > 0 &&
-            esp_timer_get_time() < speed_pi_startup_until_us_) {
-            const int kick_speed = std::max(base_speed, kSpeedPiStartupPwmPercent);
-            return ApplyMotorPwmLocked(kick_speed, kick_speed);
+        if (motion_ == Motion::kLeft || motion_ == Motion::kRight) {
+            const int turn_pwm =
+                angle_turn_ && turn_uses_imu_ && imu_ready_ ? turn_pwm_percent_ : base_speed;
+            return ApplyMotorPwmLocked(turn_pwm, turn_pwm);
         }
-        return ApplyMotorPwmLocked(base_speed, base_speed);
+        int left = base_speed;
+        int right = base_speed;
+        if (speed_pi_active_) {
+            left = speed_pi_output_percent_[0];
+            right = speed_pi_output_percent_[1];
+        } else if (kSpeedPiCalibrationValid && moving_ && speed_pi_startup_until_us_ > 0 &&
+                   esp_timer_get_time() < speed_pi_startup_until_us_) {
+            left = right = std::max(base_speed, kSpeedPiStartupPwmPercent);
+        }
+        if (heading_hold_active_ && imu_ready_ && !web_joystick_active_ &&
+            (motion_ == Motion::kForward || motion_ == Motion::kBackward)) {
+            const int correction = motion_ == Motion::kForward ? heading_correction_percent_
+                                                               : -heading_correction_percent_;
+            const int left_floor = std::min(left, kSpeedPiMinimumPwmPercent);
+            const int right_floor = std::min(right, kSpeedPiMinimumPwmPercent);
+            left = std::clamp(left - correction, left_floor, 100);
+            right = std::clamp(right + correction, right_floor, 100);
+        }
+        return ApplyMotorPwmLocked(left, right);
     }
 
     int CurrentPwmPercentLocked(int side) const {
@@ -1592,14 +1793,7 @@ private:
             return 0;
         if (web_manual_ && web_joystick_active_)
             return std::abs(side == 0 ? web_left_output_percent_ : web_right_output_percent_);
-        if (motion_ == Motion::kLeft || motion_ == Motion::kRight)
-            return ActiveSpeedLocked();
-        if (speed_pi_active_)
-            return speed_pi_output_percent_[side];
-        const int base_speed = ActiveSpeedLocked();
-        if (kSpeedPiCalibrationValid && speed_pi_startup_until_us_ > esp_timer_get_time())
-            return std::max(base_speed, kSpeedPiStartupPwmPercent);
-        return base_speed;
+        return side == 0 ? applied_left_pwm_percent_ : applied_right_pwm_percent_;
     }
 
     int CurrentLeftPwmPercentLocked() const {
@@ -1626,8 +1820,7 @@ private:
         const auto encoder = encoder_.Snapshot();
         if (!encoder.ready || !encoder.calibrated) {
             ResetSpeedPiLocked();
-            const int fallback = ActiveSpeedLocked();
-            if (!ApplyMotorPwmLocked(fallback, fallback))
+            if (!ApplySpeedLocked())
                 StopLocked();
             return;
         }
@@ -1676,7 +1869,7 @@ private:
         speed_pi_output_percent_[1] = outputs[1];
         speed_pi_last_update_us_ = now;
         speed_pi_active_ = true;
-        if (!ApplyMotorPwmLocked(outputs[0], outputs[1]))
+        if (!ApplySpeedLocked())
             StopLocked();
     }
 
@@ -1728,6 +1921,7 @@ private:
             web_left_output_percent_ = left;
             web_right_output_percent_ = right;
             encoder_.SetDrive(left, right, esp_timer_get_time());
+            SetMpu6050MotorActive(left != 0 || right != 0);
         }
         return ok;
     }
@@ -1755,8 +1949,14 @@ private:
 #endif
         motion_ = motion;
         angle_turn_ = false;
+        turn_uses_imu_ = false;
+        turn_direction_ = 0;
         turn_target_degrees_ = 0;
         turn_progress_degrees_ = 0;
+        turn_pwm_percent_ = kTurnSpeedPercent;
+        heading_hold_active_ = motion == Motion::kForward || motion == Motion::kBackward;
+        heading_target_degrees_ = yaw_degrees_;
+        heading_correction_percent_ = 0;
         duration_ms_ = duration;
         start_at_us_ = esp_timer_get_time() + kDirectionDelayUs;
         deadline_us_ = start_at_us_ + static_cast<int64_t>(duration) * 1000;
@@ -1770,6 +1970,10 @@ private:
             !PrepareMotionLocked(motion, kMaxDurationMs))
             return false;
         angle_turn_ = true;
+        turn_uses_imu_ = imu_ready_;
+        imu_axis_mismatch_ = false;
+        turn_direction_ = motion == Motion::kLeft ? 1 : -1;
+        turn_start_yaw_degrees_ = yaw_degrees_;
         turn_target_degrees_ = degrees;
         turn_progress_degrees_ = 0;
         distance_move_target_cm_ = 0;
@@ -1831,6 +2035,7 @@ private:
         const int64_t now = esp_timer_get_time();
         // Also sample at rest/while joystick owns the outputs, before any early return.
         encoder_.Update(now);
+        UpdateYawEstimateLocked(now);
         if (brake_active_) {
             if (now >= brake_until_us_)
                 StopOutputsLocked();
@@ -1841,6 +2046,7 @@ private:
             return;
         UpdateDistanceSpeedProfileLocked(now);
         UpdateSpeedPiLocked(now);
+        UpdateYawControlLocked(now);
         if (web_session_ != 0 && (now >= web_deadline_us_ || !MotionAllowed())) {
             EndWebControlLocked();
         }
@@ -2030,6 +2236,7 @@ private:
                 distance_profile_update_us_ = esp_timer_get_time();
             }
             moving_ = true;
+            SetMpu6050MotorActive(true);
             ResetSpeedPiLocked();
             if (kSpeedPiCalibrationValid)
                 speed_pi_startup_until_us_ = esp_timer_get_time() + kSpeedPiStartupUs;
@@ -2249,6 +2456,13 @@ private:
         double distance_move_progress_cm;
         int turn_target_degrees;
         double turn_progress_degrees;
+        bool imu_ready;
+        esp_err_t imu_error;
+        bool imu_axis_mismatch;
+        double heading_degrees;
+        double gyro_z_dps;
+        bool heading_hold_active;
+        bool turn_uses_imu;
         bool guard_enabled;
         int guard_baseline_cm;
         ScanState scan_state;
@@ -2290,6 +2504,13 @@ private:
             distance_move_progress_cm = distance_move_progress_cm_;
             turn_target_degrees = turn_target_degrees_;
             turn_progress_degrees = turn_progress_degrees_;
+            imu_ready = imu_ready_;
+            imu_error = GetMpu6050Status().error;
+            imu_axis_mismatch = imu_axis_mismatch_;
+            heading_degrees = yaw_degrees_;
+            gyro_z_dps = gyro_z_dps_;
+            heading_hold_active = heading_hold_active_ && imu_ready_;
+            turn_uses_imu = turn_uses_imu_;
             guard_enabled = guard_enabled_;
             guard_baseline_cm = guard_baseline_cm_;
             scan_state = scan_state_;
@@ -2352,6 +2573,13 @@ private:
                                      distance_move_progress_cm) ||
             !cJSON_AddNumberToObject(json.get(), "turn_target_degrees", turn_target_degrees) ||
             !cJSON_AddNumberToObject(json.get(), "turn_progress_degrees", turn_progress_degrees) ||
+            !cJSON_AddBoolToObject(json.get(), "imu_ready", imu_ready) ||
+            !cJSON_AddStringToObject(json.get(), "imu_error", esp_err_to_name(imu_error)) ||
+            !cJSON_AddBoolToObject(json.get(), "imu_axis_mismatch", imu_axis_mismatch) ||
+            !cJSON_AddNumberToObject(json.get(), "heading_degrees", heading_degrees) ||
+            !cJSON_AddNumberToObject(json.get(), "gyro_z_dps", gyro_z_dps) ||
+            !cJSON_AddBoolToObject(json.get(), "heading_hold_active", heading_hold_active) ||
+            !cJSON_AddBoolToObject(json.get(), "turn_uses_imu", turn_uses_imu) ||
             !AddFc03EncoderJson(json.get(), encoder)) {
             return std::unexpected("Could not allocate motor status.");
         }
@@ -2420,9 +2648,10 @@ private:
             server.AddTool(
                 name,
                 std::string(description) +
-                    " angle_degrees: 1..180, default 90. Uses both FC-03 wheel "
-                    "encoders and 75% turn PWM. Stops at the measured angle or on "
-                    "encoder failure/timeout. Result confirms acceptance, not "
+                    " angle_degrees: 1..180, default 90. Uses FC-03 and MPU6050 yaw when "
+                    "calibrated, braking near the target; falls back to encoder angle when the "
+                    "IMU is unavailable. Stops on sensor failure or timeout. Result confirms "
+                    "acceptance, not "
                     "completion; inspect distance_move_state and turn_progress_degrees.",
                 PropertyList({Property("angle_degrees", kPropertyTypeInteger,
                                        kDefaultTurnAngleDegrees, 1, kMaxTurnAngleDegrees)}),
@@ -2457,9 +2686,11 @@ private:
                        "pulses, measured RPM, wheel distance and estimated robot travel since boot "
                        "in metres. Values are null until calibrated/ready. Direction is inferred "
                        "from commands; distance_complete=false means unknown-direction pulses "
-                       "were excluded. Angle turns report turn_target_degrees and "
-                       "turn_progress_degrees. Wheel slip and coasting cause error; there is no "
-                       "independent heading sensor.",
+                       "were excluded. MPU6050 fields report relative heading, yaw rate, "
+                       "readiness, heading hold, and the latest turn's selected sensor mode. "
+                       "Angle turns report "
+                       "turn_target_degrees and turn_progress_degrees. Wheel slip and coasting "
+                       "still cause error.",
                        PropertyList(),
                        [this](const PropertyList&) -> ToolResult { return GetState(); });
         server.AddTool(
@@ -2518,7 +2749,8 @@ private:
             "drives left immediately if clearance exceeds both 40 cm and the stop distance. "
             "Otherwise it probes right and chooses the farther safe direction, rechecking "
             "left if it returns there. It stops if neither direction is safe or readings fail. "
-            "Turns use calibrated FC-03 wheel encoders; there is no rear sensor. "
+            "Turns use calibrated FC-03 wheel encoders and MPU6050 yaw when ready; there is no "
+            "rear sensor. "
             "Enabling disables follow mode. Defaults "
             "off after reboot. distance_cm: 10..100 changes the stop distance before switching "
             "mode; -1 keeps the current distance (20 cm at 50% PWM after reboot). The effective "
@@ -2575,7 +2807,8 @@ private:
             "self.navigation.scan_space",
             "Start a bounded left/center/right HC-SR04 scan, then turn back to the "
             "estimated starting heading. Requires a stopped robot outside web/autonomous "
-            "control. Turns use FC-03 encoders at 90/180/90 degrees; wheel slip makes the "
+            "control. Turns use FC-03 and MPU6050 yaw when ready at 90/180/90 degrees; "
+            "wheel slip makes the "
             "result an approximate clearance "
             "diagram, not a map. Read scan_state and scan distances via web status.",
             PropertyList(), [this](const PropertyList&) -> ToolResult {

@@ -13,6 +13,7 @@ Bo mạch ESP32-S3-N16R8, microphone I2S, MAX98357A và màn hình TFT SPI.
 - Điều khiển web tại `http://<IP-robot>:8080`.
 - Đo khoảng cách vật cản theo thời gian thực.
 - Hai FC-03: đếm xung, đo RPM và cho phép xe tiến/lùi theo quãng đường.
+- MPU6050 hỗ trợ giữ hướng khi đi thẳng và quay theo góc.
 - Telegram.
 
 ## Cấu trúc mã nguồn
@@ -22,7 +23,7 @@ Các chức năng robot được nhóm trong `robot/`:
 ```text
 robot/
 ├── controller/  # Điều khiển motor, tự hành, cử chỉ và công cụ MCP
-├── sensors/     # Encoder FC-03 và cảm biến khoảng cách HC-SR04
+├── sensors/     # Encoder FC-03, HC-SR04 và MPU6050
 ├── web/         # HTTP server và trang điều khiển nhúng
 ├── telegram/    # Tích hợp Telegram, nội dung tin nhắn và cấu hình cá nhân
 └── tests/       # Kiểm thử hồi quy trang điều khiển
@@ -51,6 +52,7 @@ node --test main/boards/bread-compact-wifi-lcd/robot/tests/web_page_test.cjs
 | 1        | Microphone I2S            |                |
 | 1        | Bo mạch ESP32-S3          | ESP32-S3-N16R8 |
 | 1        | Màn hình TFT SPI          |                |
+| 1        | IMU MPU6050              |                |
 | 2        | Pin 18650                 | 3,7 V mỗi cell |
 | 1        | Công tắc nguồn            |                |
 
@@ -137,15 +139,64 @@ Không nối trực tiếp `ECHO` 5 V vào ESP32-S3.
 | A0 / AO    | Để trống  | Để trống  |
 
 D0 phải ở mức 3,3 V. Khi bật FC-03, LED tích hợp trên GPIO48 không hoạt động.
-Hiệu chuẩn trong [config.h](config.h): `FC03_LEFT_PULSES_PER_REV` và
+Hiệu chuẩn trong [config.h](../config.h): `FC03_LEFT_PULSES_PER_REV` và
 `FC03_RIGHT_PULSES_PER_REV` là số xung/vòng bánh; `FC03_LEFT_WHEEL_DIAMETER_MM` và
 `FC03_RIGHT_WHEEL_DIAMETER_MM` là đường kính bánh (mm). Hiện cả hai bánh đặt
-**22 xung/vòng** và **60 mm**.
+**20,3 xung/vòng** bên trái, **20,8 xung/vòng** bên phải và **60 mm**.
+
+### IMU MPU6050
+
+Cấu hình I2S simplex hiện tại còn trống GPIO4 và GPIO5 cho IMU. Không dùng GPIO18 vì chân này đã hỏng trên xe. Nối MPU6050 qua I²C như sau:
+
+| Chân MPU6050 | Chân ESP32-S3 | Ghi chú |
+| ------------ | ------------- | ------- |
+| VCC / VIN    | 3V3           | Dùng 3,3 V để bảo đảm mức logic an toàn |
+| GND          | GND chung     | Nối chung mass với ESP32-S3 |
+| SDA          | GPIO4         | Dữ liệu I²C |
+| SCL          | GPIO5         | Xung nhịp I²C |
+| INT          | Để hở         | Firmware đọc cảm biến theo chu kỳ |
+| AD0          | GND hoặc để mặc định | Chọn địa chỉ `0x68` |
+
+Điện trở kéo lên SDA/SCL phải nối lên 3,3 V, tuyệt đối không kéo lên 5 V. Nhiều module đã có sẵn điện trở kéo lên. GPIO4/5 thuộc cấu hình I2S duplex thay thế, nên cần đổi chân I²C nếu chuyển chế độ âm thanh. Nếu AD0 nối 3V3, đổi `MPU6050_I2C_ADDRESS` trong [config.h](../config.h) thành `0x69`.
+
+Gắn module nằm ngang, cố định chắc gần giữa khung xe, mặt linh kiện hướng lên.
+Giữ xe đứng yên khoảng hai giây sau khi bật nguồn để hiệu chuẩn gyro. Firmware đọc gyro Z
+trong task riêng, kết hợp với quãng đường có dấu từ hai FC-03 để ước lượng hướng, bù PWM
+hai bên khi chạy thẳng và dùng góc đo được để phanh lượt quay đúng lúc.
+
+Nếu IMU chưa sẵn sàng khi bắt đầu quay, xe dùng cách quay theo encoder cũ. Nếu mất mẫu IMU
+giữa lượt quay có dùng IMU, xe sẽ dừng. Xem `imu_ready`, `imu_error`, `imu_axis_mismatch`,
+`heading_degrees`, `gyro_z_dps`, `heading_hold_active` và `turn_uses_imu` tại `/api/status`
+hoặc `self.motor.get_state`. `heading_degrees` là góc tương đối từ lúc khởi động;
+`turn_uses_imu` cho biết lượt quay gần nhất đã chọn IMU hay encoder. Khi xe rẽ trái,
+`heading_degrees` phải tăng; nếu trục Z ngược,
+xe dừng quay và đặt `imu_axis_mismatch`. Khi đó kiểm tra chiều gắn module và
+`MPU6050_GYRO_Z_SIGN` trong `config.h`.
+
+Trong Serial Monitor, lọc tag `MPU6050`. Lúc khởi động, firmware in chân SDA/SCL, kết quả
+thăm dò hai địa chỉ `0x68` và `0x69`, rồi giá trị thanh ghi `WHO_AM_I`. Firmware chấp nhận
+`0x68` của MPU-6050 và `0x70` của IMU tương thích MPU-6500; nếu module ghi MPU6050 nhưng
+trả `0x70`, monitor sẽ báo rõ và vẫn đọc gyro Z theo các thanh ghi tương thích.
+Sau đó monitor in kết quả hiệu chuẩn. Nếu cả hai địa chỉ không phản hồi, kiểm tra nguồn 3V3, GND chung,
+thứ tự SDA/SCL và điện trở kéo lên. Nếu chỉ `0x69` phản hồi, AD0 đang ở mức cao: đổi
+`MPU6050_I2C_ADDRESS` thành `0x69` hoặc kéo AD0 xuống GND. Sau khi sẵn sàng, log in tốc độ
+quay Z mỗi 5 giây. Lỗi đọc I²C rời rạc được tổng hợp theo 5 giây; nếu lỗi liên tiếp từ
+5 lần, monitor báo ngay. Nếu mất mẫu quá lâu khi đang quay bằng IMU, xe sẽ dừng.
+
+Không lắp đèn và GPIO18 không dùng được, nên các công cụ MCP điều khiển đèn đã bị tắt.
+Các lượt quay theo góc dùng IMU giữ tốc độ quay đã chọn cho đến 25° cuối, rồi giảm dần
+PWM xuống tối thiểu 55% gần góc đích. Nếu motor kêu mà không quay ở mức này, kiểm tra
+nguồn motor, dây, L298N và bánh xe trước khi thử tiếp.
+Điện trở kéo lên SDA/SCL chỉ phục vụ giao tiếp I²C: thiếu chúng có thể làm mất mẫu IMU,
+nhưng không trực tiếp làm motor thiếu lực quay. Dừng thử nếu motor chỉ kêu mà không quay.
+Cần chạy thử trên sàn để chỉnh `kTurnSlowdownWindowDegrees`, `kTurnStopLeadSeconds`,
+`kTurnKp`, `kTurnKd`, `kHeadingKp`
+và `kHeadingKd` trong `robot/controller/l298n_controller.cc`.
 
 ## Build và Flash
 
 Dùng ESP-IDF 6.1 (tối thiểu 6.0.1). Đây là lệnh build duy nhất cho board này: màn
-ST7789 240×240, L298N, HC-SR04, hai FC-03 và câu đánh thức **“Hi ESP”**. Tên firmware
+ST7789 240×240, L298N, HC-SR04, hai FC-03, MPU6050 và câu đánh thức **“Hi ESP”**. Tên firmware
 là `bread-compact-wifi-lcd`.
 
 ```sh

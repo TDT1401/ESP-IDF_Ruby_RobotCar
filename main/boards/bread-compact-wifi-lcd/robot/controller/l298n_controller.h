@@ -29,7 +29,7 @@ void SetL298nWebConnected(bool connected);
 // ESP_ERR_INVALID_ARG rejects out-of-range values; ESP_FAIL reports a hardware fault.
 esp_err_t SetL298nMotorSpeed(int speed_percent);
 
-// Start an encoder-controlled straight-line move (FC-03 builds only).
+// Start an encoder-controlled straight-line move with IMU heading hold when ready.
 // Distance is 1..1000 cm; forward movement also observes the obstacle stop threshold.
 esp_err_t MoveL298nDistance(bool forward, int distance_cm, const char* owner = "telegram");
 
@@ -50,7 +50,7 @@ esp_err_t RunL298nRoute(const char* owner);
 void CancelL298nRoute();
 void StopL298nMotor();
 
-// Read-only snapshot. PWM/moving describe commanded outputs; encoder is measured feedback.
+// Read-only snapshot. PWM/moving describe outputs; encoder and IMU are measured feedback.
 struct L298nMotorStatus {
     const char* motion;
     int speed_percent;
@@ -76,6 +76,13 @@ struct L298nMotorStatus {
     double distance_move_progress_cm;
     int turn_target_degrees;
     double turn_progress_degrees;
+    bool imu_ready;
+    esp_err_t imu_error;
+    bool imu_axis_mismatch;
+    double heading_degrees;
+    double gyro_z_dps;
+    bool heading_hold_active;
+    bool turn_uses_imu;
     bool speed_pi_calibrated;
     bool speed_pi_active;
     double speed_pi_target_rpm;

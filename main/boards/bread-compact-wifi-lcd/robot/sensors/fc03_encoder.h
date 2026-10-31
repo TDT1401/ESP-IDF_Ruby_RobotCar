@@ -16,6 +16,7 @@ struct Fc03WheelStatus {
     double hz = 0;
     double rpm = 0;
     double distance_m = 0;
+    double signed_distance_m = 0;  // Command-inferred wheel direction; for local odometry.
     int level = -1;
     int command = 0;         // Logical wheel direction, before motor wiring inversion: -1/0/+1.
     bool no_pulses = false;  // Advisory only; cannot distinguish a stall from a loose wire.

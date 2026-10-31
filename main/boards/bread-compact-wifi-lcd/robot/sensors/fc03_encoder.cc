@@ -230,6 +230,7 @@ void Fc03Encoder::Update(int64_t now_us) {
         if (status_.calibrated) {
             const double metres_per_pulse = kPi * kDiameterMm[i] / (1000.0 * kPulsesPerRev[i]);
             wheel.distance_m = wheel.pulses * metres_per_pulse;
+            wheel.signed_distance_m += delta * metres_per_pulse * counter.direction;
             segment_centre_m_ += delta * metres_per_pulse * counter.direction / 2.0;
         }
         wheel.rpm = status_.calibrated ? wheel.hz * 60.0 / kPulsesPerRev[i] : 0;

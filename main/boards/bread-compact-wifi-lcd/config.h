@@ -311,10 +311,17 @@
 #define DISPLAY_SPI_MODE 0
 #endif
 
-// A MCP Test: Control a lamp
-#define LAMP_GPIO GPIO_NUM_18
+// No lamp is connected; GPIO18 is unavailable on this car.
+#define LAMP_GPIO GPIO_NUM_NC
 
 #ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N
+// GPIO4/5 are free with the simplex I2S configuration above.
+#define MPU6050_SDA_PIN GPIO_NUM_4
+#define MPU6050_SCL_PIN GPIO_NUM_5
+#define MPU6050_I2C_ADDRESS 0x68
+// Flat module, component side up: a physical left turn must give positive gyro Z.
+// Set to -1.0 only if the module's Z axis points down.
+#define MPU6050_GYRO_Z_SIGN 1.0
 #define MOTOR_LEFT_EN_PIN GPIO_NUM_8
 #define MOTOR_LEFT_IN1_PIN GPIO_NUM_9
 #define MOTOR_LEFT_IN2_PIN GPIO_NUM_10

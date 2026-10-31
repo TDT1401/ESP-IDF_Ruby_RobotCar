@@ -263,6 +263,13 @@ esp_err_t Status(httpd_req_t* req) {
         !cJSON_AddNumberToObject(json.get(), "turn_target_degrees", motor.turn_target_degrees) ||
         !cJSON_AddNumberToObject(json.get(), "turn_progress_degrees",
                                  motor.turn_progress_degrees) ||
+        !cJSON_AddBoolToObject(json.get(), "imu_ready", motor.imu_ready) ||
+        !cJSON_AddStringToObject(json.get(), "imu_error", esp_err_to_name(motor.imu_error)) ||
+        !cJSON_AddBoolToObject(json.get(), "imu_axis_mismatch", motor.imu_axis_mismatch) ||
+        !cJSON_AddNumberToObject(json.get(), "heading_degrees", motor.heading_degrees) ||
+        !cJSON_AddNumberToObject(json.get(), "gyro_z_dps", motor.gyro_z_dps) ||
+        !cJSON_AddBoolToObject(json.get(), "heading_hold_active", motor.heading_hold_active) ||
+        !cJSON_AddBoolToObject(json.get(), "turn_uses_imu", motor.turn_uses_imu) ||
         !AddFc03EncoderJson(json.get(), motor.encoder))
         return Reply(req, "500 Internal Server Error", "{\"error\":\"Status unavailable\"}");
     std::unique_ptr<char, decltype(&cJSON_free)> body(cJSON_PrintUnformatted(json.get()),

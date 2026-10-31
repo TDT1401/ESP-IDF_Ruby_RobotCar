@@ -15,6 +15,7 @@ The configured board uses an ESP32-S3-N16R8, I2S microphone, MAX98357A amplifier
 - Web control at `http://<IP-address>:8080`.
 - Real-time obstacle distance measurement.
 - Two FC-03 encoders: wheel pulses, RPM and measured forward/backward moves.
+- MPU6050 assisted straight travel and angle turns.
 - Telegram integration.
 
 ## Source layout
@@ -24,7 +25,7 @@ Robot features are grouped under `robot/`:
 ```text
 robot/
 ├── controller/  # Motor control, autonomy, gestures and MCP tools
-├── sensors/     # FC-03 encoders and HC-SR04 distance sensor
+├── sensors/     # FC-03 encoders, HC-SR04 and MPU6050
 ├── web/         # HTTP server and embedded control page
 ├── telegram/    # Telegram integration, messages and local configuration
 └── tests/       # Browser control regression tests
@@ -53,6 +54,7 @@ node --test main/boards/bread-compact-wifi-lcd/robot/tests/web_page_test.cjs
 | 1        | I2S microphone             |                   |
 | 1        | ESP32-S3 board             | ESP32-S3-N16R8    |
 | 1        | SPI TFT display            |                   |
+| 1        | MPU6050 IMU                |                   |
 | 2        | 18650 cells                | 3.7 V per cell    |
 | 1        | Power switch               |                   |
 
@@ -145,11 +147,49 @@ wheel diameters in millimetres. Current values are **20.3 pulses/rev** for the l
 **20.8 pulses/rev** for the right wheel, and **60 mm** diameter for both wheels. Recalibrate
 these values for your own encoders and wheels.
 
+### MPU6050 IMU
+
+The current simplex I2S configuration leaves GPIO4 and GPIO5 available for the IMU. GPIO18 is not used because it is faulty on this car. Connect the MPU6050 over I²C as follows:
+
+| MPU6050 pin | ESP32-S3 pin | Notes |
+| ----------- | ------------ | ----- |
+| VCC / VIN   | 3V3          | Use 3.3 V for a safe logic level |
+| GND         | Common GND   | Share ground with the ESP32-S3 |
+| SDA         | GPIO4        | I²C data |
+| SCL         | GPIO5        | I²C clock |
+| INT         | Leave open   | The firmware polls the sensor |
+| AD0         | GND or leave at its default | Selects address `0x68` |
+
+Keep the I²C pull-ups at 3.3 V; never pull SDA or SCL up to 5 V. Many breakout boards already include pull-ups. GPIO4/5 belong to the alternate duplex I2S configuration, so remap I²C before switching audio modes. If AD0 is tied to 3V3, change `MPU6050_I2C_ADDRESS` in [config.h](config.h) to `0x69`.
+
+Mount the module flat and firmly near the centre of the chassis, component side up.
+Keep the car still for about two seconds after boot while the gyro calibrates. The firmware
+samples gyro Z in a separate task, combines it with signed FC-03 wheel travel for heading,
+corrects straight travel with differential PWM, and brakes measured angle turns near the target.
+The driver accepts MPU-6050 identity `0x68` and MPU-6500-compatible identity `0x70`; the
+monitor logs which identity the connected module reports.
+
+When the IMU is unavailable at the start of a turn, the controller uses the previous
+encoder-only turn behaviour. If IMU samples fail during an IMU-controlled turn, that turn
+stops. Read `imu_ready`, `imu_error`, `imu_axis_mismatch`, `heading_degrees`, `gyro_z_dps`,
+`heading_hold_active`, and `turn_uses_imu` from `/api/status` or `self.motor.get_state`.
+`heading_degrees` is relative to startup; `turn_uses_imu` identifies the most recent turn's
+selected sensor mode.
+A left turn should increase `heading_degrees`; a reversed Z axis stops the turn and sets
+`imu_axis_mismatch`. Check the mounting and `MPU6050_GYRO_Z_SIGN` in `config.h` if needed.
+
+No lamp is connected and GPIO18 is unavailable, so the unused lamp MCP tools are disabled.
+IMU angle turns keep their cruising PWM until the final 25 degrees, then ramp down to
+at least 55% near the target. Test the final angle on the floor and adjust braking if
+needed. Physical floor tests are needed to tune `kTurnSlowdownWindowDegrees`,
+`kTurnStopLeadSeconds`, `kTurnKp`, `kTurnKd`, `kHeadingKp`, and
+`kHeadingKd` in `robot/controller/l298n_controller.cc`.
+
 ## Build and Flash
 
 Use ESP-IDF 6.1 (minimum 6.0.1). This is the only build command for this board: it selects
-the ST7789 240×240 display, L298N, HC-SR04, both FC-03 counters, and **“Hi ESP”** as the
-wake word. The firmware name is `bread-compact-wifi-lcd`.
+the ST7789 240×240 display, L298N, HC-SR04, both FC-03 counters, MPU6050, and
+**“Hi ESP”** as the wake word. The firmware name is `bread-compact-wifi-lcd`.
 
 ```sh
 python scripts/build.py bread-compact-wifi-lcd --language vi-VN --wake-word wn9_hiesp
