@@ -10,7 +10,7 @@
 // Board-lifetime controller; call once after the LCD backlight is initialized.
 void InitializeL298nController();
 
-// Called only after initialization. Records display events; motion runs on the motor timer.
+// Called only after initialization. Sleep expressions stop autonomous motion.
 void UpdateL298nEmotion(const char* emotion, bool speaking);
 
 enum class L298nWebCommand { kStop, kForward, kBackward, kLeft, kRight, kJoystick, kRelease };
@@ -24,12 +24,12 @@ esp_err_t CommandL298nWebControl(uint32_t session, uint32_t sequence, L298nWebCo
 void SetL298nWebConnected(bool connected);
 
 // Thread-safe shared voice/Telegram speed setting (RAM only, 0..100 PWM percent).
-// Applies to current voice motion without extending its deadline; never starts motion.
+// Applies to active movement without extending its safety deadline; never starts motion.
 // Zero stops. Returns ESP_ERR_INVALID_STATE while web manual control owns the motors.
 // ESP_ERR_INVALID_ARG rejects out-of-range values; ESP_FAIL reports a hardware fault.
 esp_err_t SetL298nMotorSpeed(int speed_percent);
 
-// Start an encoder-controlled straight-line move with IMU heading hold when ready.
+// Start an encoder-controlled straight-line move with required IMU heading hold.
 // Distance is 1..1000 cm; forward movement also observes the obstacle stop threshold.
 esp_err_t MoveL298nDistance(bool forward, int distance_cm, const char* owner = "telegram");
 
@@ -39,9 +39,6 @@ esp_err_t SetL298nFollowMode(bool enabled);
 esp_err_t SetL298nObstacleAvoidance(bool enabled);
 esp_err_t SetL298nFollowDistance(int distance_cm);
 esp_err_t SetL298nObstacleDistance(int distance_cm);
-esp_err_t SetL298nGuardMode(bool enabled);
-esp_err_t StartL298nSpaceScan();
-void CancelL298nSpaceScan();
 // One RAM-only script shared by web, Telegram and voice. F/B: 1..50 cm;
 // L/R: 1..180 degrees, comma separated, optional terminal S.
 // Up to five moves.
@@ -58,8 +55,6 @@ struct L298nMotorStatus {
     bool moving;
     bool pending;
     bool web_manual;
-    bool emotion_enabled;
-    bool gesture_active;
     const char* autonomy_mode;
     int follow_distance_cm;
     int obstacle_distance_cm;
@@ -88,12 +83,6 @@ struct L298nMotorStatus {
     double speed_pi_target_rpm;
     int left_pwm_percent;
     int right_pwm_percent;
-    bool guard_enabled;
-    int guard_baseline_cm;
-    const char* scan_state;
-    int scan_left_cm;
-    int scan_center_cm;
-    int scan_right_cm;
     const char* control_owner;
     bool warning_sound_enabled;
     const char* route_state;

@@ -17,8 +17,6 @@ public:
     void SetStatus(const char* status) override;
     void SetEmotion(const char* emotion) override;
     void ShowHappyFor(uint32_t duration_ms);
-    void ShowAlertFor(uint32_t duration_ms);
-    void ShowFindFor(uint32_t duration_ms);
 
     // Board-owned observer; it must not call back into the display while notified.
     using EmotionMotionCallback = void (*)(const char* emotion, bool speaking);
@@ -79,9 +77,7 @@ private:
     enum class GazeState : uint8_t { kIdle, kToDirection, kHolding, kToCenter };
     enum class HalfBlinkState : uint8_t { kIdle, kShrinking, kExpanding };
     enum class TransitionState : uint8_t { kIdle, kMorph, kBlinkSwitch };
-    enum class Screen : uint8_t {
-        kEyes, kBattery, kClock, kWifi, kTemperature, kWeather, kDrive, kFind
-    };
+    enum class Screen : uint8_t { kEyes, kBattery, kClock, kWifi, kTemperature, kWeather, kDrive };
     enum class WeatherKind : uint8_t { kUnknown, kClear, kCloudy, kRain, kStorm, kFog, kSnow };
 
     static void AnimationTimerCallback(lv_timer_t* timer);
@@ -190,8 +186,6 @@ private:
     uint32_t last_info_refresh_ms_ = 0;
     uint32_t last_weather_frame_ms_ = 0;
     uint32_t last_drive_refresh_ms_ = 0;
-    uint32_t last_find_flash_ms_ = 0;
-    bool find_flash_bright_ = false;
     int boot_blink_count_ = 0;
     int displayed_battery_level_ = -1;
     float displayed_temperature_ = 0.0f;

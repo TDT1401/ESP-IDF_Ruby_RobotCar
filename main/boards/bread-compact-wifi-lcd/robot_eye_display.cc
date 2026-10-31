@@ -452,29 +452,6 @@ void RobotEyeDisplay::ShowHappyFor(uint32_t duration_ms) {
     NotifyEmotionMotion();
 }
 
-void RobotEyeDisplay::ShowAlertFor(uint32_t duration_ms) {
-    DisplayLockGuard lock(this);
-    if (!lock || speaking_)
-        return;
-    requested_screen_ = Screen::kEyes;
-    ShowEyesScreen();
-    SetRobotEyeExpression(Expression::kAlert);
-    happy_until_ms_ = NowMs() + std::max<uint32_t>(1, duration_ms);
-    NotifyEmotionMotion();
-}
-
-void RobotEyeDisplay::ShowFindFor(uint32_t duration_ms) {
-    DisplayLockGuard lock(this);
-    if (!lock)
-        return;
-    requested_screen_ = Screen::kEyes;
-    last_find_flash_ms_ = NowMs();
-    find_flash_bright_ = true;
-    ShowScreen(Screen::kFind, duration_ms);
-    if (info_layer_ != nullptr)
-        lv_obj_set_style_bg_color(info_layer_, lv_color_hex(0x17425C), 0);
-}
-
 RobotEyeDisplay::Expression RobotEyeDisplay::InferSentenceExpression(const char* content) {
     const std::string_view text(content);
     for (auto phrase : {"xin lỗi", "rất tiếc", "chia buồn", "i'm sorry", "my condolences"}) {
@@ -680,8 +657,6 @@ void RobotEyeDisplay::ShowScreen(Screen screen, uint32_t duration_ms) {
         ShowEyesScreen();
         return;
     }
-    if (active_screen_ == Screen::kFind && screen != Screen::kFind && info_layer_ != nullptr)
-        lv_obj_set_style_bg_color(info_layer_, lv_color_hex(0x050A12), 0);
     active_screen_ = screen;
     screen_until_ms_ = NowMs() + duration_ms;
     if (info_layer_ != nullptr) {
@@ -710,8 +685,6 @@ void RobotEyeDisplay::ShowScreen(Screen screen, uint32_t duration_ms) {
 }
 
 void RobotEyeDisplay::ShowEyesScreen() {
-    if (active_screen_ == Screen::kFind && info_layer_ != nullptr)
-        lv_obj_set_style_bg_color(info_layer_, lv_color_hex(0x050A12), 0);
     active_screen_ = Screen::kEyes;
     screen_until_ms_ = 0;
     if (info_layer_ != nullptr) {
@@ -1038,12 +1011,6 @@ void RobotEyeDisplay::RefreshInfoScreen(uint32_t now, bool force) {
                      warning ? "  ! NEAR" : "");
             SetInfoText(MATERIAL_SYMBOLS_WIFI, "RUBY DRIVE", value, detail);
 #endif
-            break;
-        }
-        case Screen::kFind: {
-            auto& wifi = WifiManager::GetInstance();
-            const std::string ip = wifi.IsConnected() ? wifi.GetIpAddress() : "No IP";
-            SetInfoText(MATERIAL_SYMBOLS_WIFI, "FIND RUBY", ip.c_str(), "Ruby is here!");
             break;
         }
         case Screen::kEyes:
@@ -1669,8 +1636,7 @@ void RobotEyeDisplay::UpdateAnimation() {
         const auto motor = GetL298nMotorStatus();
         const bool driving = motor.web_manual || motor.pending || motor.moving ||
                              strcmp(motor.autonomy_mode, "manual") != 0 ||
-                             strcmp(motor.route_state, "running") == 0 ||
-                             strcmp(motor.scan_state, "scanning") == 0;
+                             strcmp(motor.route_state, "running") == 0;
         if (driving) {
             if (active_screen_ != Screen::kDrive)
                 ShowScreen(Screen::kDrive, 1000);
@@ -1685,13 +1651,6 @@ void RobotEyeDisplay::UpdateAnimation() {
         if (screen_until_ms_ != 0 && DeadlineReached(now, screen_until_ms_)) {
             ShowEyesScreen();
         } else {
-            if (active_screen_ == Screen::kFind && info_layer_ != nullptr &&
-                now - last_find_flash_ms_ >= 300) {
-                last_find_flash_ms_ = now;
-                find_flash_bright_ = !find_flash_bright_;
-                lv_obj_set_style_bg_color(info_layer_,
-                                          lv_color_hex(find_flash_bright_ ? 0x17425C : 0x050A12), 0);
-            }
             RenderWeatherScene(now);
             RefreshInfoScreen(now);
             return;

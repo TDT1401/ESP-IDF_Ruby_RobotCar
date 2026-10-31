@@ -13,7 +13,7 @@ Bo mạch ESP32-S3-N16R8, microphone I2S, MAX98357A và màn hình TFT SPI.
 - Điều khiển web tại `http://<IP-robot>:8080`.
 - Đo khoảng cách vật cản theo thời gian thực.
 - Hai FC-03: đếm xung, đo RPM và cho phép xe tiến/lùi theo quãng đường.
-- MPU6050 hỗ trợ giữ hướng khi đi thẳng và quay theo góc.
+- MPU6050 cung cấp phản hồi hướng bắt buộc khi chạy theo quãng đường và quay theo góc.
 - Telegram.
 
 ## Cấu trúc mã nguồn
@@ -22,7 +22,7 @@ Các chức năng robot được nhóm trong `robot/`:
 
 ```text
 robot/
-├── controller/  # Điều khiển motor, tự hành, cử chỉ và công cụ MCP
+├── controller/  # Đầu ra bánh xe, chuyển động đo được, tự hành và công cụ MCP
 ├── sensors/     # Encoder FC-03, HC-SR04 và MPU6050
 ├── web/         # HTTP server và trang điều khiển nhúng
 ├── telegram/    # Tích hợp Telegram, nội dung tin nhắn và cấu hình cá nhân
@@ -32,6 +32,12 @@ robot/
 `compact_wifi_board_lcd.cc` khởi tạo các module này. Chân GPIO vẫn nằm trong
 `config.h`; `main/CMakeLists.txt` chọn các file nguồn robot khi bật
 `CONFIG_BREAD_COMPACT_WIFI_LCD_L298N`.
+
+Bộ điều khiển dùng chung một trạng thái trong `l298n_internal.h`. Phần triển khai
+được chia theo chức năng: `l298n_motor_driver.cc` xuất tín hiệu bánh xe,
+`l298n_motion_executor.cc` kết hợp encoder và IMU; bám theo, né vật cản và chạy
+lộ trình nằm trong các file `l298n_follow.cc`, `l298n_obstacle_avoidance.cc` và
+`l298n_route.cc`. Lệnh web và MCP có file nguồn riêng.
 
 Chạy kiểm thử trang điều khiển từ thư mục gốc dự án:
 
@@ -164,11 +170,12 @@ Giữ xe đứng yên khoảng hai giây sau khi bật nguồn để hiệu chu�
 trong task riêng, kết hợp với quãng đường có dấu từ hai FC-03 để ước lượng hướng, bù PWM
 hai bên khi chạy thẳng và dùng góc đo được để phanh lượt quay đúng lúc.
 
-Nếu IMU chưa sẵn sàng khi bắt đầu quay, xe dùng cách quay theo encoder cũ. Nếu mất mẫu IMU
-giữa lượt quay có dùng IMU, xe sẽ dừng. Xem `imu_ready`, `imu_error`, `imu_axis_mismatch`,
+Chạy theo quãng đường và quay theo góc yêu cầu cả encoder đã hiệu chuẩn lẫn IMU sẵn sàng.
+Nếu một cảm biến mất dữ liệu trong lúc chạy, xe dừng thay vì đổi cách ước lượng.
+Xem `imu_ready`, `imu_error`, `imu_axis_mismatch`,
 `heading_degrees`, `gyro_z_dps`, `heading_hold_active` và `turn_uses_imu` tại `/api/status`
 hoặc `self.motor.get_state`. `heading_degrees` là góc tương đối từ lúc khởi động;
-`turn_uses_imu` cho biết lượt quay gần nhất đã chọn IMU hay encoder. Khi xe rẽ trái,
+`turn_uses_imu` cho biết lượt quay dùng IMU đã bắt đầu hay đang hoạt động. Khi xe rẽ trái,
 `heading_degrees` phải tăng; nếu trục Z ngược,
 xe dừng quay và đặt `imu_axis_mismatch`. Khi đó kiểm tra chiều gắn module và
 `MPU6050_GYRO_Z_SIGN` trong `config.h`.
@@ -217,13 +224,17 @@ idf.py -p <CONG_SERIAL> flash monitor
 
 Để xe tiến 50 cm, nói “tiến 50 cm” hoặc gọi MCP `self.motor.forward_distance` với
 `distance_cm=50`; lùi dùng `self.motor.backward_distance`. Xe dừng khi cả hai bánh đạt
-mốc đo, hoặc dừng sớm nếu thiếu xung, lỗi encoder hay quá 10 giây. Khi tiến, xe cũng
-dừng nếu HC-SR04 phát hiện vật cản quá gần. `self.motor.get_state`
+mốc đo, hoặc dừng sớm nếu thiếu xung, lỗi cảm biến hay quá hạn an toàn theo quãng đường.
+Khi tiến, xe cũng dừng nếu HC-SR04 phát hiện vật cản quá gần. `self.motor.get_state`
 và `/api/status` trả `distance_move_state`, `distance_move_target_cm` và
 `distance_move_progress_cm`. Lệnh trả về ngay khi bắt đầu; `completed` mới là đã đạt mốc.
 Số đo có thể lệch quãng đường thực do trượt bánh và sai số hiệu chuẩn.
-Lệnh chạy theo quãng đường tăng tốc dần từ mức PWM 60% (hoặc tốc độ yêu cầu nếu thấp hơn),
-rồi giảm tốc trong 20 cm cuối. Quãng đường ngắn dùng profile tăng giảm tốc hình tam giác.
+Các lệnh MCP ngắn `self.motor.forward` và `self.motor.backward` cũng chạy theo
+quãng đường đo; `self.motor.left` và `self.motor.right` quay theo góc đo.
+Đã bỏ cử chỉ motor chạy theo thời gian. Nút điều khiển web và joystick vẫn chạy
+trong lúc giữ lệnh, với cơ chế tự dừng khi mất phiên 600 ms.
+Lệnh chạy theo quãng đường bắt đầu từ mức PWM tối thiểu 50%, rồi giảm tốc trong 8 cm cuối.
+Quãng đường ngắn dùng profile tăng giảm tốc hình tam giác.
 
 ## Cấu hình Telegram
 

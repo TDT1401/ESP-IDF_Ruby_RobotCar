@@ -15,7 +15,7 @@ The configured board uses an ESP32-S3-N16R8, I2S microphone, MAX98357A amplifier
 - Web control at `http://<IP-address>:8080`.
 - Real-time obstacle distance measurement.
 - Two FC-03 encoders: wheel pulses, RPM and measured forward/backward moves.
-- MPU6050 assisted straight travel and angle turns.
+- MPU6050 heading feedback required for measured straight travel and angle turns.
 - Telegram integration.
 
 ## Source layout
@@ -24,7 +24,7 @@ Robot features are grouped under `robot/`:
 
 ```text
 robot/
-├── controller/  # Motor control, autonomy, gestures and MCP tools
+├── controller/  # Wheel output, measured motion, autonomous behavior and MCP tools
 ├── sensors/     # FC-03 encoders, HC-SR04 and MPU6050
 ├── web/         # HTTP server and embedded control page
 ├── telegram/    # Telegram integration, messages and local configuration
@@ -34,6 +34,12 @@ robot/
 `compact_wifi_board_lcd.cc` initializes these modules. Board pins remain in
 `config.h`; `main/CMakeLists.txt` selects the robot sources when
 `CONFIG_BREAD_COMPACT_WIFI_LCD_L298N` is enabled.
+
+The controller keeps one shared state in `l298n_internal.h`. Its implementation
+is split by function: `l298n_motor_driver.cc` writes wheel outputs,
+`l298n_motion_executor.cc` combines encoder and IMU feedback, and separate
+`l298n_follow.cc`, `l298n_obstacle_avoidance.cc`, and `l298n_route.cc` files
+implement the remaining behaviors. Web and MCP commands have their own source files.
 
 Run the browser tests from the repository root:
 
@@ -169,12 +175,12 @@ corrects straight travel with differential PWM, and brakes measured angle turns 
 The driver accepts MPU-6050 identity `0x68` and MPU-6500-compatible identity `0x70`; the
 monitor logs which identity the connected module reports.
 
-When the IMU is unavailable at the start of a turn, the controller uses the previous
-encoder-only turn behaviour. If IMU samples fail during an IMU-controlled turn, that turn
-stops. Read `imu_ready`, `imu_error`, `imu_axis_mismatch`, `heading_degrees`, `gyro_z_dps`,
-`heading_hold_active`, and `turn_uses_imu` from `/api/status` or `self.motor.get_state`.
-`heading_degrees` is relative to startup; `turn_uses_imu` identifies the most recent turn's
-selected sensor mode.
+Measured travel and angle turns require both calibrated encoders and a ready IMU.
+If either sensor fails during a measured movement, the car stops instead of changing
+measurement modes. Read `imu_ready`, `imu_error`, `imu_axis_mismatch`,
+`heading_degrees`, `gyro_z_dps`, `heading_hold_active`, and `turn_uses_imu` from
+`/api/status` or `self.motor.get_state`. `heading_degrees` is relative to startup;
+`turn_uses_imu` reports whether an IMU controlled turn is active or was last started.
 A left turn should increase `heading_degrees`; a reversed Z axis stops the turn and sets
 `imu_axis_mismatch`. Check the mounting and `MPU6050_GYRO_Z_SIGN` in `config.h` if needed.
 
@@ -209,13 +215,17 @@ idf.py -p <SERIAL_PORT> flash monitor
 To drive forward 50 cm, say “move forward 50 cm” or call MCP
 `self.motor.forward_distance` with `distance_cm=50`; use `self.motor.backward_distance`
 to reverse. The motors stop when both wheels reach the target, or earlier on missing
-pulses, encoder failure, or a 10-second timeout. Forward travel also stops if HC-SR04
-detects a nearby obstacle. `self.motor.get_state` and `/api/status`
+pulses, sensor failure, or a distance-scaled safety timeout. Forward travel also
+stops if HC-SR04 detects a nearby obstacle. `self.motor.get_state` and `/api/status`
 report `distance_move_state`, `distance_move_target_cm`, and `distance_move_progress_cm`.
 The tool returns when motion starts; `completed` confirms the measured target was reached.
 Wheel slip and calibration error can change the real travel distance.
-Distance moves ramp up from a 60% PWM floor (or the requested speed if lower), then
-begin ramping down over the final 20 cm. Short moves use a triangular speed profile.
+The short MCP names `self.motor.forward` and `self.motor.backward` now use the same
+measured distance command; `self.motor.left` and `self.motor.right` use a measured
+angle. Motor gestures based on fixed run times have been removed. Web drive buttons
+and the joystick remain held controls with a 600 ms connection watchdog.
+Distance moves start at a 50% PWM floor and begin slowing over the final 8 cm.
+Short moves use a triangular speed profile.
 
 ## Telegram Configuration
 

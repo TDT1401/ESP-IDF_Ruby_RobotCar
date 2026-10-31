@@ -11,9 +11,9 @@
 - Chế độ **bám khoảng cách**.
 - Chế độ **tự hành né vật cản**.
 - Điều khiển thủ công bằng trang web HUD tại `http://<IP-của-robot>:8080`, có joystick, trạng thái cảm biến và cảnh báo vật cản.
-- Hiển thị mắt robot và biểu cảm; chuyển động ngắn theo một số cảm xúc của trợ lý.
+- Hiển thị mắt robot và biểu cảm.
 - Điều khiển và xem trạng thái qua Telegram khi tính năng này được cấu hình.
-- Cơ chế an toàn: tự dừng khi mất phiên web, cảm biến/encoder lỗi, hết thời gian chạy hoặc gặp vật cản quá gần khi tiến.
+- Cơ chế an toàn: tự dừng khi mất phiên web, cảm biến lỗi, quá hạn an toàn của chuyển động đo được hoặc gặp vật cản quá gần khi tiến.
 
 ## Linh kiện chính
 
@@ -29,6 +29,7 @@
 |        4 | Bánh xe và 1 khung xe           | Phần cơ khí của robot                                 |
 |        1 | HC-SR04                         | Đo khoảng cách và phát hiện vật cản phía trước        |
 |        2 | FC-03                           | Đếm xung bánh trái/phải, ước lượng RPM và quãng đường |
+|        1 | MPU6050                         | Đo tốc độ quay, giữ hướng và hỗ trợ quay theo góc     |
 |        2 | Pin 18650 3,7 V                 | Nguồn cho robot                                       |
 |        1 | Công tắc nguồn                  | Bật/tắt nguồn                                         |
 
@@ -42,10 +43,11 @@
 - L298N: motor trái `ENA/IN1/IN2 = GPIO8/9/10`; motor phải `IN3/IN4/ENB = GPIO11/12/13`.
 - HC-SR04: `TRIG GPIO14`, `ECHO GPIO39` qua mạch hạ mức.
 - FC-03: bánh trái `GPIO38`, bánh phải `GPIO48`.
+- MPU6050: `SDA GPIO4`, `SCL GPIO5`.
 
 ## Tài liệu liên quan
 
 - Hướng dẫn đầy đủ: [README.vi.md](README.vi.md)
-- Cấu hình chân GPIO: [config.h](config.h)
-- Điều khiển motor và tự hành: [robot/controller/l298n_controller.cc](robot/controller/l298n_controller.cc)
+- Cấu hình chân GPIO: [config.h](../config.h)
+- Điều khiển motor và tự hành: [robot/controller](../robot/controller/l298n_controller.cc)
 - Ghi chú phát triển: [update.md](update.md)

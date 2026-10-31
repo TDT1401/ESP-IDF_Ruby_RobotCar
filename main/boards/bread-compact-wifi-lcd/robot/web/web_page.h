@@ -13,7 +13,7 @@ inline constexpr char kL298nWebPage[] = R"html(
   <style>
     :root{color-scheme:dark;--bg:#050711;--panel:#0d1324dd;--panel2:#101a30;--text:#f3f7ff;--muted:#8291ae;--line:#21304d;--cyan:#28d7ff;--blue:#4776ff;--purple:#985cff;--success:#39e58c;--danger:#ff4f70;--shadow:0 24px 70px #0009}
     body.ultra{--bg:#000;--panel:#070a12f2;--panel2:#090e18;--line:#192235}
-    .scan-map{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}.scan-sector{padding:12px 6px;border:1px solid var(--line);border-radius:12px;text-align:center;background:var(--panel2)}.scan-sector strong{display:block;color:var(--cyan);font-size:20px}.feature-card{margin-top:18px;padding:16px;border:1px solid var(--line);border-radius:16px;background:var(--panel2)}.feature-card p{color:var(--muted)}.feature-card button{margin-right:8px}.feature-state{color:var(--cyan);font-weight:700}
+.feature-card{margin-top:18px;padding:16px;border:1px solid var(--line);border-radius:16px;background:var(--panel2)}.feature-card p{color:var(--muted)}.feature-card button{margin-right:8px}.feature-state{color:var(--cyan);font-weight:700}
     .feature-card input[type=text]{width:100%;margin:6px 0 12px;padding:11px;border:1px solid var(--line);border-radius:10px;background:#050a14;color:var(--text);font:inherit}
     *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
     body{margin:0;min-height:100vh;overflow-x:hidden;background:radial-gradient(circle at 12% 4%,#1b4fff33,transparent 30%),radial-gradient(circle at 88% 22%,#8d3cff28,transparent 28%),linear-gradient(145deg,#060914,var(--bg) 48%,#070a16);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,sans-serif}
@@ -77,7 +77,7 @@ inline constexpr char kL298nWebPage[] = R"html(
           <div class="portrait-manual">
             <div class="home-overview" aria-label="Thông tin thiết bị"><span>📶 <strong id="homeNetwork">Đang kiểm tra Wi-Fi…</strong></span><span>⏱ <strong id="homeUptime">--</strong></span><button id="refreshHome" type="button">Làm mới</button></div>
             <p id="homeUpdated" class="home-updated">Chưa có dữ liệu trạng thái.</p>
-            <section class="home-section"><h3>Thao tác nhanh</h3><p>Dừng khẩn cấp có hiệu lực cả khi xe đang tự hành hoặc lái trong HUD.</p><div class="home-actions"><button id="emergencyStop" class="danger" type="button">⏹ Dừng xe</button><button id="wakeRobot" type="button">🎙 Đánh thức Ruby</button><button id="findRobot" type="button">📍 Tìm xe</button></div><p id="status" role="status" aria-live="polite"></p></section>
+            <section class="home-section"><h3>Thao tác nhanh</h3><p>Dừng khẩn cấp có hiệu lực cả khi xe đang tự hành hoặc lái trong HUD.</p><div class="home-actions"><button id="emergencyStop" class="danger" type="button">⏹ Dừng xe</button><button id="wakeRobot" type="button">🎙 Đánh thức Ruby</button></div><p id="status" role="status" aria-live="polite"></p></section>
             <section class="home-section"><h3>Đi theo quãng đường</h3><p>Cần FC-03 đã hiệu chuẩn. Xe tự dừng ở đích; phía sau không có cảm biến vật cản.</p><div class="home-row"><label for="moveDistance">Quãng đường</label><input id="moveDistance" type="number" min="1" max="1000" step="1" value="30" inputmode="numeric"><span>cm</span></div><div class="home-row"><button id="moveForward" type="button">⬆ Tiến</button><button id="moveBackward" type="button">⬇ Lùi</button></div><p id="moveProgress" class="feature-state" aria-live="polite"></p></section>
             <section class="home-section"><h3>Chế độ tự hành</h3><p>Bật một chế độ tại một thời điểm; chỉnh khoảng cách ở phần cấu hình bên dưới.</p><div class="home-row"><button id="homeFollowToggle" type="button" aria-pressed="false">Bật Follow</button><button id="homeAvoidToggle" type="button" aria-pressed="false">Bật né vật cản</button></div></section>
             <section id="encoderPanel" hidden aria-live="polite">
@@ -97,8 +97,6 @@ inline constexpr char kL298nWebPage[] = R"html(
               <div class="config-card"><label for="obstacleDistanceSetting">Ngưỡng né vật cản (cm)</label><input id="obstacleDistanceSetting" type="number" min="10" max="100" step="1" value="20"></div>
             </div>
             <div class="config-actions"><button id="saveConfig" type="button">Lưu thông số</button><p class="config-hint">Áp dụng ngay trong firmware; giá trị sẽ về mặc định sau khi khởi động lại.</p></div>
-            <section class="feature-card"><h3>Canh gác khi đứng yên</h3><p>SR04 theo dõi thay đổi khoảng cách. Khi phát hiện thay đổi, mắt robot, loa và Telegram cảnh báo; mỗi lần cách nhau ít nhất 30 giây.</p><button id="guardOn" type="button">Bật canh gác</button><button id="guardOff" type="button">Tắt</button> <span id="guardState" class="feature-state">Đang tắt</span></section>
-            <section class="feature-card"><h3>Quét khoảng trống trước xe</h3><p>Xe quay từng bước để đo trái, giữa, phải, rồi quay về hướng ban đầu theo thời gian. Sơ đồ chỉ là ước lượng, không phải bản đồ chính xác.</p><button id="scanStart" type="button">Bắt đầu quét</button><button id="scanCancel" type="button">Dừng quét</button> <span id="scanState" class="feature-state">Chưa quét</span><div class="scan-map" aria-label="Sơ đồ khoảng cách ước lượng"><div class="scan-sector">Trái<strong id="scanLeft">--</strong></div><div class="scan-sector">Giữa<strong id="scanCenter">--</strong></div><div class="scan-sector">Phải<strong id="scanRight">--</strong></div></div><p id="scanSuggestion">Chỉ gợi ý hướng đi khi cả ba số đo hợp lệ.</p></section>
             <section class="feature-card"><h3>Lệnh nhiều bước</h3><p>Nhập F30,L90,S = tiến 30 cm, xoay trái 90° rồi dừng. B = lùi, R = xoay phải. Tối đa 5 bước; F/B dùng 1–50 cm, L/R dùng 1–180°. Góc được tính từ FC-03 và còn sai số do trượt bánh. Phía sau không có cảm biến vật cản. Kịch bản lưu trong RAM và mất khi khởi động lại.</p><input id="routeScript" type="text" maxlength="63" value="F30,L90,S" aria-label="Kịch bản di chuyển"><div class="home-row"><button id="routeSave" type="button">Lưu</button><button id="routeRun" type="button">Lưu &amp; chạy</button><button id="routeReplay" type="button">Chạy đã lưu</button><button id="routeStop" type="button">Dừng kịch bản</button></div><p id="routeState" class="feature-state">Chưa lưu</p></section>
             </details>
             <details class="home-section home-detail"><summary>Thông tin thiết bị &amp; trợ giúp</summary><p>Địa chỉ web: <strong id="homeIp">--</strong> · RAM trống: <strong id="homeRam">--</strong> KB.</p><p>Follow và né vật cản có tab riêng để xem trạng thái. Dùng HUD để lái liên tục; lệnh tiến/lùi theo cm và lộ trình tự dừng khi hoàn thành. Nút Dừng xe ngắt mọi chuyển động.</p></details>
@@ -177,7 +175,6 @@ inline constexpr char kL298nWebPage[] = R"html(
           data.distance_move_target_cm + ' cm' : '';
         return ['route','Lộ trình · bước ' + data.route_step + '/' + data.route_steps + progress];
       }
-      if (data.scan_state === 'scanning') return ['scan','Đang quét khoảng trống trước xe'];
       if (data.autonomy_mode === 'follow') return ['autonomy','Follow đang bật'];
       if (data.autonomy_mode === 'obstacle_avoidance')
         return ['autonomy','Né vật cản đang bật'];
@@ -212,8 +209,6 @@ inline constexpr char kL298nWebPage[] = R"html(
       if (operationKind === 'route')
         return data.route_state === 'complete' ? ['Lộ trình đã hoàn thành.',true] :
           ['Lộ trình đã bị ngắt.',false];
-      if (operationKind === 'scan')
-        return data.scan_state === 'complete' ? ['Đã quét xong.',true] : ['Quét đã bị ngắt.',false];
       return null;
     }
 
@@ -334,30 +329,12 @@ inline constexpr char kL298nWebPage[] = R"html(
         $('moveProgress').textContent = moveState && data.distance_move_target_cm > 0
           ? moveState + ' · ' + Math.round(data.distance_move_progress_cm || 0) +
             '/' + data.distance_move_target_cm + ' cm' : moveState;
-        $('guardState').textContent = data.guard_enabled ? 'Đang bật' : 'Đang tắt';
         const routeLabel = ({empty:'Chưa lưu',saved:'Đã lưu',running:'Đang chạy',
           complete:'Đã hoàn thành',interrupted:'Đã ngắt'})[data.route_state] || 'Chưa lưu';
         $('routeState').textContent = routeLabel + (data.route_state === 'running'
           ? ' · bước ' + data.route_step + '/' + data.route_steps : '');
         if (document.activeElement !== $('routeScript') && data.route_script)
           $('routeScript').value = data.route_script;
-        $('scanState').textContent = ({idle:'Chưa quét',scanning:'Đang quét…',
-          complete:'Đã quét xong',interrupted:'Đã dừng'})[data.scan_state] || 'Chưa quét';
-        const scanValues = [data.scan_left_cm,data.scan_center_cm,data.scan_right_cm];
-        ['scanLeft','scanCenter','scanRight'].forEach((id,index) => {
-          $(id).textContent = Number.isFinite(scanValues[index]) && scanValues[index] > 0
-            ? scanValues[index] + ' cm' : '--';
-        });
-        const clear = scanValues.map(value => Number.isFinite(value) && value >= 30 ? value : -1);
-        const widest = Math.max(...clear);
-        const suggested = clear[1] === widest ? 1 : clear.indexOf(widest);
-        $('scanSuggestion').textContent = data.scan_state !== 'complete'
-          ? 'Chờ quét xong để gợi ý hướng.'
-          : scanValues.some(value => !Number.isFinite(value) || value <= 0)
-            ? 'Có hướng không đo được SR04; chưa thể gợi ý đáng tin cậy.'
-          : widest < 0 ? 'Chưa thấy hướng trống đủ 30 cm; không nên tiến.'
-          : 'Gợi ý hướng ' + ['trái','thẳng','phải'][suggested] +
-            ' (ước lượng theo SR04 và thời gian quay).';
         obstacleDistanceCm = Number.isFinite(data.obstacle_distance_cm)
           ? data.obstacle_distance_cm : 20;
         warningDistanceCm = Number.isFinite(data.warning_distance_cm)
@@ -462,11 +439,10 @@ inline constexpr char kL298nWebPage[] = R"html(
     function render() {
       $('hudStop').disabled = !session || releasing;
       const actionBusy = homeBusy || autonomyBusy || busy || releasing;
-      for (const id of ['followOff','avoidOff','wakeRobot','findRobot','saveSharedSpeed',
-                        'guardOff','scanCancel'])
+      for (const id of ['followOff','avoidOff','wakeRobot','saveSharedSpeed'])
         $(id).disabled = actionBusy;
-      for (const id of ['followOn','avoidOn','moveForward','moveBackward','guardOn',
-                        'scanStart','routeSave','routeRun','routeReplay'])
+      for (const id of ['followOn','avoidOn','moveForward','moveBackward',
+                        'routeSave','routeRun','routeReplay'])
         $(id).disabled = actionBusy || operationActive;
       $('homeFollowToggle').disabled = actionBusy || (operationActive && currentMode !== 'follow');
       $('homeAvoidToggle').disabled = actionBusy || (operationActive && currentMode !== 'avoid');
@@ -756,50 +732,6 @@ inline constexpr char kL298nWebPage[] = R"html(
       }
     }
 
-    async function setFeature(mode, enabled) {
-      if (homeBusy || autonomyBusy || busy || releasing) return;
-      if (enabled && operationActive) {
-        notifyAction('Dừng xe trước khi bắt đầu thao tác mới.',false);
-        return;
-      }
-      const version = stopVersion;
-      autonomyBusy = true;
-      render();
-      $('modeNotice').textContent = 'Đang cập nhật chế độ…';
-      try {
-        if (session) await releaseForAction();
-        await post('/api/autonomy',JSON.stringify({mode,enabled}));
-        if (mode === 'scan' && enabled) showOperation('Đã nhận lệnh quét','scan');
-        else if (mode === 'scan' && operationKind === 'scan') {
-          operationActive = false;
-          render();
-        }
-        $('modeNotice').textContent = mode === 'guard'
-          ? (enabled ? 'Đã bật canh gác.' : 'Đã tắt canh gác.')
-          : (enabled ? 'Đã bắt đầu quét.' : 'Đã dừng quét.');
-        if (version === stopVersion) notifyAction($('modeNotice').textContent,true);
-        await refreshTelemetry();
-      } catch (_) {
-        $('modeNotice').textContent = 'Không thể đổi chế độ. Xe phải đứng yên, không ở phiên lái web hoặc chế độ tự hành.';
-        if (version === stopVersion) notifyAction($('modeNotice').textContent,false);
-      } finally { await reassertStop(version); autonomyBusy = false; render(); }
-    }
-
-    async function findRobot() {
-      if (homeBusy || busy || releasing || autonomyBusy) return;
-      homeBusy = true;
-      render();
-      try {
-        if (session) await releaseForAction();
-        await post('/api/find');
-        $('status').textContent = 'Ruby đang phát âm báo và nhấp nháy màn hình hiển thị IP.';
-        notifyAction($('status').textContent,true);
-      } catch (_) {
-        $('status').textContent = 'Chưa thể tìm xe: xe đang hoạt động hoặc vừa được gọi. Hãy thử lại sau vài giây.';
-        notifyAction($('status').textContent,false);
-      } finally { homeBusy = false; render(); }
-    }
-
     async function routeAction(action) {
       if (action !== 'stop' && (homeBusy || autonomyBusy || busy || releasing)) return;
       if (action !== 'stop' && operationActive) {
@@ -948,11 +880,6 @@ inline constexpr char kL298nWebPage[] = R"html(
         'Chưa lấy được trạng thái mới. Hãy thử lại sau.',refreshed);
       $('refreshHome').disabled = false;
     });
-    $('guardOn').addEventListener('click',() => { void setFeature('guard',true); });
-    $('guardOff').addEventListener('click',() => { void setFeature('guard',false); });
-    $('findRobot').addEventListener('click',() => { void findRobot(); });
-    $('scanStart').addEventListener('click',() => { void setFeature('scan',true); });
-    $('scanCancel').addEventListener('click',() => { void setFeature('scan',false); });
     $('routeSave').addEventListener('click',() => { void routeAction('save'); });
     $('routeRun').addEventListener('click',() => { void routeAction('run'); });
     $('routeReplay').addEventListener('click',() => { void routeAction('runSaved'); });

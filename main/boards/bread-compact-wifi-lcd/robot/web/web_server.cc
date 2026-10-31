@@ -14,10 +14,9 @@
 #include <memory>
 
 #include "../controller/l298n_controller.h"
-#include "../find_robot.h"
 #include "application.h"
-#include "wifi_manager.h"
 #include "web_page.h"
+#include "wifi_manager.h"
 
 namespace {
 constexpr const char* kTag = "L298nWeb";
@@ -71,16 +70,6 @@ esp_err_t Claim(httpd_req_t* req) {
     return Reply(req, "200 OK", body);
 }
 
-esp_err_t Find(httpd_req_t* req) {
-    if (!IsControlRequest(req) || req->content_len != 0) {
-        Reply(req, "400 Bad Request", "{\"error\":\"Invalid request\"}");
-        return ESP_FAIL;
-    }
-    if (FindL298nRobot() != ESP_OK)
-        return Reply(req, "409 Conflict", "{\"error\":\"Robot busy or find cooldown active\"}");
-    return Reply(req, "200 OK", "{\"ok\":true}");
-}
-
 bool ReadInteger(const cJSON* json, const char* key, uint32_t minimum, uint32_t maximum,
                  uint32_t* result) {
     const auto* item = cJSON_GetObjectItemCaseSensitive(json, key);
@@ -116,14 +105,12 @@ esp_err_t Command(httpd_req_t* req) {
     uint32_t session, sequence, speed;
     int joystick_x = 0, joystick_y = 0;
     const auto* direction = cJSON_GetObjectItemCaseSensitive(json.get(), "direction");
-    const auto* warning_enabled =
-        cJSON_GetObjectItemCaseSensitive(json.get(), "warning_enabled");
+    const auto* warning_enabled = cJSON_GetObjectItemCaseSensitive(json.get(), "warning_enabled");
     const auto* x = cJSON_GetObjectItemCaseSensitive(json.get(), "x");
     const auto* y = cJSON_GetObjectItemCaseSensitive(json.get(), "y");
     const bool has_joystick = x != nullptr || y != nullptr;
     const bool is_joystick = cJSON_IsString(direction) && strcmp(direction->valuestring, "j") == 0;
-    if (!cJSON_IsObject(json.get()) ||
-        (has_joystick != is_joystick) ||
+    if (!cJSON_IsObject(json.get()) || (has_joystick != is_joystick) ||
         cJSON_GetArraySize(json.get()) !=
             (4 + (warning_enabled == nullptr ? 0 : 1) + (has_joystick ? 2 : 0)) ||
         !ReadInteger(json.get(), "session", 1, UINT32_MAX, &session) ||
@@ -152,10 +139,9 @@ esp_err_t Command(httpd_req_t* req) {
     else
         return Reply(req, "400 Bad Request", "{\"error\":\"Invalid direction\"}");
 
-    if (CommandL298nWebControl(
-            session, sequence, command, static_cast<int>(speed),
-            warning_enabled == nullptr || cJSON_IsTrue(warning_enabled), joystick_x,
-            joystick_y) != ESP_OK)
+    if (CommandL298nWebControl(session, sequence, command, static_cast<int>(speed),
+                               warning_enabled == nullptr || cJSON_IsTrue(warning_enabled),
+                               joystick_x, joystick_y) != ESP_OK)
         return Reply(req, "409 Conflict", "{\"error\":\"Session expired or motor unavailable\"}");
     return Reply(req, "200 OK", "{\"ok\":true}");
 }
@@ -221,12 +207,6 @@ esp_err_t Status(httpd_req_t* req) {
     if (!json || !cJSON_AddBoolToObject(json.get(), "distance_valid", motor.distance_valid) ||
         !cJSON_AddNumberToObject(json.get(), "distance_cm", motor.measured_distance_cm) ||
         !cJSON_AddStringToObject(json.get(), "autonomy_mode", motor.autonomy_mode) ||
-        !cJSON_AddBoolToObject(json.get(), "guard_enabled", motor.guard_enabled) ||
-        !cJSON_AddNumberToObject(json.get(), "guard_baseline_cm", motor.guard_baseline_cm) ||
-        !cJSON_AddStringToObject(json.get(), "scan_state", motor.scan_state) ||
-        !cJSON_AddNumberToObject(json.get(), "scan_left_cm", motor.scan_left_cm) ||
-        !cJSON_AddNumberToObject(json.get(), "scan_center_cm", motor.scan_center_cm) ||
-        !cJSON_AddNumberToObject(json.get(), "scan_right_cm", motor.scan_right_cm) ||
         !cJSON_AddStringToObject(json.get(), "control_owner", motor.control_owner) ||
         !cJSON_AddBoolToObject(json.get(), "warning_sound_enabled", motor.warning_sound_enabled) ||
         !cJSON_AddStringToObject(json.get(), "route_state", motor.route_state) ||
@@ -304,16 +284,6 @@ esp_err_t Autonomy(httpd_req_t* req) {
         error = SetL298nFollowMode(cJSON_IsTrue(enabled));
     else if (strcmp(mode->valuestring, "avoid") == 0)
         error = SetL298nObstacleAvoidance(cJSON_IsTrue(enabled));
-    else if (strcmp(mode->valuestring, "guard") == 0)
-        error = SetL298nGuardMode(cJSON_IsTrue(enabled));
-    else if (strcmp(mode->valuestring, "scan") == 0) {
-        if (cJSON_IsTrue(enabled))
-            error = StartL298nSpaceScan();
-        else {
-            CancelL298nSpaceScan();
-            error = ESP_OK;
-        }
-    }
     else
         return Reply(req, "400 Bad Request", "{\"error\":\"Invalid autonomy mode\"}");
     if (error != ESP_OK)
@@ -407,7 +377,6 @@ esp_err_t StartServer() {
     const httpd_uri_t routes[] = {
         {.uri = "/", .method = HTTP_GET, .handler = Root, .user_ctx = nullptr},
         {.uri = "/api/claim", .method = HTTP_POST, .handler = Claim, .user_ctx = nullptr},
-        {.uri = "/api/find", .method = HTTP_POST, .handler = Find, .user_ctx = nullptr},
         {.uri = "/api/command", .method = HTTP_POST, .handler = Command, .user_ctx = nullptr},
         {.uri = "/api/action", .method = HTTP_POST, .handler = Action, .user_ctx = nullptr},
         {.uri = "/api/status", .method = HTTP_GET, .handler = Status, .user_ctx = nullptr},

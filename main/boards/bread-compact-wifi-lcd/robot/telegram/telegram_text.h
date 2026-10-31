@@ -106,9 +106,8 @@ inline constexpr char kMenu[] =
     "⬆️ Tiến / ⬇️ Lùi: chạm nút rồi nhập khoảng cách bằng cm (1–1000).\n"
     "🎙️ Đánh thức Ruby để trò chuyện; 🌐 mở trang điều khiển xe.\n"
     "📊 Trạng thái và các nút tự hành cũng có sẵn bên dưới.\n"
-    "Canh gác: /guard on hoặc /guard off. Quét khoảng trống: /scan hoặc /scan stop.\n"
     "Kịch bản: /route F30,L90,S; lưu để chạy lại: /route save F30,L90,S rồi /route run.\n"
-    "Tìm xe: /find để phát âm báo, nhấp nháy màn hình và hiện IP.";
+    "Dùng /status để xem trạng thái xe.";
 
 inline constexpr char kWakeRequested[] =
     "🎙️ Đã gửi yêu cầu đánh thức. Chờ Ruby chuyển sang lắng nghe rồi nói vào mic trên Ruby.\n"
@@ -120,7 +119,8 @@ inline constexpr char kWakeConnecting[] =
 inline constexpr char kWakeSpeaking[] =
     "🗣️ Ruby đang nói. Hãy chờ Ruby nói xong và chuyển sang lắng nghe.";
 inline constexpr char kWakeUnavailable[] =
-    "⚠️ Ruby chưa sẵn sàng để đánh thức. Chạm nút 📊 Trạng thái để kiểm tra rồi thử lại khi Ruby sẵn "
+    "⚠️ Ruby chưa sẵn sàng để đánh thức. Chạm nút 📊 Trạng thái để kiểm tra rồi thử lại khi Ruby "
+    "sẵn "
     "sàng.";
 
 inline constexpr char kSpeedCurrentPrefix[] = "⚙️ Tốc độ đã đặt: ";
@@ -156,7 +156,8 @@ inline constexpr char kDistanceMoveAccepted[] =
 inline constexpr char kDistanceMoveWebBusy[] =
     "🎮 Web đang giữ quyền điều khiển motor. Hãy trả quyền trên trang web rồi gửi lại lệnh.";
 inline constexpr char kDistanceMoveUnavailable[] =
-    "❌ Không thể chạy theo quãng đường: FC-03 chưa sẵn sàng/hiệu chuẩn, PWM đang bằng 0, hoặc motor không thể chạy. Chạm nút 📊 Trạng thái để kiểm tra.";
+    "❌ Không thể chạy theo quãng đường: FC-03 chưa sẵn sàng/hiệu chuẩn, PWM đang bằng 0, hoặc "
+    "motor không thể chạy. Chạm nút 📊 Trạng thái để kiểm tra.";
 
 inline constexpr char kFollowUsage[] =
     "Dùng <code>/follow on</code>, <code>/follow off</code> hoặc <code>/follow N</code> với N từ "
