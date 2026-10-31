@@ -6,7 +6,7 @@ An ESP32 mobile robotics learning project. Ruby RobotCar combines the XiaoZhi vo
 
 ![Ruby RobotCar four-wheel ESP32-S3 robot](docs/ruby_car.png)
 
-The source is currently configured for one hardware setup: an ESP32-S3-N16R8, L298N motor driver, HC-SR04 ultrasonic sensor, two FC-03 wheel encoders, and a TFT display. For assembly and setup instructions, see the [bread-compact-wifi-lcd board guide](main/boards/bread-compact-wifi-lcd/README.md).
+The source is configured for one hardware setup: an ESP32-S3-N16R8, L298N motor driver, HC-SR04 ultrasonic sensor, two FC-03 wheel encoders, and a ST7789 240×240 TFT display. The firmware locales are Vietnamese, English, and Simplified Chinese. For assembly and setup instructions, see the [bread-compact-wifi-lcd board guide](main/boards/bread-compact-wifi-lcd/README.md).
 
 ## Where to start
 

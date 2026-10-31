@@ -166,7 +166,7 @@ The current simplex I2S configuration leaves GPIO4 and GPIO5 available for the I
 | INT         | Leave open   | The firmware polls the sensor |
 | AD0         | GND or leave at its default | Selects address `0x68` |
 
-Keep the I²C pull-ups at 3.3 V; never pull SDA or SCL up to 5 V. Many breakout boards already include pull-ups. GPIO4/5 belong to the alternate duplex I2S configuration, so remap I²C before switching audio modes. If AD0 is tied to 3V3, change `MPU6050_I2C_ADDRESS` in [config.h](config.h) to `0x69`.
+Keep the I²C pull-ups at 3.3 V; never pull SDA or SCL up to 5 V. Many breakout boards already include pull-ups. GPIO4/5 are dedicated to the MPU6050 in this configuration. If AD0 is tied to 3V3, change `MPU6050_I2C_ADDRESS` in [config.h](config.h) to `0x69`.
 
 Mount the module flat and firmly near the centre of the chassis, component side up.
 Keep the car still for about two seconds after boot while the gyro calibrates. The firmware

@@ -460,6 +460,21 @@ def _kconfig_choice(
     }
 
 
+def _kconfig_has_definition(
+    kind: str,
+    name: str,
+    kconfig_path: Path = Path("main/Kconfig.projbuild"),
+) -> bool:
+    """Check whether an optional choice or config still exists in Kconfig."""
+    return bool(
+        re.search(
+            rf"^\s*{re.escape(kind)}\s+{re.escape(name)}\s*$",
+            kconfig_path.read_text(encoding="utf-8"),
+            re.MULTILINE,
+        )
+    )
+
+
 def _kconfig_config_board_dependencies(
     symbol: str,
     kconfig_path: Path = Path("main/Kconfig.projbuild"),
@@ -515,6 +530,8 @@ def _build_option_definitions(
     definitions: list[dict[str, Any]] = []
 
     for choice_name in ("DISPLAY_OLED_TYPE", "DISPLAY_LCD_TYPE"):
+        if not _kconfig_has_definition("choice", choice_name):
+            continue
         choice = _kconfig_choice(choice_name)
         if board_config not in choice["board_configs"]:
             continue
@@ -534,7 +551,10 @@ def _build_option_definitions(
 
     # Message styles are implemented by the color LCD display path. OLED and
     # no-display boards deliberately do not expose a selector that has no effect.
-    if re.search(r"\b[A-Za-z0-9_]*LcdDisplay\b", source):
+    if (
+        re.search(r"\b[A-Za-z0-9_]*LcdDisplay\b", source)
+        and _kconfig_has_definition("choice", "DISPLAY_STYLE")
+    ):
         style_choice = _kconfig_choice("DISPLAY_STYLE")
         emote_boards = _kconfig_config_board_dependencies("USE_EMOTE_MESSAGE_STYLE")
         style_choices = [
@@ -563,7 +583,11 @@ def _build_option_definitions(
             },
         ))
 
-    aec_boards = _kconfig_config_board_dependencies("USE_DEVICE_AEC")
+    aec_boards = (
+        _kconfig_config_board_dependencies("USE_DEVICE_AEC")
+        if _kconfig_has_definition("config", "USE_DEVICE_AEC")
+        else set()
+    )
     if board_config in aec_boards:
         definitions.append({
             "key": "aec_mode",
