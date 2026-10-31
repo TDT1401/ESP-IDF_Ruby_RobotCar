@@ -42,8 +42,7 @@ function setup({fullscreen = 'native'} = {}) {
     'avoidStatus','followStatus','avoidDistance','followDistance','avoidOn','avoidOff','followOn',
     'followOff','expandDrive','hudExit','hudConnect','hudNotice','hudRotateConnect',
     'hudRotateExit','hudRotateStatus','hudDistance','hudWarning','hudSound',
-    'speed50','speed75','speed100',
-    'routeScript','routeSave','routeRun','routeStop','routeState'
+    'speed50','speed75','speed100'
   ]
     .map(id => [id, new Element()]));
   elements.speed = new Input();

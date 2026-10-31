@@ -10,7 +10,6 @@ ToolResult L298nController::MoveAngle(Motion motion, const PropertyList& propert
         std::lock_guard lock(mutex_);
         if (web_manual_)
             return std::unexpected("Release web manual control before turning.");
-        CancelRouteLocked();
         const auto encoder = encoder_.Snapshot();
         if (!encoder.ready || !encoder.calibrated || !imu_ready_)
             return std::unexpected("Calibrated FC-03 and a ready MPU6050 are required for a turn.");
@@ -38,7 +37,6 @@ ToolResult L298nController::MoveDistance(Motion motion, const PropertyList& prop
         if (web_manual_)
             return std::unexpected(
                 "Web manual control is active; release it on the web page first.");
-        CancelRouteLocked();
         const auto encoder = encoder_.Snapshot();
         if (!encoder.ready || !encoder.calibrated || !imu_ready_) {
             return std::unexpected("FC-03 and MPU6050 must be ready for a measured move.");
@@ -68,7 +66,6 @@ esp_err_t L298nController::StartDistanceMoveCommand(Motion motion, int distance_
         return ESP_ERR_INVALID_STATE;
     if (owner != nullptr && strcmp(owner, "web") == 0 && !web_connected_)
         return ESP_ERR_INVALID_STATE;
-    CancelRouteLocked();
     const auto encoder = encoder_.Snapshot();
     if (!encoder.ready || !encoder.calibrated || !imu_ready_)
         return ESP_ERR_NOT_SUPPORTED;
@@ -138,9 +135,6 @@ ToolResult L298nController::GetState() {
     bool turn_uses_imu;
     const char* control_owner;
     bool warning_sound_enabled;
-    RouteState route_state;
-    std::array<char, 64> route_script;
-    int route_step, route_steps;
     {
         std::lock_guard lock(mutex_);
         const int64_t now = esp_timer_get_time();
@@ -178,10 +172,6 @@ ToolResult L298nController::GetState() {
         turn_uses_imu = turn_uses_imu_;
         control_owner = ControlOwnerLocked();
         warning_sound_enabled = proximity_warning_enabled_;
-        route_state = route_state_;
-        route_script = route_script_;
-        route_step = route_active_ ? route_index_ + 1 : 0;
-        route_steps = route_count_;
         remaining_ms = deadline_us_ > 0 && motion != Motion::kStop
                            ? std::max<int64_t>(0, (deadline_us_ - now + 999) / 1000)
                            : 0;
@@ -199,10 +189,6 @@ ToolResult L298nController::GetState() {
         !cJSON_AddStringToObject(json.get(), "autonomy_mode", AutonomyModeName(autonomy_mode)) ||
         !cJSON_AddStringToObject(json.get(), "control_owner", control_owner) ||
         !cJSON_AddBoolToObject(json.get(), "warning_sound_enabled", warning_sound_enabled) ||
-        !cJSON_AddStringToObject(json.get(), "route_state", RouteStateName(route_state)) ||
-        !cJSON_AddStringToObject(json.get(), "route_script", route_script.data()) ||
-        !cJSON_AddNumberToObject(json.get(), "route_step", route_step) ||
-        !cJSON_AddNumberToObject(json.get(), "route_steps", route_steps) ||
         !cJSON_AddNumberToObject(json.get(), "follow_distance_cm", follow_distance) ||
         !cJSON_AddNumberToObject(json.get(), "obstacle_distance_cm", obstacle_distance) ||
         !cJSON_AddNumberToObject(json.get(), "follow_target_cm", effective_follow_distance) ||
@@ -403,24 +389,6 @@ void L298nController::RegisterTools() {
                    "follow/avoid thresholds, current autonomy mode and blocked state.",
                    PropertyList(),
                    [this](const PropertyList&) -> ToolResult { return GetState(); });
-    server.AddTool(
-        "self.navigation.run_route",
-        "Run a bounded multi-step route. Script syntax: F30,L90,S means forward 30 cm, "
-        "turn left 90 degrees, then stop. B and R mean backward and right. F/B use "
-        "1..50 cm; L/R use 1..180 degrees, up to five moves. FC-03 calibration is required. "
-        "Turns are approximate; the rear has no obstacle sensor. Stop interrupts it at "
-        "any time. The script remains saved in RAM for web or Telegram replay.",
-        PropertyList({Property("script", kPropertyTypeString).SetMaxLength(63)}),
-        [this](const PropertyList& properties) -> ToolResult {
-            const auto script = properties["script"].value<std::string>();
-            if (SaveRoute(script.c_str()) != ESP_OK)
-                return std::unexpected(
-                    "Use up to five F/B 1..50 cm and L/R 1..180 degree steps, optionally "
-                    "ending in S.");
-            if (RunRoute("voice") != ESP_OK)
-                return std::unexpected("Route needs an idle robot, FC-03 and MPU6050.");
-            return GetState();
-        });
 }
 
 }  // namespace ruby_robot

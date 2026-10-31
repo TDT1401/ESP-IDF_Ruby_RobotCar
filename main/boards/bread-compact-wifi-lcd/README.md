@@ -38,8 +38,8 @@ robot/
 The controller keeps one shared state in `l298n_internal.h`. Its implementation
 is split by function: `l298n_motor_driver.cc` writes wheel outputs,
 `l298n_motion_executor.cc` combines encoder and IMU feedback, and separate
-`l298n_follow.cc`, `l298n_obstacle_avoidance.cc`, and `l298n_route.cc` files
-implement the remaining behaviors. Web and MCP commands have their own source files.
+`l298n_follow.cc` and `l298n_obstacle_avoidance.cc` files implement autonomous
+behaviors. Web and MCP commands have their own source files.
 
 Run the browser tests from the repository root:
 

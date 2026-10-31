@@ -1635,8 +1635,7 @@ void RobotEyeDisplay::UpdateAnimation() {
         last_drive_refresh_ms_ = now;
         const auto motor = GetL298nMotorStatus();
         const bool driving = motor.web_manual || motor.pending || motor.moving ||
-                             strcmp(motor.autonomy_mode, "manual") != 0 ||
-                             strcmp(motor.route_state, "running") == 0;
+                             strcmp(motor.autonomy_mode, "manual") != 0;
         if (driving) {
             if (active_screen_ != Screen::kDrive)
                 ShowScreen(Screen::kDrive, 1000);

@@ -35,9 +35,9 @@ robot/
 
 Bộ điều khiển dùng chung một trạng thái trong `l298n_internal.h`. Phần triển khai
 được chia theo chức năng: `l298n_motor_driver.cc` xuất tín hiệu bánh xe,
-`l298n_motion_executor.cc` kết hợp encoder và IMU; bám theo, né vật cản và chạy
-lộ trình nằm trong các file `l298n_follow.cc`, `l298n_obstacle_avoidance.cc` và
-`l298n_route.cc`. Lệnh web và MCP có file nguồn riêng.
+`l298n_motion_executor.cc` kết hợp encoder và IMU; bám theo và né vật cản nằm
+trong các file `l298n_follow.cc` và `l298n_obstacle_avoidance.cc`. Lệnh web và
+MCP có file nguồn riêng.
 
 Chạy kiểm thử trang điều khiển từ thư mục gốc dự án:
 

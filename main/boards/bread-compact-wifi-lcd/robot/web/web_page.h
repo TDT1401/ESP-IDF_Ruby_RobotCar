@@ -97,9 +97,8 @@ inline constexpr char kL298nWebPage[] = R"html(
               <div class="config-card"><label for="obstacleDistanceSetting">Ngưỡng né vật cản (cm)</label><input id="obstacleDistanceSetting" type="number" min="10" max="100" step="1" value="20"></div>
             </div>
             <div class="config-actions"><button id="saveConfig" type="button">Lưu thông số</button><p class="config-hint">Áp dụng ngay trong firmware; giá trị sẽ về mặc định sau khi khởi động lại.</p></div>
-            <section class="feature-card"><h3>Lệnh nhiều bước</h3><p>Nhập F30,L90,S = tiến 30 cm, xoay trái 90° rồi dừng. B = lùi, R = xoay phải. Tối đa 5 bước; F/B dùng 1–50 cm, L/R dùng 1–180°. Góc được tính từ FC-03 và còn sai số do trượt bánh. Phía sau không có cảm biến vật cản. Kịch bản lưu trong RAM và mất khi khởi động lại.</p><input id="routeScript" type="text" maxlength="63" value="F30,L90,S" aria-label="Kịch bản di chuyển"><div class="home-row"><button id="routeSave" type="button">Lưu</button><button id="routeRun" type="button">Lưu &amp; chạy</button><button id="routeReplay" type="button">Chạy đã lưu</button><button id="routeStop" type="button">Dừng kịch bản</button></div><p id="routeState" class="feature-state">Chưa lưu</p></section>
             </details>
-            <details class="home-section home-detail"><summary>Thông tin thiết bị &amp; trợ giúp</summary><p>Địa chỉ web: <strong id="homeIp">--</strong> · RAM trống: <strong id="homeRam">--</strong> KB.</p><p>Follow và né vật cản có tab riêng để xem trạng thái. Dùng HUD để lái liên tục; lệnh tiến/lùi theo cm và lộ trình tự dừng khi hoàn thành. Nút Dừng xe ngắt mọi chuyển động.</p></details>
+            <details class="home-section home-detail"><summary>Thông tin thiết bị &amp; trợ giúp</summary><p>Địa chỉ web: <strong id="homeIp">--</strong> · RAM trống: <strong id="homeRam">--</strong> KB.</p><p>Follow và né vật cản có tab riêng để xem trạng thái. Dùng HUD để lái liên tục; lệnh tiến/lùi theo cm tự dừng khi hoàn thành. Nút Dừng xe ngắt mọi chuyển động.</p></details>
           </div>
           <div class="hud-rotate" aria-live="polite"><div class="hud-rotate-icon">↻</div><strong>Xoay ngang màn hình để trải nghiệm.</strong><p id="hudRotateStatus">Đang kết nối điều khiển xe…</p><div class="hud-rotate-actions"><button id="hudRotateStop" class="mode-off" type="button">⏹ Dừng xe</button><button id="hudRotateConnect" type="button">Kết nối lại</button><button id="hudRotateExit" type="button">Quay lại</button></div></div>
           <div class="landscape-hud" aria-label="Buồng lái ngang">
@@ -168,13 +167,6 @@ inline constexpr char kL298nWebPage[] = R"html(
     }
 
     function operationFromStatus(data) {
-      if (data.route_state === 'running') {
-        const progress = data.distance_move_state === 'moving' &&
-          data.distance_move_target_cm > 0 ? ' · ' +
-          Math.round(data.distance_move_progress_cm || 0) + '/' +
-          data.distance_move_target_cm + ' cm' : '';
-        return ['route','Lộ trình · bước ' + data.route_step + '/' + data.route_steps + progress];
-      }
       if (data.autonomy_mode === 'follow') return ['autonomy','Follow đang bật'];
       if (data.autonomy_mode === 'obstacle_avoidance')
         return ['autonomy','Né vật cản đang bật'];
@@ -206,9 +198,6 @@ inline constexpr char kL298nWebPage[] = R"html(
         if (data.distance_move_state === 'timeout') return ['Xe đã dừng vì hết thời gian.',false];
         return ['Lệnh di chuyển đã bị ngắt.',false];
       }
-      if (operationKind === 'route')
-        return data.route_state === 'complete' ? ['Lộ trình đã hoàn thành.',true] :
-          ['Lộ trình đã bị ngắt.',false];
       return null;
     }
 
@@ -329,12 +318,6 @@ inline constexpr char kL298nWebPage[] = R"html(
         $('moveProgress').textContent = moveState && data.distance_move_target_cm > 0
           ? moveState + ' · ' + Math.round(data.distance_move_progress_cm || 0) +
             '/' + data.distance_move_target_cm + ' cm' : moveState;
-        const routeLabel = ({empty:'Chưa lưu',saved:'Đã lưu',running:'Đang chạy',
-          complete:'Đã hoàn thành',interrupted:'Đã ngắt'})[data.route_state] || 'Chưa lưu';
-        $('routeState').textContent = routeLabel + (data.route_state === 'running'
-          ? ' · bước ' + data.route_step + '/' + data.route_steps : '');
-        if (document.activeElement !== $('routeScript') && data.route_script)
-          $('routeScript').value = data.route_script;
         obstacleDistanceCm = Number.isFinite(data.obstacle_distance_cm)
           ? data.obstacle_distance_cm : 20;
         warningDistanceCm = Number.isFinite(data.warning_distance_cm)
@@ -441,8 +424,7 @@ inline constexpr char kL298nWebPage[] = R"html(
       const actionBusy = homeBusy || autonomyBusy || busy || releasing;
       for (const id of ['followOff','avoidOff','wakeRobot','saveSharedSpeed'])
         $(id).disabled = actionBusy;
-      for (const id of ['followOn','avoidOn','moveForward','moveBackward',
-                        'routeSave','routeRun','routeReplay'])
+      for (const id of ['followOn','avoidOn','moveForward','moveBackward'])
         $(id).disabled = actionBusy || operationActive;
       $('homeFollowToggle').disabled = actionBusy || (operationActive && currentMode !== 'follow');
       $('homeAvoidToggle').disabled = actionBusy || (operationActive && currentMode !== 'avoid');
@@ -732,43 +714,6 @@ inline constexpr char kL298nWebPage[] = R"html(
       }
     }
 
-    async function routeAction(action) {
-      if (action !== 'stop' && (homeBusy || autonomyBusy || busy || releasing)) return;
-      if (action !== 'stop' && operationActive) {
-        notifyAction('Dừng xe trước khi gửi lộ trình khác.',false);
-        return;
-      }
-      const version = stopVersion;
-      if (action !== 'stop') { autonomyBusy = true; render(); }
-      try {
-        if ((action === 'run' || action === 'runSaved') && session)
-          await releaseForAction();
-        const body = action === 'runSaved' ? {action:'run'} :
-          action === 'save' || action === 'run'
-            ? {action,script:$('routeScript').value.trim()} : {action};
-        await post('/api/route',JSON.stringify(body));
-        if (action === 'run' || action === 'runSaved') showOperation('Đã nhận lộ trình','route');
-        else if (action === 'stop' && operationKind === 'route') {
-          operationActive = false;
-          render();
-        }
-        $('modeNotice').textContent = action === 'save' ? 'Đã lưu kịch bản trong RAM.' :
-          action === 'stop' ? 'Đã dừng kịch bản.' : 'Đang chạy kịch bản.';
-        if (version === stopVersion) notifyAction($('modeNotice').textContent,true);
-        await refreshTelemetry();
-      } catch (_) {
-        $('modeNotice').textContent = action === 'save'
-          ? 'Kịch bản sai. Dùng F/B/L/R với 1–50 cm, tối đa 5 bước.'
-          : action === 'stop' ? 'Không thể dừng kịch bản. Hãy dùng nút Dừng xe.'
-          : 'Không thể chạy kịch bản. Xe cần đứng yên và FC-03 đã hiệu chuẩn.';
-        if (version === stopVersion) notifyAction($('modeNotice').textContent,false);
-      } finally {
-        await reassertStop(version);
-        if (action !== 'stop') autonomyBusy = false;
-        render();
-      }
-    }
-
     async function saveConfiguration() {
       if (homeBusy || autonomyBusy || busy || releasing) return;
       const followDistance = Number($('followDistanceSetting').value);
@@ -880,10 +825,6 @@ inline constexpr char kL298nWebPage[] = R"html(
         'Chưa lấy được trạng thái mới. Hãy thử lại sau.',refreshed);
       $('refreshHome').disabled = false;
     });
-    $('routeSave').addEventListener('click',() => { void routeAction('save'); });
-    $('routeRun').addEventListener('click',() => { void routeAction('run'); });
-    $('routeReplay').addEventListener('click',() => { void routeAction('runSaved'); });
-    $('routeStop').addEventListener('click',() => { void routeAction('stop'); });
     if ($('saveConfig')) $('saveConfig').addEventListener('click',() => { void saveConfiguration(); });
     $('hudExit').addEventListener('click',exitHud);
     $('hudRotateExit').addEventListener('click',exitHud);

@@ -132,16 +132,6 @@ std::string StatusMessage() {
     message += std::to_string(motor.follow_distance_cm) + " cm\n";
     message += L298nTelegramText::kObstacleDistanceLabel;
     message += std::to_string(motor.obstacle_distance_cm) + " cm\n";
-    message += "• Kịch bản: ";
-    message += motor.route_state;
-    if (motor.route_steps > 0) {
-        message += " <code>";
-        message += motor.route_script.data();
-        message += "</code>";
-        if (strcmp(motor.route_state, "running") == 0)
-            message += " (bước " + std::to_string(motor.route_step) + "/" +
-                       std::to_string(motor.route_steps) + ")";
-    }
     message += "\n\n";
 
     message += L298nTelegramText::kDivider;
@@ -680,38 +670,7 @@ private:
             HandleAutonomy(argument, true);
         else if (command == "/avoid")
             HandleAutonomy(argument, false);
-        else if (command == "/route") {
-            const auto option = LowerAscii(argument);
-            if (option == "stop") {
-                CancelL298nRoute();
-                Send("Đã dừng kịch bản.", true);
-            } else if (option == "run") {
-                Send(RunL298nRoute("telegram") == ESP_OK
-                         ? "Đang chạy kịch bản đã lưu. /stop ngắt ngay."
-                         : "Không thể chạy: cần xe đứng yên và FC-03 đã hiệu chuẩn.",
-                     true);
-            } else if (option == "status" || option.empty()) {
-                Send(StatusMessage(), true);
-            } else {
-                const bool save_only = option.rfind("save ", 0) == 0;
-                const std::string script = save_only ? argument.substr(5) : argument;
-                const auto error = SaveL298nRoute(script.c_str());
-                if (error != ESP_OK) {
-                    Send(
-                        "Sai kịch bản. Ví dụ: /route F30,L90,S; F/B 1–50 cm, L/R 1–180°, tối đa 5 "
-                        "bước.",
-                        true);
-                } else if (save_only) {
-                    Send("Đã lưu kịch bản. Dùng /route run để chạy.", true);
-                } else {
-                    Send(
-                        RunL298nRoute("telegram") == ESP_OK
-                            ? "Đang chạy kịch bản. /stop ngắt ngay."
-                            : "Đã lưu nhưng chưa thể chạy: cần xe đứng yên và FC-03 đã hiệu chuẩn.",
-                        true);
-                }
-            }
-        } else if (command == "/stop") {
+        else if (command == "/stop") {
             StopL298nMotor();
             Send(L298nTelegramText::kEmergencyStopped, true);
         } else if (command == "/start" || command == "/menu" || command == "/help")

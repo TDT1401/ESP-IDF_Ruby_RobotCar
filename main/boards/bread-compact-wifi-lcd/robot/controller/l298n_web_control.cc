@@ -5,9 +5,6 @@ namespace ruby_robot {
 void L298nController::SetWebConnected(bool connected) {
     std::lock_guard lock(mutex_);
     web_connected_ = connected;
-    if (!connected)
-        if (!connected && route_active_ && strcmp(control_owner_, "web") == 0)
-            CancelRouteLocked();
     if (!connected && strcmp(control_owner_, "web") == 0 &&
         (distance_move_state_ == DistanceMoveState::kPending ||
          distance_move_state_ == DistanceMoveState::kMoving))
@@ -30,7 +27,6 @@ esp_err_t L298nController::BeginWebControl(uint32_t* session) {
         EndWebControlLocked();
     if (fault_ != ESP_OK)
         return fault_;
-    CancelRouteLocked();
     DisableAutonomyLocked();
     StopLocked();
     if (fault_ != ESP_OK)

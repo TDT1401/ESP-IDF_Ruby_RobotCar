@@ -135,13 +135,6 @@ void L298nController::UpdateDistanceMoveLocked() {
     }
     if (distance_move_state_ != DistanceMoveState::kMoving)
         return;
-    if (route_active_ && motion_ == Motion::kForward &&
-        (!sensor_valid_ ||
-         esp_timer_get_time() - last_sensor_update_us_ > kSensorStaleMs * 1000LL)) {
-        distance_move_state_ = DistanceMoveState::kInterrupted;
-        StopLocked();
-        return;
-    }
     if (motion_ == Motion::kForward && sensor_valid_ &&
         esp_timer_get_time() - last_sensor_update_us_ <= kSensorStaleMs * 1000LL &&
         measured_distance_cm_ <= ScaleDistanceForSpeed(obstacle_distance_cm_, speed_percent_)) {
@@ -196,10 +189,7 @@ void L298nController::UpdateDistanceSpeedProfileLocked(int64_t now) {
         now - distance_profile_update_us_ < kDistanceRampUpdateUs)
         return;
 
-    const int target_speed = route_active_
-                                 ? std::min(std::max(speed_percent_, kDistanceMinimumDrivePercent),
-                                            kRouteDriveSpeedPercent)
-                                 : std::max(speed_percent_, kDistanceMinimumDrivePercent);
+    const int target_speed = std::max(speed_percent_, kDistanceMinimumDrivePercent);
     const int start_speed = std::min(target_speed, kDistanceRampStartSpeedPercent);
     const int crawl_speed = std::min(target_speed, kDistanceCrawlSpeedPercent);
     const double total_distance = distance_move_target_cm_;
@@ -324,34 +314,10 @@ void L298nController::Tick() {
     const auto state = Application::GetInstance().GetDeviceState();
     if (state == kDeviceStateUpgrading || state == kDeviceStateFatalError ||
         state == kDeviceStateWifiConfiguring) {
-        CancelRouteLocked();
         DisableAutonomyLocked();
         if (motion_ != Motion::kStop)
             StopLocked();
         return;
-    }
-    if (route_active_) {
-        if (fault_ != ESP_OK || now >= route_deadline_us_) {
-            CancelRouteLocked();
-            return;
-        }
-        if (distance_move_state_ == DistanceMoveState::kCompleted) {
-            if (route_index_ + 1 == route_count_) {
-                route_active_ = false;
-                route_state_ = RouteState::kComplete;
-                manual_override_ = response_active_;
-            } else {
-                ++route_index_;
-                if (!StartRouteStepLocked())
-                    CancelRouteLocked();
-            }
-            return;
-        }
-        if (distance_move_state_ != DistanceMoveState::kPending &&
-            distance_move_state_ != DistanceMoveState::kMoving) {
-            CancelRouteLocked();
-            return;
-        }
     }
     // The web session owns direct wheel commands until release or expiry.
     if (web_manual_ && web_joystick_active_)
@@ -392,14 +358,6 @@ void L298nController::Tick() {
             distance_move_state_ = DistanceMoveState::kTimeout;
         StopLocked();
     } else if (!moving_ && now >= start_at_us_) {
-        if (route_active_ && motion_ == Motion::kForward &&
-            (!sensor_valid_ || now - last_sensor_update_us_ > kSensorStaleMs * 1000LL ||
-             measured_distance_cm_ <=
-                 ScaleDistanceForSpeed(obstacle_distance_cm_, speed_percent_))) {
-            distance_move_state_ = DistanceMoveState::kInterrupted;
-            CancelRouteLocked();
-            return;
-        }
         if (!ApplyDirectionLocked()) {
             StopLocked();
             return;

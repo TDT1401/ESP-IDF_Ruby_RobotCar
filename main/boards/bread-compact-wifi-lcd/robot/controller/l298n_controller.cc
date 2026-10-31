@@ -5,8 +5,6 @@ namespace ruby_robot {
 const char* L298nController::ControlOwnerLocked() const {
     if (web_manual_)
         return "web";
-    if (route_active_)
-        return control_owner_;
     if (autonomy_mode_ != AutonomyMode::kManual)
         return "automatic";
     return motion_ != Motion::kStop ? control_owner_ : "none";
@@ -19,7 +17,6 @@ L298nController& L298nController::Instance() {
 
 void L298nController::Stop() {
     std::lock_guard lock(mutex_);
-    CancelRouteLocked();
     manual_override_ = true;
     DisableAutonomyLocked();
     web_session_ = 0;  // A spoken stop also invalidates in-flight browser commands.
@@ -36,7 +33,6 @@ esp_err_t L298nController::SetSpeedPercent(int speed) {
     std::lock_guard lock(mutex_);
     if (web_manual_)
         return ESP_ERR_INVALID_STATE;
-    CancelRouteLocked();
     manual_override_ = true;
     speed_percent_ = speed;
     if (speed == 0)
@@ -91,11 +87,7 @@ L298nMotorStatus L298nController::Snapshot() {
             CurrentLeftPwmPercentLocked(),
             CurrentRightPwmPercentLocked(),
             ControlOwnerLocked(),
-            proximity_warning_enabled_,
-            RouteStateName(route_state_),
-            route_script_,
-            route_active_ ? route_index_ + 1 : 0,
-            route_count_};
+            proximity_warning_enabled_};
 }
 
 L298nController::L298nController() {
@@ -223,13 +215,5 @@ esp_err_t SetL298nFollowDistance(int distance_cm) {
 esp_err_t SetL298nObstacleDistance(int distance_cm) {
     return L298nController::Instance().SetObstacleDistance(distance_cm);
 }
-
-esp_err_t SaveL298nRoute(const char* script) {
-    return L298nController::Instance().SaveRoute(script);
-}
-
-esp_err_t RunL298nRoute(const char* owner) { return L298nController::Instance().RunRoute(owner); }
-
-void CancelL298nRoute() { L298nController::Instance().CancelRoute(); }
 
 void StopL298nMotor() { L298nController::Instance().Stop(); }

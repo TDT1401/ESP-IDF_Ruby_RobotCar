@@ -2,7 +2,6 @@
 
 #include <esp_err.h>
 
-#include <array>
 #include <cstdint>
 
 #include "../sensors/fc03_encoder.h"
@@ -39,12 +38,6 @@ esp_err_t SetL298nFollowMode(bool enabled);
 esp_err_t SetL298nObstacleAvoidance(bool enabled);
 esp_err_t SetL298nFollowDistance(int distance_cm);
 esp_err_t SetL298nObstacleDistance(int distance_cm);
-// One RAM-only script shared by web, Telegram and voice. F/B: 1..50 cm;
-// L/R: 1..180 degrees, comma separated, optional terminal S.
-// Up to five moves.
-esp_err_t SaveL298nRoute(const char* script);
-esp_err_t RunL298nRoute(const char* owner);
-void CancelL298nRoute();
 void StopL298nMotor();
 
 // Read-only snapshot. PWM/moving describe outputs; encoder and IMU are measured feedback.
@@ -85,9 +78,5 @@ struct L298nMotorStatus {
     int right_pwm_percent;
     const char* control_owner;
     bool warning_sound_enabled;
-    const char* route_state;
-    std::array<char, 64> route_script;
-    int route_step;
-    int route_steps;
 };
 L298nMotorStatus GetL298nMotorStatus();

@@ -19,7 +19,6 @@ esp_err_t L298nController::SetAutonomyModeLocked(AutonomyMode requested,
         return ESP_OK;
     if (web_manual_)
         return ESP_ERR_INVALID_STATE;
-    CancelRouteLocked();
     if (requested != AutonomyMode::kManual &&
         (!MotionAllowed() || fault_ != ESP_OK || speed_percent_ == 0)) {
         return ESP_ERR_INVALID_STATE;

@@ -11,12 +11,8 @@
 #include <esp_timer.h>
 
 #include <algorithm>
-#include <array>
-#include <cctype>
 #include <cmath>
-#include <cstddef>
 #include <cstdint>
-#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
@@ -96,10 +92,6 @@ constexpr int kSensorStaleMs = 250;
 constexpr int kReferenceSpeedPercent = 50;
 constexpr int64_t kProximityWarningPeriodUs = 700000;
 constexpr int kAutonomySpeedPercent = 40;
-constexpr int kRouteDriveSpeedPercent = 60;
-constexpr int kRouteMaxSteps = 5;
-constexpr int kRouteMaxStepCm = 50;
-constexpr int64_t kRouteMaxUs = 60000000;
 constexpr int kDefaultTurnAngleDegrees = 90;
 constexpr int kMaxTurnAngleDegrees = 180;
 constexpr double kPi = 3.14159265358979323846;
@@ -158,105 +150,6 @@ enum class DistanceMoveState {
     kObstacle
 };
 using AvoidState = robot_autonomy::AvoidPhase;
-enum class RouteState { kEmpty, kSaved, kRunning, kComplete, kInterrupted };
-
-inline const char* RouteStateName(RouteState state) {
-    switch (state) {
-        case RouteState::kSaved:
-            return "saved";
-        case RouteState::kRunning:
-            return "running";
-        case RouteState::kComplete:
-            return "complete";
-        case RouteState::kInterrupted:
-            return "interrupted";
-        default:
-            return "empty";
-    }
-}
-
-struct RouteStep {
-    Motion motion;
-    int value;  // Centimetres for F/B, degrees for L/R.
-};
-
-inline bool ParseRoute(const char* script, std::array<RouteStep, kRouteMaxSteps>& steps, int& count,
-                       std::array<char, 64>& normalized) {
-    if (script == nullptr)
-        return false;
-    size_t length = 0;
-    while (length < normalized.size() && script[length] != '\0')
-        ++length;
-    if (length == 0 || length >= normalized.size())
-        return false;
-    count = 0;
-    size_t written = 0;
-    const char* cursor = script;
-    while (*cursor != '\0') {
-        while (*cursor == ' ' || *cursor == '\t')
-            ++cursor;
-        const char code = static_cast<char>(std::toupper(static_cast<unsigned char>(*cursor++)));
-        if (code == 'S') {
-            while (*cursor == ' ' || *cursor == '\t')
-                ++cursor;
-            if (*cursor != '\0' || count == 0)
-                return false;
-            if (written + 3 > normalized.size())
-                return false;
-            normalized[written++] = ',';
-            normalized[written++] = 'S';
-            break;
-        }
-        Motion motion;
-        switch (code) {
-            case 'F':
-                motion = Motion::kForward;
-                break;
-            case 'B':
-                motion = Motion::kBackward;
-                break;
-            case 'L':
-                motion = Motion::kLeft;
-                break;
-            case 'R':
-                motion = Motion::kRight;
-                break;
-            default:
-                return false;
-        }
-        if (count >= kRouteMaxSteps || *cursor < '0' || *cursor > '9')
-            return false;
-        int value = 0;
-        while (*cursor >= '0' && *cursor <= '9') {
-            value = value * 10 + (*cursor++ - '0');
-            if (value > (motion == Motion::kLeft || motion == Motion::kRight ? kMaxTurnAngleDegrees
-                                                                             : kRouteMaxStepCm))
-                return false;
-        }
-        if (value == 0)
-            return false;
-        while (*cursor == ' ' || *cursor == '\t')
-            ++cursor;
-        char item[8];
-        const int size = snprintf(item, sizeof(item), "%s%c%d", count ? "," : "", code, value);
-        if (size <= 0 || written + static_cast<size_t>(size) >= normalized.size())
-            return false;
-        memcpy(normalized.data() + written, item, size);
-        written += size;
-        steps[count++] = {motion, value};
-        if (*cursor == '\0')
-            break;
-        if (*cursor++ != ',')
-            return false;
-        if (*cursor == '\0')
-            return false;
-    }
-    if (count == 0)
-        return false;
-    normalized[written] = '\0';
-    return true;
-}
-
 inline bool IsSleepEmotion(const char* emotion) {
     return emotion != nullptr && (strcmp(emotion, "sleep") == 0 || strcmp(emotion, "sleepy") == 0);
 }
@@ -329,12 +222,6 @@ public:
     esp_err_t SetFollowDistance(int distance_cm);
 
     esp_err_t SetObstacleDistance(int distance_cm);
-
-    esp_err_t SaveRoute(const char* script);
-
-    esp_err_t RunRoute(const char* owner);
-
-    void CancelRoute();
 
     void UpdateDistance(int distance_cm, bool valid);
 
@@ -433,20 +320,9 @@ private:
     bool warning_queued_ = false;
     bool proximity_warning_enabled_ = true;
     int64_t next_warning_at_us_ = 0;
-    std::array<RouteStep, kRouteMaxSteps> route_steps_ = {};
-    std::array<char, 64> route_script_ = {};
-    int route_count_ = 0;
-    int route_index_ = 0;
-    int64_t route_deadline_us_ = 0;
-    bool route_active_ = false;
-    RouteState route_state_ = RouteState::kEmpty;
     const char* control_owner_ = "none";
 
     const char* ControlOwnerLocked() const;
-
-    void CancelRouteLocked();
-
-    bool StartRouteStepLocked();
 
     L298nController();
 

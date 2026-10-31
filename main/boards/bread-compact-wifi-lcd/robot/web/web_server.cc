@@ -209,10 +209,6 @@ esp_err_t Status(httpd_req_t* req) {
         !cJSON_AddStringToObject(json.get(), "autonomy_mode", motor.autonomy_mode) ||
         !cJSON_AddStringToObject(json.get(), "control_owner", motor.control_owner) ||
         !cJSON_AddBoolToObject(json.get(), "warning_sound_enabled", motor.warning_sound_enabled) ||
-        !cJSON_AddStringToObject(json.get(), "route_state", motor.route_state) ||
-        !cJSON_AddStringToObject(json.get(), "route_script", motor.route_script.data()) ||
-        !cJSON_AddNumberToObject(json.get(), "route_step", motor.route_step) ||
-        !cJSON_AddNumberToObject(json.get(), "route_steps", motor.route_steps) ||
         !cJSON_AddNumberToObject(json.get(), "follow_distance_cm", motor.follow_distance_cm) ||
         !cJSON_AddNumberToObject(json.get(), "obstacle_distance_cm", motor.obstacle_distance_cm) ||
         !cJSON_AddNumberToObject(json.get(), "follow_target_cm",
@@ -316,47 +312,6 @@ esp_err_t Configure(httpd_req_t* req) {
     return Reply(req, "200 OK", "{\"ok\":true}");
 }
 
-esp_err_t Route(httpd_req_t* req) {
-    char body[128];
-    if (!IsControlRequest(req) || req->content_len == 0 || req->content_len >= sizeof(body)) {
-        Reply(req, "400 Bad Request", "{\"error\":\"Invalid request\"}");
-        return ESP_FAIL;
-    }
-    const size_t received = ReceiveBody(req, body);
-    if (received == 0)
-        return ESP_FAIL;
-    if (memchr(body, '\0', received) != nullptr)
-        return Reply(req, "400 Bad Request", "{\"error\":\"Invalid JSON\"}");
-    using Json = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
-    Json json(cJSON_ParseWithLengthOpts(body, received + 1, nullptr, true), cJSON_Delete);
-    const auto* action = cJSON_GetObjectItemCaseSensitive(json.get(), "action");
-    const auto* script = cJSON_GetObjectItemCaseSensitive(json.get(), "script");
-    if (!cJSON_IsObject(json.get()) || !cJSON_IsString(action) ||
-        cJSON_GetArraySize(json.get()) != (script == nullptr ? 1 : 2))
-        return Reply(req, "400 Bad Request", "{\"error\":\"Invalid route command\"}");
-    esp_err_t error = ESP_ERR_INVALID_ARG;
-    if (strcmp(action->valuestring, "save") == 0 && cJSON_IsString(script))
-        error = SaveL298nRoute(script->valuestring);
-    else if (strcmp(action->valuestring, "run") == 0) {
-        if (script == nullptr)
-            error = ESP_OK;
-        else if (cJSON_IsString(script))
-            error = SaveL298nRoute(script->valuestring);
-        if (error == ESP_OK)
-            error = RunL298nRoute("web");
-    } else if (strcmp(action->valuestring, "stop") == 0 && script == nullptr) {
-        CancelL298nRoute();
-        error = ESP_OK;
-    }
-    if (error == ESP_ERR_INVALID_ARG)
-        return Reply(
-            req, "400 Bad Request",
-            "{\"error\":\"Use F30,L90,S; F/B 1..50 cm, L/R 1..180 degrees, up to five steps\"}");
-    if (error != ESP_OK)
-        return Reply(req, "409 Conflict", "{\"error\":\"Route unavailable\"}");
-    return Reply(req, "200 OK", "{\"ok\":true}");
-}
-
 esp_err_t StartServer() {
     if (server != nullptr)
         return ESP_OK;
@@ -382,7 +337,6 @@ esp_err_t StartServer() {
         {.uri = "/api/status", .method = HTTP_GET, .handler = Status, .user_ctx = nullptr},
         {.uri = "/api/config", .method = HTTP_POST, .handler = Configure, .user_ctx = nullptr},
         {.uri = "/api/autonomy", .method = HTTP_POST, .handler = Autonomy, .user_ctx = nullptr},
-        {.uri = "/api/route", .method = HTTP_POST, .handler = Route, .user_ctx = nullptr},
     };
     for (const auto& route : routes) {
         error = httpd_register_uri_handler(server, &route);
