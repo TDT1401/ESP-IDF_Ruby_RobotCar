@@ -17,6 +17,21 @@
 namespace {
 
 constexpr char kTag[] = "MPU6050";
+#define IMU_LOGI(...)                    \
+    do {                                 \
+        if constexpr (MPU6050_DEBUG)     \
+            ESP_LOGI(kTag, __VA_ARGS__); \
+    } while (false)
+#define IMU_LOGW(...)                    \
+    do {                                 \
+        if constexpr (MPU6050_DEBUG)     \
+            ESP_LOGW(kTag, __VA_ARGS__); \
+    } while (false)
+#define IMU_LOGE(...)                    \
+    do {                                 \
+        if constexpr (MPU6050_DEBUG)     \
+            ESP_LOGE(kTag, __VA_ARGS__); \
+    } while (false)
 constexpr uint8_t kWhoAmI = 0x75;
 constexpr uint8_t kMpu6050Identity = 0x68;
 constexpr uint8_t kMpu6500Identity = 0x70;
@@ -51,7 +66,7 @@ esp_err_t WriteRegister(uint8_t reg, uint8_t value) {
 
 void SampleTask(void*) {
     vTaskDelay(pdMS_TO_TICKS(100));  // Let the sensor settle after leaving sleep mode.
-    ESP_LOGI(kTag, "Gyro Z calibration started; keep the car still for about 2 seconds");
+    IMU_LOGI("Gyro Z calibration started; keep the car still for about 2 seconds");
     TickType_t last_wake = xTaskGetTickCount();
     double calibration_sum = 0;
     double calibration_squares = 0;
@@ -69,7 +84,7 @@ void SampleTask(void*) {
         if (now - last_read_health_log_us < kStatusLogIntervalUs)
             return;
         if (read_errors > 0) {
-            ESP_LOGW(kTag, "Gyro Z I2C read errors: %d/%d samples in 5 s (last: %s)", read_errors,
+            IMU_LOGW("Gyro Z I2C read errors: %d/%d samples in 5 s (last: %s)", read_errors,
                      read_attempts, esp_err_to_name(last_read_error));
         }
         read_attempts = 0;
@@ -86,8 +101,8 @@ void SampleTask(void*) {
             last_read_error = error;
             ++consecutive_errors;
             if (consecutive_errors == kPersistentReadErrorSamples)
-                ESP_LOGW(kTag, "Gyro Z read failed at register 0x%02x: %s (%d consecutive)",
-                         kGyroZHigh, esp_err_to_name(error), consecutive_errors);
+                IMU_LOGW("Gyro Z read failed at register 0x%02x: %s (%d consecutive)", kGyroZHigh,
+                         esp_err_to_name(error), consecutive_errors);
             portENTER_CRITICAL(&status_lock);
             status.error = error;
             portEXIT_CRITICAL(&status_lock);
@@ -96,13 +111,13 @@ void SampleTask(void*) {
             continue;
         }
         if (consecutive_errors >= kPersistentReadErrorSamples)
-            ESP_LOGI(kTag, "Gyro Z reads recovered after %d errors", consecutive_errors);
+            IMU_LOGI("Gyro Z reads recovered after %d errors", consecutive_errors);
         consecutive_errors = 0;
         const int16_t raw = static_cast<int16_t>((data[0] << 8) | data[1]);
         const double rate = raw / kGyroScale * MPU6050_GYRO_Z_SIGN;
         if (!calibrated && motor_active.load(std::memory_order_relaxed)) {
             if (!reported_motor_active) {
-                ESP_LOGW(kTag, "Calibration paused: motors active; stop the car for 2 seconds");
+                IMU_LOGW("Calibration paused: motors active; stop the car for 2 seconds");
                 reported_motor_active = true;
             }
             calibration_sum = 0;
@@ -119,12 +134,12 @@ void SampleTask(void*) {
                 if (variance <= 4.0 && std::abs(mean) <= 20.0) {
                     bias = mean;
                     calibrated = true;
-                    ESP_LOGI(kTag, "Gyro Z bias %.3f deg/s; calibration complete", bias);
+                    IMU_LOGI("Gyro Z bias %.3f deg/s; calibration complete", bias);
                 } else {
-                    ESP_LOGW(kTag,
-                             "Keep car still while calibrating gyro (mean %.2f deg/s, variance "
-                             "%.2f)",
-                             mean, variance);
+                    IMU_LOGW(
+                        "Keep car still while calibrating gyro (mean %.2f deg/s, variance "
+                        "%.2f)",
+                        mean, variance);
                     calibration_sum = 0;
                     calibration_squares = 0;
                     calibration_count = 0;
@@ -140,7 +155,7 @@ void SampleTask(void*) {
         portEXIT_CRITICAL(&status_lock);
         report_read_health(now);
         if (calibrated && now - last_status_log_us >= kStatusLogIntervalUs) {
-            ESP_LOGI(kTag, "IMU ready: gyro_z=%.2f deg/s, bias=%.3f deg/s", rate - bias, bias);
+            IMU_LOGI("IMU ready: gyro_z=%.2f deg/s, bias=%.3f deg/s", rate - bias, bias);
             last_status_log_us = now;
         }
         vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(kSamplePeriodMs));
@@ -159,8 +174,7 @@ void SetInitializationError(const char* stage, esp_err_t error) {
         i2c_del_master_bus(bus);
         bus = nullptr;
     }
-    ESP_LOGE(kTag, "%s failed: %s; IMU unavailable, using encoders only", stage,
-             esp_err_to_name(error));
+    IMU_LOGE("%s failed: %s; IMU unavailable, using encoders only", stage, esp_err_to_name(error));
 }
 
 }  // namespace
@@ -168,7 +182,7 @@ void SetInitializationError(const char* stage, esp_err_t error) {
 void InitializeMpu6050() {
     if (task != nullptr || bus != nullptr)
         return;
-    ESP_LOGI(kTag, "Starting I2C0: SDA=GPIO%d, SCL=GPIO%d, 100 kHz, configured address=0x%02x",
+    IMU_LOGI("Starting I2C0: SDA=GPIO%d, SCL=GPIO%d, 100 kHz, configured address=0x%02x",
              MPU6050_SDA_PIN, MPU6050_SCL_PIN, MPU6050_I2C_ADDRESS);
     i2c_master_bus_config_t bus_config = {};
     bus_config.i2c_port = I2C_NUM_0;
@@ -184,13 +198,12 @@ void InitializeMpu6050() {
     }
     const esp_err_t probe_68 = i2c_master_probe(bus, 0x68, 50);
     const esp_err_t probe_69 = i2c_master_probe(bus, 0x69, 50);
-    ESP_LOGI(kTag, "I2C probe: 0x68=%s, 0x69=%s", esp_err_to_name(probe_68),
-             esp_err_to_name(probe_69));
+    IMU_LOGI("I2C probe: 0x68=%s, 0x69=%s", esp_err_to_name(probe_68), esp_err_to_name(probe_69));
     if ((MPU6050_I2C_ADDRESS == 0x68 ? probe_68 : probe_69) != ESP_OK) {
-        ESP_LOGE(kTag,
-                 "No response at configured address 0x%02x; check 3V3, GND, SDA/SCL, "
-                 "pull-ups and AD0",
-                 MPU6050_I2C_ADDRESS);
+        IMU_LOGE(
+            "No response at configured address 0x%02x; check 3V3, GND, SDA/SCL, "
+            "pull-ups and AD0",
+            MPU6050_I2C_ADDRESS);
         SetInitializationError("I2C address probe",
                                MPU6050_I2C_ADDRESS == 0x68 ? probe_68 : probe_69);
         return;
@@ -210,15 +223,15 @@ void InitializeMpu6050() {
         SetInitializationError("Read WHO_AM_I (0x75)", error);
         return;
     }
-    ESP_LOGI(kTag, "WHO_AM_I register 0x75 = 0x%02x", identity);
+    IMU_LOGI("WHO_AM_I register 0x75 = 0x%02x", identity);
     if (identity != kMpu6050Identity && identity != kMpu6500Identity) {
         SetInitializationError("Unexpected WHO_AM_I value", ESP_ERR_INVALID_RESPONSE);
         return;
     }
     if (identity == kMpu6500Identity) {
-        ESP_LOGW(kTag,
-                 "Module reports MPU-6500 identity (0x70), not MPU-6050 (0x68); using compatible "
-                 "gyro registers");
+        IMU_LOGW(
+            "Module reports MPU-6500 identity (0x70), not MPU-6050 (0x68); using compatible "
+            "gyro registers");
     }
     constexpr uint8_t settings[][2] = {{kPowerManagement, 0x00},
                                        {kGyroConfig, 0x00},
@@ -227,7 +240,7 @@ void InitializeMpu6050() {
     for (const auto& setting : settings) {
         error = WriteRegister(setting[0], setting[1]);
         if (error != ESP_OK) {
-            ESP_LOGE(kTag, "Configuration register 0x%02x = 0x%02x failed", setting[0], setting[1]);
+            IMU_LOGE("Configuration register 0x%02x = 0x%02x failed", setting[0], setting[1]);
             SetInitializationError("Write IMU configuration", error);
             return;
         }
@@ -236,7 +249,7 @@ void InitializeMpu6050() {
         SetInitializationError("Start gyro sampling task", ESP_ERR_NO_MEM);
         return;
     }
-    ESP_LOGI(kTag, "%s detected at I2C address 0x%02x; gyro sampling task started",
+    IMU_LOGI("%s detected at I2C address 0x%02x; gyro sampling task started",
              identity == kMpu6500Identity ? "MPU-6500-compatible IMU" : "MPU-6050",
              MPU6050_I2C_ADDRESS);
 }

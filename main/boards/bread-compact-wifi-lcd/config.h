@@ -319,6 +319,8 @@
 #define MPU6050_SDA_PIN GPIO_NUM_4
 #define MPU6050_SCL_PIN GPIO_NUM_5
 #define MPU6050_I2C_ADDRESS 0x68
+// Set to 1 to print MPU6050 diagnostics to Serial Monitor, then rebuild and flash.
+#define MPU6050_DEBUG 0
 // Flat module, component side up: a physical left turn must give positive gyro Z.
 // Set to -1.0 only if the module's Z axis points down.
 #define MPU6050_GYRO_Z_SIGN 1.0
