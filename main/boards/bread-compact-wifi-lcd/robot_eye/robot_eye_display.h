@@ -77,7 +77,7 @@ private:
     enum class GazeState : uint8_t { kIdle, kToDirection, kHolding, kToCenter };
     enum class HalfBlinkState : uint8_t { kIdle, kShrinking, kExpanding };
     enum class TransitionState : uint8_t { kIdle, kMorph, kBlinkSwitch };
-    enum class Screen : uint8_t { kEyes, kBattery, kClock, kWifi, kTemperature, kWeather, kDrive };
+    enum class Screen : uint8_t { kEyes, kClock, kWifi, kTemperature, kWeather, kDrive };
     enum class WeatherKind : uint8_t { kUnknown, kClear, kCloudy, kRain, kStorm, kFog, kSnow };
 
     static void AnimationTimerCallback(lv_timer_t* timer);
@@ -85,7 +85,6 @@ private:
     static Expression InferSentenceExpression(const char* content);
     static Screen DetectRequestedScreen(const char* content);
     static WeatherKind DetectWeatherKind(const char* content);
-    static bool ParsePercentage(const char* content, int& percentage);
     static bool ParseTemperature(const char* content, float& temperature);
     static float Clamp01(float value);
     static float EaseInOut(float value);
@@ -187,7 +186,6 @@ private:
     uint32_t last_weather_frame_ms_ = 0;
     uint32_t last_drive_refresh_ms_ = 0;
     int boot_blink_count_ = 0;
-    int displayed_battery_level_ = -1;
     float displayed_temperature_ = 0.0f;
     bool displayed_temperature_valid_ = false;
 

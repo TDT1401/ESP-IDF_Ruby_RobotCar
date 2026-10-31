@@ -7,7 +7,7 @@
 #include "lamp_controller.h"
 #include "led/single_led.h"
 #include "mcp_server.h"
-#include "robot_eye_display.h"
+#include "robot_eye/robot_eye_display.h"
 #include "system_reset.h"
 #include "wifi_board.h"
 #include "wifi_manager.h"

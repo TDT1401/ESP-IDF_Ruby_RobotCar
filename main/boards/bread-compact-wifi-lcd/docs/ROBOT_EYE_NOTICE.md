@@ -1,7 +1,7 @@
 # RobotEye attribution
 
 The vector eye geometry, expression set, morphing, blinking, gaze, drift, and boot-animation
-model in `robot_eye_display.*` are adapted from
+model in `robot_eye/robot_eye_*.cc` are adapted from
 [fonzu/RobotEye](https://github.com/fonzu/RobotEye), version 1.0.0, commit
 `8758b199ca853904afaa7dc433cedf64ca7bf6cf`.
 

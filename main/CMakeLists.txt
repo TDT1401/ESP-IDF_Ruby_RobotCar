@@ -894,6 +894,17 @@ file(GLOB BOARD_SOURCES
 )
 list(APPEND SOURCES ${BOARD_SOURCES})
 
+if(CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI_LCD)
+    list(APPEND SOURCES
+        "boards/bread-compact-wifi-lcd/robot_eye/robot_eye_animation.cc"
+        "boards/bread-compact-wifi-lcd/robot_eye/robot_eye_display.cc"
+        "boards/bread-compact-wifi-lcd/robot_eye/robot_eye_geometry.cc"
+        "boards/bread-compact-wifi-lcd/robot_eye/robot_eye_info.cc"
+        "boards/bread-compact-wifi-lcd/robot_eye/robot_eye_renderer.cc"
+        "boards/bread-compact-wifi-lcd/robot_eye/robot_eye_weather.cc"
+    )
+endif()
+
 if(CONFIG_BREAD_COMPACT_WIFI_LCD_L298N)
     list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/sensors/fc03_encoder.cc")
     list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/sensors/hcsr04_sensor.cc")
