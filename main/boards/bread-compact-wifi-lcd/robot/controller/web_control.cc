@@ -1,11 +1,13 @@
 #include "controller_internal.h"
 
+#include <esp_random.h>
+
 namespace ruby_robot {
 
 void L298nController::SetWebConnected(bool connected) {
     std::lock_guard lock(mutex_);
-    web_connected_ = connected;
-    if (!connected && web_manual_) {
+    web_control_.SetConnected(connected);
+    if (!connected && web_control_.active()) {
         EndWebControlLocked();
     }
 }
@@ -15,11 +17,11 @@ esp_err_t L298nController::BeginWebControl(uint32_t* session) {
         return ESP_ERR_INVALID_ARG;
     std::lock_guard lock(mutex_);
     const int64_t now = esp_timer_get_time();
-    if (!web_connected_ || !MotionAllowed())
+    if (!web_control_.connected() || !MotionAllowed())
         return ESP_ERR_INVALID_STATE;
-    if (web_session_ != 0 && now < web_deadline_us_)
+    if (!web_control_.CanBegin(now))
         return ESP_ERR_INVALID_STATE;
-    if (web_manual_)
+    if (web_control_.active())
         EndWebControlLocked();
     if (fault_ != ESP_OK)
         return fault_;
@@ -31,15 +33,13 @@ esp_err_t L298nController::BeginWebControl(uint32_t* session) {
         return ESP_FAIL;
     web_sleep_lock_held_ = true;
 #endif
-    web_manual_ = true;
     proximity_warning_enabled_ = true;
-    web_sequence_ = 0;
     // Zero is reserved for an expired/released session.
-    web_session_ = esp_random();
-    if (web_session_ == 0)
-        web_session_ = 1;
-    web_deadline_us_ = now + kWebTimeoutMs * 1000LL;
-    *session = web_session_;
+    uint32_t token = esp_random();
+    if (token == 0)
+        token = 1;
+    web_control_.Begin(token, now);
+    *session = token;
     return ESP_OK;
 }
 
@@ -79,10 +79,8 @@ esp_err_t L298nController::WebCommand(uint32_t session, uint32_t sequence, L298n
     }
     std::lock_guard lock(mutex_);
     const int64_t now = esp_timer_get_time();
-    if (!web_connected_ || session == 0 || session != web_session_ || sequence <= web_sequence_ ||
-        now >= web_deadline_us_)
+    if (!web_control_.Accept(session, sequence, now))
         return ESP_ERR_INVALID_STATE;
-    web_sequence_ = sequence;
     proximity_warning_enabled_ = proximity_warning_enabled;
     if (command == L298nWebCommand::kRelease) {
         EndWebControlLocked();
@@ -92,36 +90,26 @@ esp_err_t L298nController::WebCommand(uint32_t session, uint32_t sequence, L298n
         EndWebControlLocked();
         return ESP_ERR_INVALID_STATE;
     }
-    web_deadline_us_ = now + kWebTimeoutMs * 1000LL;
+    web_control_.Refresh(now);
     web_speed_percent_ = speed;
     if (motion == Motion::kStop || speed == 0) {
         StopLocked();
     } else if (command == L298nWebCommand::kJoystick) {
-        int left = joystick_y + joystick_x;
-        int right = joystick_y - joystick_x;
-        const int peak = std::max(std::abs(left), std::abs(right));
-        if (peak > 1000) {
-            left = left * 1000 / peak;
-            right = right * 1000 / peak;
-        }
-        const int drive_speed = speed;
-        left = left * drive_speed / 1000;
-        right = right * drive_speed / 1000;
-        web_speed_percent_ = drive_speed;
-        if (left == 0 && right == 0) {
+        const auto wheels = MixJoystick(joystick_x, joystick_y, speed);
+        if (wheels.left == 0 && wheels.right == 0) {
             StopLocked();
         } else {
             if (!web_joystick_active_ && moving_)
                 StopOutputsLocked();
             web_joystick_active_ = true;
-            if (!ApplyWebDriveLocked(left, right)) {
+            if (!ApplyWebDriveLocked(wheels.left, wheels.right)) {
                 StopLocked();
                 EndWebControlLocked();
                 return ESP_FAIL;
             }
             motion_ = motion;
             moving_ = true;
-            deadline_us_ = web_deadline_us_;
+            deadline_us_ = web_control_.deadline_us();
         }
     } else {
         if (web_joystick_active_) {
@@ -136,7 +124,7 @@ esp_err_t L298nController::WebCommand(uint32_t session, uint32_t sequence, L298n
                 return ESP_FAIL;
             }
         }
-        deadline_us_ = web_deadline_us_;
+        deadline_us_ = web_control_.deadline_us();
         if (moving_ && !ApplySpeedLocked()) {
             EndWebControlLocked();
             return ESP_FAIL;
@@ -148,7 +136,7 @@ esp_err_t L298nController::WebCommand(uint32_t session, uint32_t sequence, L298n
 void L298nController::UpdateEmotion(const char* emotion, bool speaking) {
     std::lock_guard lock(mutex_);
     if (speaking && IsSleepEmotion(emotion)) {
-        if (!web_manual_)
+        if (!web_control_.active())
             StopLocked();
     }
 }
@@ -163,10 +151,7 @@ void L298nController::ReleaseWebSleepLockLocked() {
 }
 
 void L298nController::EndWebControlLocked() {
-    web_session_ = 0;
-    web_sequence_ = 0;
-    web_deadline_us_ = 0;
-    web_manual_ = false;
+    web_control_.Revoke();
     ReleaseWebSleepLockLocked();
     StopLocked();
 }

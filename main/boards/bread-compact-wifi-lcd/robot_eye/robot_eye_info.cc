@@ -12,14 +12,8 @@
 
 #include <sdkconfig.h>
 
-#include "board.h"
 #include "material_symbols.h"
 #include "robot_eye_constants.h"
-#include "wifi_manager.h"
-
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N
-#include "../robot/controller/l298n_controller.h"
-#endif
 
 using namespace robot_eye_detail;
 
@@ -273,12 +267,10 @@ void RobotEyeDisplay::RefreshInfoScreen(uint32_t now, bool force) {
             break;
         }
         case Screen::kWifi: {
-            auto& wifi = WifiManager::GetInstance();
-            if (wifi.IsConnected()) {
+            const auto wifi = ReadWifiStatus();
+            if (wifi.connected) {
                 snprintf(value, sizeof(value), "Wi-Fi: Connected");
-                const std::string ssid = wifi.GetSsid();
-                const std::string ip = wifi.GetIpAddress();
-                snprintf(detail, sizeof(detail), "%s\n%s", ssid.c_str(), ip.c_str());
+                snprintf(detail, sizeof(detail), "%s\n%s", wifi.ssid.c_str(), wifi.ip.c_str());
                 SetInfoText(MATERIAL_SYMBOLS_WIFI, "WI-FI", value, detail);
             } else {
                 snprintf(value, sizeof(value), "Wi-Fi: Disconnected");
@@ -289,7 +281,7 @@ void RobotEyeDisplay::RefreshInfoScreen(uint32_t now, bool force) {
         case Screen::kTemperature:
         case Screen::kWeather: {
             float temperature = 0.0f;
-            const bool has_sensor = Board::GetInstance().GetTemperature(temperature);
+            const bool has_sensor = ReadTemperature(temperature);
             if (has_sensor) {
                 displayed_temperature_ = temperature;
                 displayed_temperature_valid_ = true;
@@ -347,7 +339,7 @@ void RobotEyeDisplay::RefreshInfoScreen(uint32_t now, bool force) {
         }
         case Screen::kDrive: {
 #ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N
-            const auto motor = GetL298nMotorStatus();
+            const auto motor = ReadDriveStatus();
             const char* direction = "STOP";
             if (strcmp(motor.motion, "forward") == 0)
                 direction = "FORWARD";
@@ -357,20 +349,19 @@ void RobotEyeDisplay::RefreshInfoScreen(uint32_t now, bool force) {
                 direction = "LEFT";
             else if (strcmp(motor.motion, "turn_right") == 0)
                 direction = "RIGHT";
-            snprintf(value, sizeof(value), "%s %d%%", direction, motor.active_speed_percent);
-            const char* owner = strcmp(motor.control_owner, "web") == 0        ? "WEB"
-                                : strcmp(motor.control_owner, "telegram") == 0 ? "TELEGRAM"
-                                : strcmp(motor.control_owner, "voice") == 0    ? "VOICE"
+            snprintf(value, sizeof(value), "%s %d%%", direction, motor.speed_percent);
+            const char* owner = strcmp(motor.owner, "web") == 0        ? "WEB"
+                                : strcmp(motor.owner, "telegram") == 0 ? "TELEGRAM"
+                                : strcmp(motor.owner, "voice") == 0    ? "VOICE"
                                                                                : "AUTO";
             char range[20];
             if (motor.distance_valid)
-                snprintf(range, sizeof(range), "%dcm", motor.measured_distance_cm);
+                snprintf(range, sizeof(range), "%dcm", motor.distance_cm);
             else
                 snprintf(range, sizeof(range), "--");
             const bool warning =
                 motor.distance_valid &&
-                motor.measured_distance_cm < (motor.web_manual ? motor.web_warning_effective_cm
-                                                               : motor.obstacle_stop_effective_cm);
+                motor.distance_cm < motor.warning_distance_cm;
             snprintf(detail, sizeof(detail), "SR04 %s  |  %s\nBEEP %s%s", range, owner,
                      motor.web_manual ? (motor.warning_sound_enabled ? "ON" : "OFF") : "--",
                      warning ? "  ! NEAR" : "");

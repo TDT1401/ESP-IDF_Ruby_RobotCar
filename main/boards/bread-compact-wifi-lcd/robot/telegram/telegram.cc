@@ -34,7 +34,6 @@
 #include <string>
 
 #include "../controller/l298n_controller.h"
-#include "../web/web_server.h"
 #include "application.h"
 #include "audio_codec.h"
 #include "board.h"
@@ -49,6 +48,10 @@ constexpr size_t kMaxResponse = 8192;
 constexpr size_t kMaxOutboundText = 4000;
 constexpr UBaseType_t kOutboundQueueDepth = 3;
 constexpr double kMaxExactId = 4503599627370495.0;  // Telegram IDs have at most 52 bits.
+bool (*web_server_ready)() = nullptr;
+
+bool WebServerReady() { return web_server_ready != nullptr && web_server_ready(); }
+
 using Json = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
 using JsonText = std::unique_ptr<char, decltype(&cJSON_free)>;
 
@@ -83,7 +86,7 @@ std::string WebMessage() {
     auto& wifi = WifiManager::GetInstance();
     if (!wifi.IsConnected())
         return L298nTelegramText::kWebWifiDisconnected;
-    if (!IsL298nWebServerRunning())
+    if (!WebServerReady())
         return L298nTelegramText::kWebServerUnavailable;
     const std::string url = "http://" + wifi.GetIpAddress() + ":8080";
     return std::string(L298nTelegramText::kWebReadyHeader) + L298nTelegramText::kWebLinkPrefix +
@@ -154,7 +157,7 @@ std::string StatusMessage() {
     message += L298nTelegramText::kFreeRamLabel;
     message += std::to_string(esp_get_free_heap_size() / 1024) + L298nTelegramText::kMemoryUnit;
 
-    if (wifi_connected && IsL298nWebServerRunning()) {
+    if (wifi_connected && WebServerReady()) {
         message += "\n\n" + std::string(L298nTelegramText::kStatusWebLinkPrefix);
         message += "<a href=\"http://" + wifi.GetIpAddress() + ":8080\">";
         message += L298nTelegramText::kWebOpenText;
@@ -364,7 +367,7 @@ private:
     bool Send(const std::string& text, bool html = false, bool add_web_button = false) {
         Json request(cJSON_CreateObject(), cJSON_Delete);
         Json keyboard(nullptr, cJSON_Delete);
-        if (add_web_button && IsL298nWebServerRunning()) {
+        if (add_web_button && WebServerReady()) {
             keyboard.reset(cJSON_CreateObject());
             Json row(cJSON_CreateArray(), cJSON_Delete);
             Json button(cJSON_CreateObject(), cJSON_Delete);
@@ -642,7 +645,10 @@ private:
 };
 }  // namespace
 
-void InitializeL298nTelegram() { Telegram::Instance().Start(); }
+void InitializeL298nTelegram(bool (*ready)()) {
+    web_server_ready = ready;
+    Telegram::Instance().Start();
+}
 
 void UpdateL298nTelegramNetwork(bool connected) { Telegram::Instance().SetConnected(connected); }
 
@@ -650,7 +656,8 @@ void UpdateL298nTelegramNetwork(bool connected) { Telegram::Instance().SetConnec
 
 #include <esp_log.h>
 
-void InitializeL298nTelegram() {
+void InitializeL298nTelegram(bool (*web_server_ready)()) {
+    (void)web_server_ready;
 #if L298N_TELEGRAM_ENABLED
     ESP_LOGE("L298nTelegram", "Telegram needs CONFIG_MBEDTLS_CERTIFICATE_BUNDLE; not started");
 #else

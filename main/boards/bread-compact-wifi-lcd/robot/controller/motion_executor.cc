@@ -1,5 +1,8 @@
 #include "controller_internal.h"
 
+#include "../sensors/mpu6050_imu.h"
+#include "application.h"
+
 namespace ruby_robot {
 
 void L298nController::StopLocked() {
@@ -33,7 +36,7 @@ void L298nController::Tick() {
     std::lock_guard lock(mutex_);
     const int64_t now = esp_timer_get_time();
     encoder_.Update(now);  // Telemetry only; motor PWM does not depend on encoder readings.
-    if (web_session_ != 0 && (now >= web_deadline_us_ || !MotionAllowed())) {
+    if (web_control_.active() && (web_control_.Expired(now) || !MotionAllowed())) {
         EndWebControlLocked();
         return;
     }

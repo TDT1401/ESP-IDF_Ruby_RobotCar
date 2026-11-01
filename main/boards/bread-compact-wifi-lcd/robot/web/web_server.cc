@@ -14,6 +14,7 @@
 #include <memory>
 
 #include "../controller/l298n_controller.h"
+#include "../serialization/fc03_json.h"
 #include "application.h"
 #include "web_page.h"
 #include "wifi_manager.h"

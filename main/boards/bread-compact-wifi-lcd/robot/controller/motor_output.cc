@@ -1,5 +1,9 @@
 #include "controller_internal.h"
 
+#include <cstdlib>
+
+#include "../sensors/mpu6050_imu.h"
+
 namespace ruby_robot {
 
 void L298nController::StopOutputsLocked() {
@@ -7,14 +11,7 @@ void L298nController::StopOutputsLocked() {
     applied_left_pwm_percent_ = 0;
     applied_right_pwm_percent_ = 0;
     encoder_.SetDrive(0, 0, esp_timer_get_time());
-    // Disable both bridges before touching any direction pin. Attempt every
-    // output even if an earlier operation fails. Stop means coast, not brake.
-    Check(ledc_stop(kMode, kLeftChannel, 0));
-    Check(ledc_stop(kMode, kRightChannel, 0));
-    for (auto pin :
-         {MOTOR_LEFT_IN1_PIN, MOTOR_LEFT_IN2_PIN, MOTOR_RIGHT_IN1_PIN, MOTOR_RIGHT_IN2_PIN}) {
-        Check(gpio_set_level(pin, 0));
-    }
+    Check(driver_.Stop());
     motion_ = Motion::kStop;
     moving_ = false;
     web_left_output_percent_ = 0;
@@ -29,24 +26,17 @@ void L298nController::StopOutputsLocked() {
 #endif
 }
 
-bool L298nController::SetWheelPwmLocked(ledc_channel_t channel, int percent) {
-    if (percent == 0)
-        return Check(ledc_stop(kMode, channel, 0));
-    const uint32_t duty = static_cast<uint32_t>(std::abs(percent)) * 1023 / 100;
-    return Check(ledc_set_duty(kMode, channel, duty)) && Check(ledc_update_duty(kMode, channel));
+bool L298nController::SetWheelPwmLocked(Wheel wheel, int percent) {
+    return Check(driver_.SetPwm(wheel, percent));
 }
 
-bool L298nController::SetWheelDirectionLocked(gpio_num_t in1, gpio_num_t in2, int sign,
-                                              bool inverted) {
-    if (sign == 0)
-        return Check(gpio_set_level(in1, 0)) && Check(gpio_set_level(in2, 0));
-    const bool forward = (sign > 0) != inverted;
-    return Check(gpio_set_level(in1, forward)) && Check(gpio_set_level(in2, !forward));
+bool L298nController::SetWheelDirectionLocked(Wheel wheel, int sign, bool inverted) {
+    return Check(driver_.SetDirection(wheel, sign, inverted));
 }
 
 bool L298nController::ApplyMotorPwmLocked(int left_percent, int right_percent) {
-    const bool ok = SetWheelPwmLocked(kLeftChannel, left_percent) &&
-                    SetWheelPwmLocked(kRightChannel, right_percent);
+    const bool ok = SetWheelPwmLocked(Wheel::kLeft, left_percent) &&
+                    SetWheelPwmLocked(Wheel::kRight, right_percent);
     if (ok) {
         applied_left_pwm_percent_ = left_percent;
         applied_right_pwm_percent_ = right_percent;
@@ -57,7 +47,7 @@ bool L298nController::ApplyMotorPwmLocked(int left_percent, int right_percent) {
 int L298nController::CurrentPwmPercentLocked(int side) const {
     if (!moving_)
         return 0;
-    if (web_manual_ && web_joystick_active_)
+    if (web_control_.active() && web_joystick_active_)
         return std::abs(side == 0 ? web_left_output_percent_ : web_right_output_percent_);
     return side == 0 ? applied_left_pwm_percent_ : applied_right_pwm_percent_;
 }
@@ -87,16 +77,15 @@ bool L298nController::ApplyWebDriveLocked(int left, int right) {
     constexpr bool invert_right = false;
 #endif
     if (left == 0)
-        ok = SetWheelPwmLocked(kLeftChannel, 0) && ok;
+        ok = SetWheelPwmLocked(Wheel::kLeft, 0) && ok;
     if (right == 0)
-        ok = SetWheelPwmLocked(kRightChannel, 0) && ok;
-    ok = SetWheelDirectionLocked(MOTOR_LEFT_IN1_PIN, MOTOR_LEFT_IN2_PIN, left, invert_left) && ok;
-    ok = SetWheelDirectionLocked(MOTOR_RIGHT_IN1_PIN, MOTOR_RIGHT_IN2_PIN, right, invert_right) &&
-         ok;
+        ok = SetWheelPwmLocked(Wheel::kRight, 0) && ok;
+    ok = SetWheelDirectionLocked(Wheel::kLeft, left, invert_left) && ok;
+    ok = SetWheelDirectionLocked(Wheel::kRight, right, invert_right) && ok;
     if (left != 0)
-        ok = SetWheelPwmLocked(kLeftChannel, left) && ok;
+        ok = SetWheelPwmLocked(Wheel::kLeft, left) && ok;
     if (right != 0)
-        ok = SetWheelPwmLocked(kRightChannel, right) && ok;
+        ok = SetWheelPwmLocked(Wheel::kRight, right) && ok;
     if (ok) {
         web_left_output_percent_ = left;
         web_right_output_percent_ = right;
@@ -123,10 +112,8 @@ bool L298nController::ApplyDirectionLocked() {
 #else
     constexpr bool invert_right = false;
 #endif
-    const bool ok = SetWheelDirectionLocked(MOTOR_LEFT_IN1_PIN, MOTOR_LEFT_IN2_PIN, encoder_left,
-                                            invert_left) &&
-                    SetWheelDirectionLocked(MOTOR_RIGHT_IN1_PIN, MOTOR_RIGHT_IN2_PIN, encoder_right,
-                                            invert_right);
+    const bool ok = SetWheelDirectionLocked(Wheel::kLeft, encoder_left, invert_left) &&
+                    SetWheelDirectionLocked(Wheel::kRight, encoder_right, invert_right);
     if (ok)
         encoder_.SetDrive(encoder_left, encoder_right, esp_timer_get_time());
     return ok;

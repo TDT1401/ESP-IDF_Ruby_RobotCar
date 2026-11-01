@@ -18,16 +18,31 @@ The web session watchdog stops the motors after 600 ms without a valid command.
 
 ## Source layout
 
-Robot code is under `robot/`. The controller uses `l298n_motor_driver.cc` for wheel
-outputs, `motion_executor.cc` for manual command timing, and `web_control.cc` for
-the browser session. Sensor tasks report telemetry but do not control wheel PWM.
-Board pins remain in `config.h`; `main/CMakeLists.txt` selects the sources.
+The hierarchy covers the whole board, with `compact_wifi_board_lcd.cc` as the board
+factory and `robot/robot_board.cc` as the RobotCar composition root:
+
+1. `robot/web/`, `robot/telegram/`, and `robot/mcp/` adapt requests to the public
+   control API in `robot/controller/l298n_controller.h`. `robot/serialization/`
+   formats sensor telemetry for these adapters.
+2. `robot/controller/` owns control arbitration, the watchdog, motion timing,
+   warnings, and the stop path. Its mutex serializes network, sensor, and timer
+   callbacks. `robot/domain/` holds hardware-independent motion and lease rules.
+3. `robot/drivers/` owns motor GPIO and LEDC; `robot/sensors/` owns sensor hardware.
+   Sensor readings never directly set wheel PWM.
+4. `robot_eye/` renders the display. It receives Wi-Fi and temperature views from
+   the board, plus a read-only drive view and emotion callback from
+   `robot/robot_board.cc`. The display does not include the motor controller or
+   read board/network singletons itself.
+
+`config.h` holds board pins and `main/CMakeLists.txt` selects board sources. The
+600 ms lease deadline and stop path remain on the device.
 
 Run the browser tests from the repository root:
 
 ```sh
 node --test main/boards/bread-compact-wifi-lcd/robot/tests/web_page_test.cjs
 ```
+
 ## Components
 
 | Quantity | Component                  | Notes             |

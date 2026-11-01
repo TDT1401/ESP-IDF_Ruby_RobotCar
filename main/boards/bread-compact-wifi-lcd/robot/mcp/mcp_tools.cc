@@ -1,23 +1,15 @@
-#include "controller_internal.h"
+#include "mcp_tools.h"
 
-namespace ruby_robot {
+#include <expected>
 
-void L298nController::RegisterTools() {
-    auto& server = McpServer::GetInstance();
-    server.AddTool("self.motor.stop", "Stop the motors and release web control.", PropertyList(),
-                   [this](const PropertyList&) -> ToolResult {
-                       Stop();
-                       return GetState();
-                   });
-    server.AddTool(
-        "self.motor.get_state",
-        "Read manual PWM, motor state, raw FC-03 encoder and MPU6050 gyro telemetry. "
-        "Distance moves, measured turns, PI speed control and heading hold are disabled.",
-        PropertyList(), [this](const PropertyList&) -> ToolResult { return GetState(); });
-}
+#include "../controller/l298n_controller.h"
+#include "../serialization/fc03_json.h"
+#include "mcp_server.h"
 
-ToolResult L298nController::GetState() {
-    const auto status = Snapshot();
+namespace {
+
+ToolResult GetState() {
+    const auto status = GetL298nMotorStatus();
     CJsonUniquePtr json(cJSON_CreateObject());
     if (!json || !cJSON_AddStringToObject(json.get(), "motion", status.motion) ||
         !cJSON_AddNumberToObject(json.get(), "speed_percent", status.speed_percent) ||
@@ -40,4 +32,18 @@ ToolResult L298nController::GetState() {
     return json.release();
 }
 
-}  // namespace ruby_robot
+}  // namespace
+
+void RegisterL298nMcpTools() {
+    auto& server = McpServer::GetInstance();
+    server.AddTool("self.motor.stop", "Stop the motors and release web control.", PropertyList(),
+                   [](const PropertyList&) -> ToolResult {
+                       StopL298nMotor();
+                       return GetState();
+                   });
+    server.AddTool(
+        "self.motor.get_state",
+        "Read manual PWM, motor state, raw FC-03 encoder and MPU6050 gyro telemetry. "
+        "Distance moves, measured turns, PI speed control and heading hold are disabled.",
+        PropertyList(), [](const PropertyList&) -> ToolResult { return GetState(); });
+}

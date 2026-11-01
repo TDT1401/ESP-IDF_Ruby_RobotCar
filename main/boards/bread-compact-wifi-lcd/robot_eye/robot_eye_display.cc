@@ -306,6 +306,34 @@ void RobotEyeDisplay::SetEmotionMotionCallback(EmotionMotionCallback callback) {
     }
 }
 
+void RobotEyeDisplay::SetDriveStatusProvider(DriveStatusProvider provider) {
+    DisplayLockGuard lock(this);
+    if (lock) {
+        drive_status_provider_ = provider;
+    }
+}
+
+RobotDriveStatus RobotEyeDisplay::ReadDriveStatus() const {
+    return drive_status_provider_ != nullptr ? drive_status_provider_() : RobotDriveStatus{};
+}
+
+void RobotEyeDisplay::SetSystemStatusProviders(WifiStatusProvider wifi,
+                                               TemperatureProvider temperature) {
+    DisplayLockGuard lock(this);
+    if (lock) {
+        wifi_status_provider_ = wifi;
+        temperature_provider_ = temperature;
+    }
+}
+
+RobotEyeWifiStatus RobotEyeDisplay::ReadWifiStatus() const {
+    return wifi_status_provider_ != nullptr ? wifi_status_provider_() : RobotEyeWifiStatus{};
+}
+
+bool RobotEyeDisplay::ReadTemperature(float& temperature) const {
+    return temperature_provider_ != nullptr && temperature_provider_(temperature);
+}
+
 void RobotEyeDisplay::NotifyEmotionMotion() {
     if (emotion_motion_callback_ == nullptr) {
         return;

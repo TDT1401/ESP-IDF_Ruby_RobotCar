@@ -84,8 +84,8 @@
 // Calibration: count rising edges during ONE complete WHEEL revolution.
 // Include the gearbox ratio if the encoder disc is on the motor shaft.
 // Zero means unknown: raw pulse counts work, but metres/RPM remain unavailable.
-#define FC03_LEFT_PULSES_PER_REV 18.64
-#define FC03_RIGHT_PULSES_PER_REV 19.09
+#define FC03_LEFT_PULSES_PER_REV 20.09
+#define FC03_RIGHT_PULSES_PER_REV 20.12
 #define FC03_LEFT_WHEEL_DIAMETER_MM 60.0
 #define FC03_RIGHT_WHEEL_DIAMETER_MM 60.0
 

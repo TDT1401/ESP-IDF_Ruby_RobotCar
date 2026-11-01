@@ -1,7 +1,6 @@
 #pragma once
 
 #include <esp_err.h>
-#include <cJSON.h>
 #include <sdkconfig.h>
 
 #include <cstdint>
@@ -72,9 +71,6 @@ private:
     void FinishSegment();
 #endif
 };
-
-// Adds one owned "encoder" object. Distances/RPM are JSON null until calibrated/ready.
-bool AddFc03EncoderJson(cJSON* parent, const Fc03EncoderStatus& status);
 
 // Logging runs in a separate low-priority task, outside motor timer/locks/audio tasks.
 void StartFc03Monitor(Fc03EncoderStatus (*snapshot)());

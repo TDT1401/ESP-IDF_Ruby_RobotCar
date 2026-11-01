@@ -12,9 +12,7 @@
 #include "wifi_manager.h"
 
 #ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N
-#include "robot/controller/l298n_controller.h"
-#include "robot/telegram/telegram.h"
-#include "robot/web/web_server.h"
+#include "robot/robot_board.h"
 #endif
 
 #include <driver/i2c_master.h>
@@ -33,6 +31,25 @@
 #include <vector>
 
 #define TAG "CompactWifiBoardLCD"
+
+namespace {
+
+RobotEyeWifiStatus ReadRobotEyeWifiStatus() {
+    auto& wifi = WifiManager::GetInstance();
+    RobotEyeWifiStatus status;
+    status.connected = wifi.IsConnected();
+    if (status.connected) {
+        status.ssid = wifi.GetSsid();
+        status.ip = wifi.GetIpAddress();
+    }
+    return status;
+}
+
+bool ReadRobotEyeTemperature(float& temperature) {
+    return Board::GetInstance().GetTemperature(temperature);
+}
+
+}  // namespace
 
 // Log the I2S samples before they enter AFE/Opus, only for this board.
 class MicDiagnosticCodec : public NoAudioCodecSimplex {
@@ -217,14 +234,14 @@ public:
     CompactWifiBoardLCD() : boot_button_(BOOT_BUTTON_GPIO, false, 3000) {
         InitializeSpi();
         InitializeLcdDisplay();
+        static_cast<RobotEyeDisplay*>(display_)->SetSystemStatusProviders(
+            ReadRobotEyeWifiStatus, ReadRobotEyeTemperature);
         InitializeButtons();
         if (DISPLAY_BACKLIGHT_PIN != GPIO_NUM_NC) {
             GetBacklight()->RestoreBrightness();
         }
 #ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N
-        InitializeL298nController();
-        InitializeL298nTelegram();
-        static_cast<RobotEyeDisplay*>(display_)->SetEmotionMotionCallback(UpdateL298nEmotion);
+        InitializeRobotBoard(*static_cast<RobotEyeDisplay*>(display_));
 #endif
     }
 
@@ -257,12 +274,10 @@ public:
             [this, callback = std::move(callback)](NetworkEvent event, const std::string& data) {
                 if (event == NetworkEvent::Connected) {
                     SetPowerSaveLevel(PowerSaveLevel::PERFORMANCE);
-                    UpdateL298nWebNetwork(true);
-                    UpdateL298nTelegramNetwork(true);
+                    UpdateRobotNetwork(true);
                 } else if (event == NetworkEvent::Disconnected ||
                            event == NetworkEvent::WifiConfigModeEnter) {
-                    UpdateL298nWebNetwork(false);
-                    UpdateL298nTelegramNetwork(false);
+                    UpdateRobotNetwork(false);
                 }
                 if (callback)
                     callback(event, data);

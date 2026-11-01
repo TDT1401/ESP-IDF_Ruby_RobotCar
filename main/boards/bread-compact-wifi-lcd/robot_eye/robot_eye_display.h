@@ -1,7 +1,27 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include "display/lcd_display.h"
+
+struct RobotEyeWifiStatus {
+    bool connected = false;
+    std::string ssid;
+    std::string ip;
+};
+
+// Read-only view supplied by the board; the display does not own motor control.
+struct RobotDriveStatus {
+    bool active = false;
+    const char* motion = "stopped";
+    int speed_percent = 0;
+    const char* owner = "none";
+    bool web_manual = false;
+    bool distance_valid = false;
+    int distance_cm = -1;
+    int warning_distance_cm = 0;
+    bool warning_sound_enabled = false;
+};
 
 // LVGL port of fonzu/RobotEye's vector geometry and non-blocking animation model.
 // The upstream library targets Arduino/U8g2; this display keeps the XiaoZhi ESP-IDF
@@ -21,6 +41,11 @@ public:
     // Board-owned observer; it must not call back into the display while notified.
     using EmotionMotionCallback = void (*)(const char* emotion, bool speaking);
     void SetEmotionMotionCallback(EmotionMotionCallback callback);
+    using DriveStatusProvider = RobotDriveStatus (*)();
+    void SetDriveStatusProvider(DriveStatusProvider provider);
+    using WifiStatusProvider = RobotEyeWifiStatus (*)();
+    using TemperatureProvider = bool (*)(float& temperature);
+    void SetSystemStatusProviders(WifiStatusProvider wifi, TemperatureProvider temperature);
     void SetChatMessage(const char* role, const char* content) override;
     void ClearChatMessages() override;
     void SetPreviewImage(std::unique_ptr<LvglImage> image) override;
@@ -110,6 +135,9 @@ private:
     void UpdateDrift(uint32_t now);
     void UpdateTransition(uint32_t now);
     void UpdateAnimation();
+    RobotDriveStatus ReadDriveStatus() const;
+    RobotEyeWifiStatus ReadWifiStatus() const;
+    bool ReadTemperature(float& temperature) const;
 
     void ShowScreen(Screen screen, uint32_t duration_ms);
     void ShowEyesScreen();
@@ -198,4 +226,7 @@ private:
     bool response_sentence_received_ = false;
     bool status_neutral_pending_ = false;
     EmotionMotionCallback emotion_motion_callback_ = nullptr;
+    DriveStatusProvider drive_status_provider_ = nullptr;
+    WifiStatusProvider wifi_status_provider_ = nullptr;
+    TemperatureProvider temperature_provider_ = nullptr;
 };

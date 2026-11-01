@@ -1,5 +1,10 @@
 #include "controller_internal.h"
 
+#include <esp_system.h>
+
+#include "../sensors/hcsr04_sensor.h"
+#include "../sensors/mpu6050_imu.h"
+
 namespace ruby_robot {
 
 L298nController& L298nController::Instance() {
@@ -9,10 +14,7 @@ L298nController& L298nController::Instance() {
 
 void L298nController::Stop() {
     std::lock_guard lock(mutex_);
-    web_session_ = 0;  // A spoken stop also invalidates in-flight browser commands.
-    web_sequence_ = 0;
-    web_deadline_us_ = 0;
-    web_manual_ = false;
+    web_control_.Revoke();  // A spoken stop also invalidates in-flight browser commands.
     ReleaseWebSleepLockLocked();
     StopLocked();
 }
@@ -28,7 +30,7 @@ L298nMotorStatus L298nController::Snapshot() {
     status.active_speed_percent = moving_ ? ActiveSpeedLocked() : 0;
     status.moving = moving_;
     status.pending = motion_ != Motion::kStop && !moving_;
-    status.web_manual = web_manual_;
+    status.web_manual = web_control_.active();
     status.autonomy_mode = "manual";
     status.follow_distance_cm = kDefaultFollowDistanceCm;
     status.obstacle_distance_cm = kDefaultObstacleDistanceCm;
@@ -46,41 +48,12 @@ L298nMotorStatus L298nController::Snapshot() {
     status.gyro_z_dps = imu.gyro_z_dps;
     status.left_pwm_percent = CurrentLeftPwmPercentLocked();
     status.right_pwm_percent = CurrentRightPwmPercentLocked();
-    status.control_owner = web_manual_ ? "web" : "none";
+    status.control_owner = web_control_.active() ? "web" : "none";
     status.warning_sound_enabled = proximity_warning_enabled_;
     return status;
 }
 
 L298nController::L298nController() {
-    constexpr uint64_t pins = (1ULL << MOTOR_LEFT_EN_PIN) | (1ULL << MOTOR_LEFT_IN1_PIN) |
-                              (1ULL << MOTOR_LEFT_IN2_PIN) | (1ULL << MOTOR_RIGHT_EN_PIN) |
-                              (1ULL << MOTOR_RIGHT_IN1_PIN) | (1ULL << MOTOR_RIGHT_IN2_PIN);
-    gpio_config_t gpio = {};
-    gpio.pin_bit_mask = pins;
-    gpio.mode = GPIO_MODE_OUTPUT;
-    gpio.pull_down_en = GPIO_PULLDOWN_ENABLE;
-    ESP_ERROR_CHECK(gpio_config(&gpio));
-    for (auto pin : {MOTOR_LEFT_EN_PIN, MOTOR_LEFT_IN1_PIN, MOTOR_LEFT_IN2_PIN, MOTOR_RIGHT_EN_PIN,
-                     MOTOR_RIGHT_IN1_PIN, MOTOR_RIGHT_IN2_PIN}) {
-        ESP_ERROR_CHECK(gpio_set_level(pin, 0));
-    }
-
-    ledc_timer_config_t pwm = {};
-    pwm.speed_mode = kMode;
-    pwm.duty_resolution = LEDC_TIMER_10_BIT;
-    pwm.timer_num = kTimer;
-    pwm.freq_hz = 1000;
-    pwm.clk_cfg = LEDC_AUTO_CLK;
-    ESP_ERROR_CHECK(ledc_timer_config(&pwm));
-    for (auto channel : {kLeftChannel, kRightChannel}) {
-        ledc_channel_config_t output = {};
-        output.gpio_num = channel == kLeftChannel ? MOTOR_LEFT_EN_PIN : MOTOR_RIGHT_EN_PIN;
-        output.speed_mode = kMode;
-        output.channel = channel;
-        output.timer_sel = kTimer;
-        output.duty = 0;
-        ESP_ERROR_CHECK(ledc_channel_config(&output));
-    }
 #ifdef CONFIG_PM_ENABLE
     ESP_ERROR_CHECK(esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "l298n", &sleep_lock_));
     ESP_ERROR_CHECK(esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "l298n_web", &web_sleep_lock_));
@@ -95,7 +68,6 @@ L298nController::L298nController() {
     timer.skip_unhandled_events = true;
     ESP_ERROR_CHECK(esp_timer_create(&timer, &timer_));
     ESP_ERROR_CHECK(esp_timer_start_periodic(timer_, kTickUs));
-    RegisterTools();
 }
 
 L298nController::~L298nController() {
@@ -120,7 +92,7 @@ bool L298nController::Check(esp_err_t error) {
 using ruby_robot::L298nController;
 
 void InitializeL298nController() {
-    // Singleton and tool callbacks live for the entire firmware lifetime.
+    // Singleton and sensor callbacks live for the entire firmware lifetime.
     L298nController::Instance();
     StartFc03Monitor([]() { return L298nController::Instance().Snapshot().encoder; });
     InitializeHcsr04Sensor([](int distance_cm, bool valid) {

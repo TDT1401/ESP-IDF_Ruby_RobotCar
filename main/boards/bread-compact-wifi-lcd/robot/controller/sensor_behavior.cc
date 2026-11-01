@@ -1,5 +1,8 @@
 #include "controller_internal.h"
 
+#include "application.h"
+#include "assets/lang_config.h"
+
 namespace ruby_robot {
 
 void L298nController::UpdateDistance(int distance_cm, bool valid) {
@@ -16,8 +19,8 @@ void L298nController::ScheduleProximityWarning() {
         const int64_t now = esp_timer_get_time();
         const int warning_distance =
             ScaleDistanceForSpeed(kDefaultObstacleDistanceCm, web_speed_percent_);
-        if (web_manual_ && proximity_warning_enabled_ && web_connected_ && web_session_ != 0 &&
-            now < web_deadline_us_ && sensor_valid_ &&
+        if (web_control_.active() && proximity_warning_enabled_ && web_control_.connected() &&
+            !web_control_.Expired(now) && sensor_valid_ &&
             now - last_sensor_update_us_ <= kSensorStaleMs * 1000LL &&
             motion_ == Motion::kForward && measured_distance_cm_ < warning_distance &&
             !warning_queued_ && now >= next_warning_at_us_) {
@@ -36,8 +39,8 @@ void L298nController::ScheduleProximityWarning() {
             next_warning_at_us_ = now + kProximityWarningPeriodUs;
             const int warning_distance =
                 ScaleDistanceForSpeed(kDefaultObstacleDistanceCm, web_speed_percent_);
-            warn = web_manual_ && proximity_warning_enabled_ && web_connected_ &&
-                   web_session_ != 0 && now < web_deadline_us_ && sensor_valid_ &&
+            warn = web_control_.active() && proximity_warning_enabled_ &&
+                   web_control_.connected() && !web_control_.Expired(now) && sensor_valid_ &&
                    now - last_sensor_update_us_ <= kSensorStaleMs * 1000LL &&
                    motion_ == Motion::kForward && measured_distance_cm_ < warning_distance;
         }

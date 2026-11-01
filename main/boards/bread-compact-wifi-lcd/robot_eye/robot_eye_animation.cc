@@ -5,9 +5,6 @@
 #include <sdkconfig.h>
 
 #include "robot_eye_constants.h"
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N
-#include "../robot/controller/l298n_controller.h"
-#endif
 
 using namespace robot_eye_detail;
 
@@ -243,9 +240,7 @@ void RobotEyeDisplay::UpdateAnimation() {
 #ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N
     if (now - last_drive_refresh_ms_ >= 200) {
         last_drive_refresh_ms_ = now;
-        const auto motor = GetL298nMotorStatus();
-        const bool driving = motor.web_manual || motor.pending || motor.moving ||
-                             strcmp(motor.autonomy_mode, "manual") != 0;
+        const bool driving = ReadDriveStatus().active;
         if (driving) {
             if (active_screen_ != Screen::kDrive)
                 ShowScreen(Screen::kDrive, 1000);
