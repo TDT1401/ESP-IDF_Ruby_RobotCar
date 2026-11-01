@@ -1,4 +1,4 @@
-#include "l298n_internal.h"
+#include "controller_internal.h"
 
 namespace ruby_robot {
 

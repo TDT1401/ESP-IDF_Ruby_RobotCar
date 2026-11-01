@@ -33,10 +33,10 @@ robot/
 `config.h`; `main/CMakeLists.txt` chọn các file nguồn robot khi bật
 `CONFIG_BREAD_COMPACT_WIFI_LCD_L298N`.
 
-Bộ điều khiển dùng chung một trạng thái trong `l298n_internal.h`. Phần triển khai
+Bộ điều khiển dùng chung một trạng thái trong `controller_internal.h`. Phần triển khai
 được chia theo chức năng: `l298n_motor_driver.cc` xuất tín hiệu bánh xe,
-`l298n_motion_executor.cc` kết hợp encoder và IMU; bám theo và né vật cản nằm
-trong các file `l298n_follow.cc` và `l298n_obstacle_avoidance.cc`. Lệnh web và
+`motion_executor.cc` kết hợp encoder và IMU; bám theo và né vật cản nằm
+trong các file `follow.cc` và `obstacle_avoidance.cc`. Lệnh web và
 MCP có file nguồn riêng.
 
 Chạy kiểm thử trang điều khiển từ thư mục gốc dự án:
