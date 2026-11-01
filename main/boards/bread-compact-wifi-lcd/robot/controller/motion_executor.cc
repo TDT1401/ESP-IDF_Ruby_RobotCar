@@ -147,7 +147,7 @@ void L298nController::UpdateDistanceMoveLocked() {
     const double right_cm =
         std::max(0.0, (encoder.right.distance_m - distance_move_start_right_m_) * 100.0);
     if (!angle_turn_) {
-        distance_move_progress_cm_ = std::min(left_cm, right_cm);
+        distance_move_progress_cm_ = std::min(left_cm, right_cm) / ROBOT_STRAIGHT_DISTANCE_SCALE;
     }
     const double per_wheel_target_cm =
         ROBOT_TRACK_WIDTH_MM / 20.0 * turn_target_degrees_ * kPi / 180.0;
@@ -306,8 +306,8 @@ void L298nController::Tick() {
     if (brake_active_)
         return;
     UpdateDistanceSpeedProfileLocked(now);
-    UpdateSpeedPiLocked(now);
     UpdateYawControlLocked(now);
+    UpdateSpeedPiLocked(now);
     if (web_session_ != 0 && (now >= web_deadline_us_ || !MotionAllowed())) {
         EndWebControlLocked();
     }
@@ -446,7 +446,7 @@ bool L298nController::ApplySpeedLocked() {
                esp_timer_get_time() < speed_pi_startup_until_us_) {
         left = right = std::max(base_speed, kSpeedPiStartupPwmPercent);
     }
-    if (heading_hold_active_ && imu_ready_ && !web_joystick_active_ &&
+    if (!speed_pi_active_ && heading_hold_active_ && imu_ready_ && !web_joystick_active_ &&
         (motion_ == Motion::kForward || motion_ == Motion::kBackward)) {
         const int correction = motion_ == Motion::kForward ? heading_correction_percent_
                                                            : -heading_correction_percent_;
@@ -484,10 +484,19 @@ void L298nController::UpdateSpeedPiLocked(int64_t now) {
         CalibratedRpmAtPwm(requested_pwm, kLeftRpmAtPwm50, kLeftRpmAtPwm70);
     const double right_curve_rpm =
         CalibratedRpmAtPwm(requested_pwm, kRightRpmAtPwm50, kRightRpmAtPwm70);
-    const double target_rpm = (left_curve_rpm + right_curve_rpm) * 0.5;
+    const double base_rpm = (left_curve_rpm + right_curve_rpm) * 0.5;
+    // Outer heading PD asks for a wheel-speed difference; each wheel PI tracks it.
+    const double steering_pwm = heading_hold_active_ && imu_ready_
+                                    ? (motion_ == Motion::kForward ? heading_correction_percent_
+                                                                   : -heading_correction_percent_)
+                                    : 0;
+    const double steering_rpm =
+        steering_pwm * (kLeftRpmAtPwm70 - kLeftRpmAtPwm50 + kRightRpmAtPwm70 - kRightRpmAtPwm50) /
+        40.0;
+    const double target_rpm[] = {base_rpm - steering_rpm, base_rpm + steering_rpm};
     const double feed_forward[] = {
-        CalibratedPwmForRpm(target_rpm, kLeftRpmAtPwm50, kLeftRpmAtPwm70),
-        CalibratedPwmForRpm(target_rpm, kRightRpmAtPwm50, kRightRpmAtPwm70)};
+        CalibratedPwmForRpm(target_rpm[0], kLeftRpmAtPwm50, kLeftRpmAtPwm70),
+        CalibratedPwmForRpm(target_rpm[1], kRightRpmAtPwm50, kRightRpmAtPwm70)};
     const double measured_rpm[] = {encoder.left.rpm, encoder.right.rpm};
     int outputs[2] = {};
     const double dt = speed_pi_last_update_us_ == 0
@@ -501,7 +510,7 @@ void L298nController::UpdateSpeedPiLocked(int64_t now) {
             speed_pi_integral_[i] = 0;
             continue;
         }
-        const double error = target_rpm - measured_rpm[i];
+        const double error = target_rpm[i] - measured_rpm[i];
         const double candidate_integral = std::clamp(speed_pi_integral_[i] + error * dt,
                                                      -kSpeedPiIntegralLimit, kSpeedPiIntegralLimit);
         const double raw_output =
@@ -515,7 +524,7 @@ void L298nController::UpdateSpeedPiLocked(int64_t now) {
         outputs[i] = static_cast<int>(std::lround(limited_output));
     }
 
-    speed_pi_target_rpm_ = target_rpm;
+    speed_pi_target_rpm_ = base_rpm;
     speed_pi_output_percent_[0] = outputs[0];
     speed_pi_output_percent_[1] = outputs[1];
     speed_pi_last_update_us_ = now;

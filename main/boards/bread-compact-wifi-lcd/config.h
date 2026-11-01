@@ -72,6 +72,9 @@
 #define MOTOR_RIGHT_EN_PIN GPIO_NUM_13
 // Effective track width for in-place turns, calibrated on the floor.
 #define ROBOT_TRACK_WIDTH_MM 110.0
+// Straight-distance calibration. With the previous 0.83 scale, commands of
+// 50/100/200 cm traveled about 60/110/210 cm; 0.78 balances those measurements.
+#define ROBOT_STRAIGHT_DISTANCE_SCALE 0.78
 
 // HC-SR04 uses 5 V power. ECHO must be level-shifted to 3.3 V before this GPIO.
 #define HCSR04_TRIGGER_PIN GPIO_NUM_14

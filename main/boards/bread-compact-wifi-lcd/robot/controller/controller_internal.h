@@ -107,6 +107,7 @@ constexpr bool kSpeedPiCalibrationValid =
     FC03_RIGHT_PULSES_PER_REV > 0 && FC03_LEFT_WHEEL_DIAMETER_MM > 0 &&
     FC03_RIGHT_WHEEL_DIAMETER_MM > 0;
 static_assert(ROBOT_TRACK_WIDTH_MM > 0);
+static_assert(ROBOT_STRAIGHT_DISTANCE_SCALE > 0);
 #else
 constexpr double kLeftRpmAtPwm50 = 0;
 constexpr double kLeftRpmAtPwm70 = 0;
