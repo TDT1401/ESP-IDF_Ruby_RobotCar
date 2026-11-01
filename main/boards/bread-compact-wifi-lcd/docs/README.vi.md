@@ -6,45 +6,26 @@ Bo mạch ESP32-S3-N16R8, microphone I2S, MAX98357A và màn hình TFT SPI.
 
 ## Chức năng
 
-- Trợ lý giọng nói.
-- Chế độ follow.
-- Chế độ tự hành né vật cản.
-- Điều khiển thủ công bằng web với chế độ HUD.
-- Điều khiển web tại `http://<IP-robot>:8080`.
-- Đo khoảng cách vật cản theo thời gian thực.
-- Hai FC-03: đếm xung, đo RPM và cho phép xe tiến/lùi theo quãng đường.
-- MPU6050 cung cấp phản hồi hướng bắt buộc khi chạy theo quãng đường và quay theo góc.
-- Telegram.
+- Trợ lý giọng nói, lái thủ công qua web/HUD, trạng thái và lệnh dừng qua Telegram.
+- Điều khiển PWM trực tiếp cho tiến, lùi và xoay bằng L298N.
+- HC-SR04 đo khoảng cách; FC-03 báo xung/RPM; MPU6050 báo tốc độ quay Z.
+
+Tạm ngừng lệnh đi theo quãng đường, quay theo góc, giữ hướng PD, tốc độ PI,
+follow và tự hành né vật cản trong lúc thiết kế lại bộ điều khiển. Mất lệnh web
+trong 600 ms sẽ dừng motor.
 
 ## Cấu trúc mã nguồn
 
-Các chức năng robot được nhóm trong `robot/`:
+Mã robot nằm trong `robot/`. `l298n_motor_driver.cc` xuất PWM,
+`motion_executor.cc` quản lý thời điểm bắt đầu/dừng lệnh thủ công,
+`web_control.cc` quản lý phiên web. Các sensor chỉ cung cấp số đo, không
+điều chỉnh PWM. Chân GPIO nằm trong `config.h`.
 
-```text
-robot/
-├── controller/  # Đầu ra bánh xe, chuyển động đo được, tự hành và công cụ MCP
-├── sensors/     # Encoder FC-03, HC-SR04 và MPU6050
-├── web/         # HTTP server và trang điều khiển nhúng
-├── telegram/    # Tích hợp Telegram, nội dung tin nhắn và cấu hình cá nhân
-└── tests/       # Kiểm thử hồi quy trang điều khiển
-```
-
-`compact_wifi_board_lcd.cc` khởi tạo các module này. Chân GPIO vẫn nằm trong
-`config.h`; `main/CMakeLists.txt` chọn các file nguồn robot khi bật
-`CONFIG_BREAD_COMPACT_WIFI_LCD_L298N`.
-
-Bộ điều khiển dùng chung một trạng thái trong `controller_internal.h`. Phần triển khai
-được chia theo chức năng: `l298n_motor_driver.cc` xuất tín hiệu bánh xe,
-`motion_executor.cc` kết hợp encoder và IMU; bám theo và né vật cản nằm
-trong các file `follow.cc` và `obstacle_avoidance.cc`. Lệnh web và
-MCP có file nguồn riêng.
-
-Chạy kiểm thử trang điều khiển từ thư mục gốc dự án:
+Chạy kiểm thử trang web từ thư mục gốc:
 
 ```sh
 node --test main/boards/bread-compact-wifi-lcd/robot/tests/web_page_test.cjs
 ```
-
 ## Component
 
 | Số lượng | Linh kiện                 | Ghi chú        |
@@ -165,41 +146,10 @@ Cấu hình I2S simplex hiện tại còn trống GPIO4 và GPIO5 cho IMU. Khôn
 
 Điện trở kéo lên SDA/SCL phải nối lên 3,3 V, tuyệt đối không kéo lên 5 V. Nhiều module đã có sẵn điện trở kéo lên. GPIO4/5 thuộc cấu hình I2S duplex thay thế, nên cần đổi chân I²C nếu chuyển chế độ âm thanh. Nếu AD0 nối 3V3, đổi `MPU6050_I2C_ADDRESS` trong [config.h](../config.h) thành `0x69`.
 
-Gắn module nằm ngang, cố định chắc gần giữa khung xe, mặt linh kiện hướng lên.
-Giữ xe đứng yên khoảng hai giây sau khi bật nguồn để hiệu chuẩn gyro. Firmware đọc gyro Z
-trong task riêng, kết hợp với quãng đường có dấu từ hai FC-03 để ước lượng hướng, bù PWM
-hai bên khi chạy thẳng và dùng góc đo được để phanh lượt quay đúng lúc.
-
-Chạy theo quãng đường và quay theo góc yêu cầu cả encoder đã hiệu chuẩn lẫn IMU sẵn sàng.
-Nếu một cảm biến mất dữ liệu trong lúc chạy, xe dừng thay vì đổi cách ước lượng.
-Xem `imu_ready`, `imu_error`, `imu_axis_mismatch`,
-`heading_degrees`, `gyro_z_dps`, `heading_hold_active` và `turn_uses_imu` tại `/api/status`
-hoặc `self.motor.get_state`. `heading_degrees` là góc tương đối từ lúc khởi động;
-`turn_uses_imu` cho biết lượt quay dùng IMU đã bắt đầu hay đang hoạt động. Khi xe rẽ trái,
-`heading_degrees` phải tăng; nếu trục Z ngược,
-xe dừng quay và đặt `imu_axis_mismatch`. Khi đó kiểm tra chiều gắn module và
-`MPU6050_GYRO_Z_SIGN` trong `config.h`.
-
-Trong Serial Monitor, lọc tag `MPU6050`. Lúc khởi động, firmware in chân SDA/SCL, kết quả
-thăm dò hai địa chỉ `0x68` và `0x69`, rồi giá trị thanh ghi `WHO_AM_I`. Firmware chấp nhận
-`0x68` của MPU-6050 và `0x70` của IMU tương thích MPU-6500; nếu module ghi MPU6050 nhưng
-trả `0x70`, monitor sẽ báo rõ và vẫn đọc gyro Z theo các thanh ghi tương thích.
-Sau đó monitor in kết quả hiệu chuẩn. Nếu cả hai địa chỉ không phản hồi, kiểm tra nguồn 3V3, GND chung,
-thứ tự SDA/SCL và điện trở kéo lên. Nếu chỉ `0x69` phản hồi, AD0 đang ở mức cao: đổi
-`MPU6050_I2C_ADDRESS` thành `0x69` hoặc kéo AD0 xuống GND. Sau khi sẵn sàng, log in tốc độ
-quay Z mỗi 5 giây. Lỗi đọc I²C rời rạc được tổng hợp theo 5 giây; nếu lỗi liên tiếp từ
-5 lần, monitor báo ngay. Nếu mất mẫu quá lâu khi đang quay bằng IMU, xe sẽ dừng.
-
-Không lắp đèn và GPIO18 không dùng được, nên các công cụ MCP điều khiển đèn đã bị tắt.
-Các lượt quay theo góc dùng IMU giữ tốc độ quay đã chọn cho đến 25° cuối, rồi giảm dần
-PWM xuống tối thiểu 55% gần góc đích. Nếu motor kêu mà không quay ở mức này, kiểm tra
-nguồn motor, dây, L298N và bánh xe trước khi thử tiếp.
-Điện trở kéo lên SDA/SCL chỉ phục vụ giao tiếp I²C: thiếu chúng có thể làm mất mẫu IMU,
-nhưng không trực tiếp làm motor thiếu lực quay. Dừng thử nếu motor chỉ kêu mà không quay.
-Cần chạy thử trên sàn để chỉnh `kTurnSlowdownWindowDegrees`, `kTurnStopLeadSeconds`,
-`kTurnKp`, `kTurnKd`, `kHeadingKp`
-và `kHeadingKd` trong `robot/controller/l298n_controller.cc`.
-
+Gắn module chắc chắn và giữ xe đứng yên khoảng hai giây sau khi bật nguồn để
+hiệu chuẩn gyro. `gyro_z_dps`, `imu_ready` và `imu_error` cho biết dữ liệu gyro
+thô. Firmware hiện không tính heading và không dùng IMU/FC-03 để sửa PWM.
+Nút xoay trái/phải quay hai motor ngược chiều bằng PWM cố định, không đo góc đích.
 ## Build và Flash
 
 Dùng ESP-IDF 6.1 (tối thiểu 6.0.1). Đây là lệnh build duy nhất cho board này: màn
@@ -222,20 +172,11 @@ idf.py -p <CONG_SERIAL> flash monitor
   `http://192.168.4.1` để cấu hình lại.
 - Để bật log microphone, đặt `MIC_DEBUG` thành `1` trong `config.h`, rồi build và flash lại firmware.
 
-Để xe tiến 50 cm, nói “tiến 50 cm” hoặc gọi MCP `self.motor.forward_distance` với
-`distance_cm=50`; lùi dùng `self.motor.backward_distance`. Xe dừng khi cả hai bánh đạt
-mốc đo, hoặc dừng sớm nếu thiếu xung, lỗi cảm biến hay quá hạn an toàn theo quãng đường.
-Khi tiến, xe cũng dừng nếu HC-SR04 phát hiện vật cản quá gần. `self.motor.get_state`
-và `/api/status` trả `distance_move_state`, `distance_move_target_cm` và
-`distance_move_progress_cm`. Lệnh trả về ngay khi bắt đầu; `completed` mới là đã đạt mốc.
-Số đo có thể lệch quãng đường thực do trượt bánh và sai số hiệu chuẩn.
-Các lệnh MCP ngắn `self.motor.forward` và `self.motor.backward` cũng chạy theo
-quãng đường đo; `self.motor.left` và `self.motor.right` quay theo góc đo.
-Đã bỏ cử chỉ motor chạy theo thời gian. Nút điều khiển web và joystick vẫn chạy
-trong lúc giữ lệnh, với cơ chế tự dừng khi mất phiên 600 ms.
-Lệnh chạy theo quãng đường bắt đầu từ mức PWM tối thiểu 50%, rồi giảm tốc trong 8 cm cuối.
-Quãng đường ngắn dùng profile tăng giảm tốc hình tam giác.
-
+Dùng trang web tại `http://<IP-robot>:8080` để lái bằng nút giữ hoặc joystick.
+Khi tiến/lùi, hai motor nhận cùng phần trăm PWM; xe chưa tự giữ thẳng. Thả nút,
+dừng bằng lệnh hoặc mất phiên web 600 ms thì motor dừng. MCP còn
+`self.motor.stop` và `self.motor.get_state` để xem PWM
+và dữ liệu cảm biến thô. Các lệnh theo cm/góc, follow và né vật cản hiện không hoạt động.
 ## Cấu hình Telegram
 
 1. Tạo bot với [@BotFather](https://t.me/BotFather), lấy Bot Token.

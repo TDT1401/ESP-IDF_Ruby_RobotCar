@@ -69,15 +69,6 @@ std::string LowerAscii(std::string text) {
     return text;
 }
 
-bool ParseUnsigned(const std::string& text, int maximum, int& value) {
-    if (text.empty() || text.size() > std::to_string(maximum).size() ||
-        text.find_first_not_of("0123456789") != std::string::npos) {
-        return false;
-    }
-    value = std::atoi(text.c_str());
-    return value <= maximum;
-}
-
 const char* RssiQuality(int rssi) {
     if (rssi >= -55)
         return L298nTelegramText::kRssiExcellent;
@@ -128,10 +119,6 @@ std::string StatusMessage() {
         message += L298nTelegramText::kSr04NoEcho;
         message += "\n";
     }
-    message += L298nTelegramText::kFollowDistanceLabel;
-    message += std::to_string(motor.follow_distance_cm) + " cm\n";
-    message += L298nTelegramText::kObstacleDistanceLabel;
-    message += std::to_string(motor.obstacle_distance_cm) + " cm\n";
     message += "\n\n";
 
     message += L298nTelegramText::kDivider;
@@ -246,8 +233,6 @@ private:
     int64_t chat_id_ = 0;
     int64_t offset_ = -1;  // Discard the pre-boot backlog before announcing readiness.
     int64_t retry_at_us_ = 0;
-    int64_t distance_prompt_deadline_us_ = 0;
-    int pending_distance_direction_ = 0;  // 1 forward, -1 backward, 0 none.
     bool overflow_ = false;
 
     Telegram() = default;
@@ -440,94 +425,25 @@ private:
     }
 
     void HandleSpeed(const std::string& argument) {
-        if (argument.empty()) {
-            const auto motor = GetL298nMotorStatus();
-            Send(std::string(L298nTelegramText::kSpeedCurrentPrefix) + "<b>" +
-                     std::to_string(motor.speed_percent) + "%</b>\n" +
-                     L298nTelegramText::kActivePwmLabel + "<b>" +
-                     std::to_string(motor.active_speed_percent) + "%</b>\n\n" +
-                     L298nTelegramText::kSpeedUsage,
-                 true);
-            return;
-        }
-        // Accept one integer only; reject signs, decimals, extra arguments and overflow.
-        if (argument.size() > 3 || argument.find_first_not_of("0123456789") != std::string::npos) {
-            Send(L298nTelegramText::kSpeedUsage, true);
-            return;
-        }
-        const int speed = std::atoi(argument.c_str());
-        if (speed > 100) {
-            Send(L298nTelegramText::kSpeedUsage, true);
-            return;
-        }
-        const auto error = SetL298nMotorSpeed(speed);
-        if (error == ESP_ERR_INVALID_STATE) {
-            Send(L298nTelegramText::kSpeedWebBusy, true);
-        } else if (error != ESP_OK) {
-            Send(L298nTelegramText::kSpeedHardwareError, true);
-        } else {
-            Send(std::string(L298nTelegramText::kSpeedSetPrefix) + "<b>" + std::to_string(speed) +
-                     "%</b>\n" + L298nTelegramText::kSpeedSetFooter,
-                 true);
-        }
+        (void)argument;
+        Send(L298nTelegramText::kSpeedUnavailable, true);
     }
 
     void HandleDistanceMove(const std::string& argument, bool forward) {
-        int distance_cm = 0;
-        if (!ParseUnsigned(argument, 1000, distance_cm) || distance_cm < 1) {
-            Send(L298nTelegramText::kDistanceMoveUsage, true);
-            return;
-        }
-
-        const auto error = MoveL298nDistance(forward, distance_cm);
-        if (error == ESP_OK) {
-            Send(L298nTelegramText::kDistanceMoveAccepted, true);
-        } else if (error == ESP_ERR_INVALID_STATE && GetL298nMotorStatus().web_manual) {
-            Send(L298nTelegramText::kDistanceMoveWebBusy, true);
-        } else {
-            Send(L298nTelegramText::kDistanceMoveUnavailable, true);
-        }
+        (void)argument;
+        (void)forward;
+        Send(L298nTelegramText::kDistanceMoveUnavailable, true);
     }
 
     void HandleAutonomy(const std::string& raw_argument, bool follow) {
-        const std::string argument = LowerAscii(raw_argument);
-        const char* usage =
-            follow ? L298nTelegramText::kFollowUsage : L298nTelegramText::kAvoidUsage;
-        esp_err_t error = ESP_OK;
-        if (argument.empty()) {
-            Send(usage, true);
-            return;
-        }
-        if (argument == "off") {
-            error = follow ? SetL298nFollowMode(false) : SetL298nObstacleAvoidance(false);
-        } else if (argument == "on") {
-            error = follow ? SetL298nFollowMode(true) : SetL298nObstacleAvoidance(true);
-        } else {
-            int distance = 0;
-            const int maximum = follow ? 200 : 100;
-            const int minimum = 10;
-            if (!ParseUnsigned(argument, maximum, distance) || distance < minimum) {
-                Send(usage, true);
-                return;
-            }
-            error = follow ? SetL298nFollowDistance(distance) : SetL298nObstacleDistance(distance);
-            if (error == ESP_OK) {
-                error = follow ? SetL298nFollowMode(true) : SetL298nObstacleAvoidance(true);
-            }
-        }
-        if (error == ESP_OK) {
-            Send(StatusMessage(), true);
-        } else {
-            Send(L298nTelegramText::kAutonomyUnavailable, true);
-        }
+        (void)raw_argument;
+        (void)follow;
+        Send(L298nTelegramText::kAutonomyUnavailable, true);
     }
 
     void RequestDistanceInput(bool forward) {
-        pending_distance_direction_ = forward ? 1 : -1;
-        distance_prompt_deadline_us_ = esp_timer_get_time() + 60000000;
-        Send(forward ? L298nTelegramText::kForwardDistancePrompt
-                     : L298nTelegramText::kBackwardDistancePrompt,
-             true);
+        (void)forward;
+        Send(L298nTelegramText::kDistanceMoveUnavailable, true);
     }
 
     bool HandleButton(const std::string& input) {
@@ -536,53 +452,23 @@ private:
         } else if (input == "⬇️ Lùi theo cm") {
             RequestDistanceInput(false);
         } else if (input == "🎙️ Đánh thức") {
-            pending_distance_direction_ = 0;
-            distance_prompt_deadline_us_ = 0;
             HandleWake();
         } else if (input == "⏹️ Dừng xe") {
-            pending_distance_direction_ = 0;
-            distance_prompt_deadline_us_ = 0;
             StopL298nMotor();
             Send(L298nTelegramText::kEmergencyStopped, true);
         } else if (input == "👣 Bật Follow") {
-            pending_distance_direction_ = 0;
-            distance_prompt_deadline_us_ = 0;
             HandleAutonomy("on", true);
         } else if (input == "👣 Tắt Follow") {
-            pending_distance_direction_ = 0;
-            distance_prompt_deadline_us_ = 0;
             HandleAutonomy("off", true);
         } else if (input == "🚧 Bật né vật cản") {
-            pending_distance_direction_ = 0;
-            distance_prompt_deadline_us_ = 0;
             HandleAutonomy("on", false);
         } else if (input == "🚧 Tắt né vật cản") {
-            pending_distance_direction_ = 0;
-            distance_prompt_deadline_us_ = 0;
             HandleAutonomy("off", false);
         } else if (input == "📊 Trạng thái") {
-            pending_distance_direction_ = 0;
-            distance_prompt_deadline_us_ = 0;
             Send(StatusMessage(), true);
         } else if (input == "🌐 Mở trang web") {
-            pending_distance_direction_ = 0;
-            distance_prompt_deadline_us_ = 0;
             Send(WebMessage(), true);
-        } else if (input == "🐢 Tốc độ 50%") {
-            pending_distance_direction_ = 0;
-            distance_prompt_deadline_us_ = 0;
-            HandleSpeed("50");
-        } else if (input == "🚗 Tốc độ 75%") {
-            pending_distance_direction_ = 0;
-            distance_prompt_deadline_us_ = 0;
-            HandleSpeed("75");
-        } else if (input == "⚡ Tốc độ 100%") {
-            pending_distance_direction_ = 0;
-            distance_prompt_deadline_us_ = 0;
-            HandleSpeed("100");
         } else if (input == "📖 Trợ giúp") {
-            pending_distance_direction_ = 0;
-            distance_prompt_deadline_us_ = 0;
             Send(L298nTelegramText::kMenu, true);
         } else {
             return false;
@@ -609,35 +495,6 @@ private:
         if (HandleButton(command))
             return;
 
-        if (pending_distance_direction_ != 0) {
-            const bool digits_only =
-                !command.empty() && command.find_first_not_of("0123456789") == std::string::npos;
-            if (esp_timer_get_time() >= distance_prompt_deadline_us_) {
-                pending_distance_direction_ = 0;
-                distance_prompt_deadline_us_ = 0;
-                if (digits_only) {
-                    Send(L298nTelegramText::kDistanceInputExpired, true);
-                    return;
-                }
-            } else if (digits_only) {
-                const bool forward = pending_distance_direction_ > 0;
-                pending_distance_direction_ = 0;
-                distance_prompt_deadline_us_ = 0;
-                int distance_cm = 0;
-                if (ParseUnsigned(command, 1000, distance_cm) && distance_cm >= 1) {
-                    HandleDistanceMove(command, forward);
-                } else {
-                    Send(L298nTelegramText::kDistanceInputInvalid, true);
-                }
-                return;
-            } else if (command.empty() || command.front() != '/') {
-                Send(L298nTelegramText::kDistanceInputInvalid, true);
-                return;
-            } else {
-                pending_distance_direction_ = 0;
-                distance_prompt_deadline_us_ = 0;
-            }
-        }
         const auto end = command.find_first_of(" \r\n\t");
         std::string argument;
         if (end != std::string::npos) {
@@ -677,7 +534,7 @@ private:
             Send(L298nTelegramText::kMenu, true);
         else if (!command.empty() && command.front() == '/')
             Send(L298nTelegramText::kUnknownCommand, true);
-        // Plain chat messages are ignored; setting speed never starts motor movement.
+        // Plain chat messages are ignored.
     }
 
     bool Poll(bool discard) {
@@ -789,7 +646,6 @@ void InitializeL298nTelegram() { Telegram::Instance().Start(); }
 
 void UpdateL298nTelegramNetwork(bool connected) { Telegram::Instance().SetConnected(connected); }
 
-
 #else
 
 #include <esp_log.h>
@@ -804,6 +660,5 @@ void InitializeL298nTelegram() {
 }
 
 void UpdateL298nTelegramNetwork(bool connected) { (void)connected; }
-
 
 #endif

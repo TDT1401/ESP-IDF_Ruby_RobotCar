@@ -1,6 +1,6 @@
 #pragma once
 
-// Three-mode adaptation of the supplied Kylio Robot Car dashboard.
+// Manual PWM dashboard; autonomous controls are unavailable for now.
 // Self-contained: no CDN, filesystem, Arduino runtime or Internet connection required.
 inline constexpr char kL298nWebPage[] = R"html(
 <!doctype html>
@@ -15,6 +15,7 @@ inline constexpr char kL298nWebPage[] = R"html(
     body.ultra{--bg:#000;--panel:#070a12f2;--panel2:#090e18;--line:#192235}
 .feature-card{margin-top:18px;padding:16px;border:1px solid var(--line);border-radius:16px;background:var(--panel2)}.feature-card p{color:var(--muted)}.feature-card button{margin-right:8px}.feature-state{color:var(--cyan);font-weight:700}
     .feature-card input[type=text]{width:100%;margin:6px 0 12px;padding:11px;border:1px solid var(--line);border-radius:10px;background:#050a14;color:var(--text);font:inherit}
+    [hidden]{display:none!important}
     *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
     body{margin:0;min-height:100vh;overflow-x:hidden;background:radial-gradient(circle at 12% 4%,#1b4fff33,transparent 30%),radial-gradient(circle at 88% 22%,#8d3cff28,transparent 28%),linear-gradient(145deg,#060914,var(--bg) 48%,#070a16);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,sans-serif}
     body:before{position:fixed;inset:0;z-index:-1;background-image:linear-gradient(#5f7ba20c 1px,transparent 1px),linear-gradient(90deg,#5f7ba20c 1px,transparent 1px);background-size:32px 32px;content:"";mask-image:linear-gradient(to bottom,#000,transparent 80%)}
@@ -64,12 +65,13 @@ inline constexpr char kL298nWebPage[] = R"html(
       <div class="telemetry-copy"><span class="distance-label">KHOẢNG CÁCH VẬT CẢN</span><strong id="distance" class="distance">-- cm</strong></div><span id="sensorState" class="sensor-state error">Đang chờ SR04…</span>
     </div>
     <div id="modeNotice" class="notice" role="status" aria-live="polite"></div>
+    <p class="notice">Chỉ lái thủ công bằng PWM. Xe chưa tự giữ thẳng hoặc tự dừng theo quãng đường.</p>
     <div class="dashboard">
       <nav class="menu" aria-label="Chế độ điều khiển">
         <button id="manualTab" class="active">🏠 Home</button>
         <button id="hudTab">🚗 HUD</button>
-        <button id="avoidTab">🛡️ Né vật cản</button>
-        <button id="followTab">👣 Follow</button>
+        <button id="avoidTab" hidden>🛡️ Né vật cản</button>
+        <button id="followTab" hidden>👣 Follow</button>
       </nav>
       <section class="panel-shell">
         <article id="manualPanel" class="panel active">
@@ -77,9 +79,9 @@ inline constexpr char kL298nWebPage[] = R"html(
           <div class="portrait-manual">
             <div class="home-overview" aria-label="Thông tin thiết bị"><span>📶 <strong id="homeNetwork">Đang kiểm tra Wi-Fi…</strong></span><span>⏱ <strong id="homeUptime">--</strong></span><button id="refreshHome" type="button">Làm mới</button></div>
             <p id="homeUpdated" class="home-updated">Chưa có dữ liệu trạng thái.</p>
-            <section class="home-section"><h3>Thao tác nhanh</h3><p>Dừng khẩn cấp có hiệu lực cả khi xe đang tự hành hoặc lái trong HUD.</p><div class="home-actions"><button id="emergencyStop" class="danger" type="button">⏹ Dừng xe</button><button id="wakeRobot" type="button">🎙 Đánh thức Ruby</button></div><p id="status" role="status" aria-live="polite"></p></section>
-            <section class="home-section"><h3>Đi theo quãng đường</h3><p>Cần FC-03 đã hiệu chuẩn. Xe tự dừng ở đích; phía sau không có cảm biến vật cản.</p><div class="home-row"><label for="moveDistance">Quãng đường</label><input id="moveDistance" type="number" min="1" max="1000" step="1" value="30" inputmode="numeric"><span>cm</span></div><div class="home-row"><button id="moveForward" type="button">⬆ Tiến</button><button id="moveBackward" type="button">⬇ Lùi</button></div><p id="moveProgress" class="feature-state" aria-live="polite"></p></section>
-            <section class="home-section"><h3>Chế độ tự hành</h3><p>Bật một chế độ tại một thời điểm; chỉnh khoảng cách ở phần cấu hình bên dưới.</p><div class="home-row"><button id="homeFollowToggle" type="button" aria-pressed="false">Bật Follow</button><button id="homeAvoidToggle" type="button" aria-pressed="false">Bật né vật cản</button></div></section>
+            <section class="home-section"><h3>Thao tác nhanh</h3><p>Nút Dừng xe ngắt lệnh lái thủ công đang chạy trong HUD.</p><div class="home-actions"><button id="emergencyStop" class="danger" type="button">⏹ Dừng xe</button><button id="wakeRobot" type="button">🎙 Đánh thức Ruby</button></div><p id="status" role="status" aria-live="polite"></p></section>
+            <section class="home-section" hidden><h3>Đi theo quãng đường</h3><p>Cần FC-03 đã hiệu chuẩn. Xe tự dừng ở đích; phía sau không có cảm biến vật cản.</p><div class="home-row"><label for="moveDistance">Quãng đường</label><input id="moveDistance" type="number" min="1" max="1000" step="1" value="30" inputmode="numeric"><span>cm</span></div><div class="home-row"><button id="moveForward" type="button">⬆ Tiến</button><button id="moveBackward" type="button">⬇ Lùi</button></div><p id="moveProgress" class="feature-state" aria-live="polite"></p></section>
+            <section class="home-section" hidden><h3>Chế độ tự hành</h3><p>Bật một chế độ tại một thời điểm; chỉnh khoảng cách ở phần cấu hình bên dưới.</p><div class="home-row"><button id="homeFollowToggle" type="button" aria-pressed="false">Bật Follow</button><button id="homeAvoidToggle" type="button" aria-pressed="false">Bật né vật cản</button></div></section>
             <section id="encoderPanel" hidden aria-live="polite">
               <div class="status-grid">
                 <div class="status-card"><span>Xe đã đi · ước lượng từ lúc bật</span><strong id="encoderTravel">-- m</strong></div>
@@ -89,16 +91,16 @@ inline constexpr char kL298nWebPage[] = R"html(
               <p id="encoderWheels" class="encoder-note">Quãng đường bánh trái/phải: -- / -- m</p>
               <p id="encoderState" class="encoder-note">Đang chờ FC-03…</p>
             </section>
-            <details class="home-section home-detail"><summary>Cấu hình &amp; công cụ nâng cao</summary>
-            <section class="feature-card"><h3>Tốc độ dùng chung</h3><p>Áp dụng cho giọng nói, Telegram, tự hành và lệnh theo cm; không đổi tốc độ HUD. Đặt 0 để dừng motor.</p><div class="home-row"><label for="sharedSpeed">PWM</label><input id="sharedSpeed" type="number" min="0" max="100" step="1" value="75" inputmode="numeric"><span>%</span><button id="saveSharedSpeed" type="button">Áp dụng</button></div><p>Tốc độ đang đặt: <strong id="sharedSpeedState">--%</strong></p></section>
-            <h3>Thông số tự hành</h3>
-            <div class="config-grid">
+            <details class="home-section home-detail" hidden><summary>Cấu hình &amp; công cụ nâng cao</summary>
+            <section class="feature-card" hidden><h3>Tốc độ dùng chung</h3><p>Đặt mức PWM dùng cho motor; 0 để dừng. Điều khiển lái hiện dùng phiên web/HUD.</p><div class="home-row"><label for="sharedSpeed">PWM</label><input id="sharedSpeed" type="number" min="0" max="100" step="1" value="75" inputmode="numeric"><span>%</span><button id="saveSharedSpeed" type="button">Áp dụng</button></div><p>Tốc độ đang đặt: <strong id="sharedSpeedState">--%</strong></p></section>
+            <h3 hidden>Thông số tự hành</h3>
+            <div class="config-grid" hidden>
               <div class="config-card"><label for="followDistanceSetting">Khoảng cách Follow (cm)</label><input id="followDistanceSetting" type="number" min="10" max="200" step="1" value="30"></div>
               <div class="config-card"><label for="obstacleDistanceSetting">Ngưỡng né vật cản (cm)</label><input id="obstacleDistanceSetting" type="number" min="10" max="100" step="1" value="20"></div>
             </div>
-            <div class="config-actions"><button id="saveConfig" type="button">Lưu thông số</button><p class="config-hint">Áp dụng ngay trong firmware; giá trị sẽ về mặc định sau khi khởi động lại.</p></div>
+            <div class="config-actions" hidden><button id="saveConfig" type="button">Lưu thông số</button><p class="config-hint">Áp dụng ngay trong firmware; giá trị sẽ về mặc định sau khi khởi động lại.</p></div>
             </details>
-            <details class="home-section home-detail"><summary>Thông tin thiết bị &amp; trợ giúp</summary><p>Địa chỉ web: <strong id="homeIp">--</strong> · RAM trống: <strong id="homeRam">--</strong> KB.</p><p>Follow và né vật cản có tab riêng để xem trạng thái. Dùng HUD để lái liên tục; lệnh tiến/lùi theo cm tự dừng khi hoàn thành. Nút Dừng xe ngắt mọi chuyển động.</p></details>
+            <details class="home-section home-detail"><summary>Thông tin thiết bị &amp; trợ giúp</summary><p>Địa chỉ web: <strong id="homeIp">--</strong> · RAM trống: <strong id="homeRam">--</strong> KB.</p><p>Dùng HUD để lái thủ công. Nút Dừng xe ngắt mọi chuyển động. Lệnh theo cm và tự hành hiện chưa hoạt động.</p></details>
           </div>
           <div class="hud-rotate" aria-live="polite"><div class="hud-rotate-icon">↻</div><strong>Xoay ngang màn hình để trải nghiệm.</strong><p id="hudRotateStatus">Đang kết nối điều khiển xe…</p><div class="hud-rotate-actions"><button id="hudRotateStop" class="mode-off" type="button">⏹ Dừng xe</button><button id="hudRotateConnect" type="button">Kết nối lại</button><button id="hudRotateExit" type="button">Quay lại</button></div></div>
           <div class="landscape-hud" aria-label="Buồng lái ngang">
@@ -109,17 +111,17 @@ inline constexpr char kL298nWebPage[] = R"html(
             <section class="hud-bank"><span class="hud-bank-label">ĐIỀU HƯỚNG DỰ PHÒNG</span><div class="hud-controls"><button class="drive hud-drive" data-dir="f" disabled aria-label="Tiến">▲<small>Tiến</small></button><button class="drive hud-drive" data-dir="l" disabled aria-label="Xoay trái">◀<small>Trái</small></button><button class="drive hud-drive" data-dir="r" disabled aria-label="Xoay phải">▶<small>Phải</small></button><button class="drive hud-drive" data-dir="b" disabled aria-label="Lùi">▼<small>Lùi</small></button></div></section>
           </div>
         </article>
-        <article id="avoidPanel" class="panel">
+        <article id="avoidPanel" class="panel" hidden>
           <div class="panel-head"><div><h2>Né vật cản</h2><p class="subtitle">Xe tự tiến và xoay khi gặp vật cản.</p></div><span id="avoidStatus" class="mode-status">OFF</span></div>
           <div class="mode-card"><div class="mode-icon">🛡️</div><strong>Tự hành né vật cản</strong><p id="avoidDistance" class="subtitle">Ngưỡng 20 cm</p><div class="mode-actions"><button id="avoidOn" class="mode-on">BẬT</button><button id="avoidOff" class="mode-off">TẮT</button></div></div>
         </article>
-        <article id="followPanel" class="panel">
+        <article id="followPanel" class="panel" hidden>
           <div class="panel-head"><div><h2>Follow mode</h2><p class="subtitle">Xe bám mục tiêu ở khoảng cách đã đặt.</p></div><span id="followStatus" class="mode-status">OFF</span></div>
           <div class="mode-card"><div class="mode-icon">👣</div><strong>Bám khoảng cách mục tiêu</strong><p id="followDistance" class="subtitle">Mục tiêu 30 cm</p><div class="mode-actions"><button id="followOn" class="mode-on">BẬT</button><button id="followOff" class="mode-off">TẮT</button></div></div>
         </article>
       </section>
     </div>
-    <footer>Trong phiên HUD, motor chỉ nhận lệnh từ trang này; lệnh dừng bằng giọng nói vẫn có hiệu lực.<br>Mất kết nối sẽ dừng xe. Các thông số tự hành áp dụng trong phiên hoạt động hiện tại.</footer>
+    <footer>Điều khiển thủ công bằng PWM. Mất kết nối web sẽ dừng xe; lệnh dừng bằng giọng nói vẫn có hiệu lực.</footer>
   </main>
   <script>
     'use strict';

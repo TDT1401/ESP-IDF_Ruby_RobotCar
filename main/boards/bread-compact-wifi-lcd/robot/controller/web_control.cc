@@ -5,10 +5,6 @@ namespace ruby_robot {
 void L298nController::SetWebConnected(bool connected) {
     std::lock_guard lock(mutex_);
     web_connected_ = connected;
-    if (!connected && strcmp(control_owner_, "web") == 0 &&
-        (distance_move_state_ == DistanceMoveState::kPending ||
-         distance_move_state_ == DistanceMoveState::kMoving))
-        StopLocked();
     if (!connected && web_manual_) {
         EndWebControlLocked();
     }
@@ -27,7 +23,6 @@ esp_err_t L298nController::BeginWebControl(uint32_t* session) {
         EndWebControlLocked();
     if (fault_ != ESP_OK)
         return fault_;
-    DisableAutonomyLocked();
     StopLocked();
     if (fault_ != ESP_OK)
         return fault_;
@@ -109,10 +104,7 @@ esp_err_t L298nController::WebCommand(uint32_t session, uint32_t sequence, L298n
             left = left * 1000 / peak;
             right = right * 1000 / peak;
         }
-        // A full sideways stick gets the same turn power as a direction button;
-        // partial deflection still scales the output smoothly.
-        const int drive_speed =
-            joystick_y == 0 && joystick_x != 0 ? std::max(speed, kTurnSpeedPercent) : speed;
+        const int drive_speed = speed;
         left = left * drive_speed / 1000;
         right = right * drive_speed / 1000;
         web_speed_percent_ = drive_speed;
@@ -156,16 +148,9 @@ esp_err_t L298nController::WebCommand(uint32_t session, uint32_t sequence, L298n
 void L298nController::UpdateEmotion(const char* emotion, bool speaking) {
     std::lock_guard lock(mutex_);
     if (speaking && IsSleepEmotion(emotion)) {
-        response_active_ = true;
-        manual_override_ = true;
-        DisableAutonomyLocked();
         if (!web_manual_)
             StopLocked();
-        return;
     }
-    if (!speaking && response_active_)
-        manual_override_ = false;
-    response_active_ = speaking;
 }
 
 void L298nController::ReleaseWebSleepLockLocked() {
@@ -183,7 +168,6 @@ void L298nController::EndWebControlLocked() {
     web_deadline_us_ = 0;
     web_manual_ = false;
     ReleaseWebSleepLockLocked();
-    manual_override_ = response_active_;
     StopLocked();
 }
 

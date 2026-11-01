@@ -3,17 +3,10 @@
 namespace ruby_robot {
 
 void L298nController::StopOutputsLocked() {
-    brake_active_ = false;
     SetMpu6050MotorActive(false);
-    ResetSpeedPiLocked();
-    heading_hold_active_ = false;
-    heading_correction_percent_ = 0;
     applied_left_pwm_percent_ = 0;
     applied_right_pwm_percent_ = 0;
     encoder_.SetDrive(0, 0, esp_timer_get_time());
-    // A slipped wheel must not drag the resting heading back toward wheel odometry.
-    if (imu_ready_)
-        encoder_yaw_degrees_ = yaw_degrees_;
     // Disable both bridges before touching any direction pin. Attempt every
     // output even if an earlier operation fails. Stop means coast, not brake.
     Check(ledc_stop(kMode, kLeftChannel, 0));
@@ -136,7 +129,6 @@ bool L298nController::ApplyDirectionLocked() {
                                             invert_right);
     if (ok)
         encoder_.SetDrive(encoder_left, encoder_right, esp_timer_get_time());
-    ResetSpeedPiLocked();
     return ok;
 }
 

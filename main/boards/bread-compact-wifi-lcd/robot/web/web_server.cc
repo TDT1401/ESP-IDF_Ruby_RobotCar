@@ -189,8 +189,10 @@ esp_err_t Action(httpd_req_t* req) {
         !ReadInteger(json.get(), set_speed ? "speed" : "distance_cm", set_speed ? 0 : 1,
                      set_speed ? 100 : 1000, &value))
         return Reply(req, "400 Bad Request", "{\"error\":\"Invalid action\"}");
-    const auto error = set_speed ? SetL298nMotorSpeed(static_cast<int>(value))
+    const auto error = set_speed ? ESP_ERR_NOT_SUPPORTED
                                  : MoveL298nDistance(forward, static_cast<int>(value), "web");
+    if (error == ESP_ERR_NOT_SUPPORTED)
+        return Reply(req, "501 Not Implemented", "{\"error\":\"Action is disabled\"}");
     if (error != ESP_OK)
         return Reply(req, "409 Conflict", "{\"error\":\"Controller unavailable\"}");
     return Reply(req, "200 OK", "{\"ok\":true}");
@@ -205,6 +207,7 @@ esp_err_t Status(httpd_req_t* req) {
     using Json = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
     Json json(cJSON_CreateObject(), cJSON_Delete);
     if (!json || !cJSON_AddBoolToObject(json.get(), "distance_valid", motor.distance_valid) ||
+        !cJSON_AddStringToObject(json.get(), "control_mode", "manual_pwm") ||
         !cJSON_AddNumberToObject(json.get(), "distance_cm", motor.measured_distance_cm) ||
         !cJSON_AddStringToObject(json.get(), "autonomy_mode", motor.autonomy_mode) ||
         !cJSON_AddStringToObject(json.get(), "control_owner", motor.control_owner) ||
@@ -283,7 +286,7 @@ esp_err_t Autonomy(httpd_req_t* req) {
     else
         return Reply(req, "400 Bad Request", "{\"error\":\"Invalid autonomy mode\"}");
     if (error != ESP_OK)
-        return Reply(req, "409 Conflict", "{\"error\":\"Autonomy unavailable\"}");
+        return Reply(req, "501 Not Implemented", "{\"error\":\"Autonomous modes are disabled\"}");
     return Reply(req, "200 OK", "{\"ok\":true}");
 }
 
@@ -308,7 +311,8 @@ esp_err_t Configure(httpd_req_t* req) {
         return Reply(req, "400 Bad Request", "{\"error\":\"Invalid configuration\"}");
     if (SetL298nFollowDistance(static_cast<int>(follow_distance)) != ESP_OK ||
         SetL298nObstacleDistance(static_cast<int>(obstacle_distance)) != ESP_OK)
-        return Reply(req, "409 Conflict", "{\"error\":\"Configuration unavailable\"}");
+        return Reply(req, "501 Not Implemented",
+                     "{\"error\":\"Autonomous settings are disabled\"}");
     return Reply(req, "200 OK", "{\"ok\":true}");
 }
 

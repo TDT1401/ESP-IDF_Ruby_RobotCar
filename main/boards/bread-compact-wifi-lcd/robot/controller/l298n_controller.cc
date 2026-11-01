@@ -2,14 +2,6 @@
 
 namespace ruby_robot {
 
-const char* L298nController::ControlOwnerLocked() const {
-    if (web_manual_)
-        return "web";
-    if (autonomy_mode_ != AutonomyMode::kManual)
-        return "automatic";
-    return motion_ != Motion::kStop ? control_owner_ : "none";
-}
-
 L298nController& L298nController::Instance() {
     static L298nController controller;
     return controller;
@@ -17,8 +9,6 @@ L298nController& L298nController::Instance() {
 
 void L298nController::Stop() {
     std::lock_guard lock(mutex_);
-    manual_override_ = true;
-    DisableAutonomyLocked();
     web_session_ = 0;  // A spoken stop also invalidates in-flight browser commands.
     web_sequence_ = 0;
     web_deadline_us_ = 0;
@@ -27,67 +17,38 @@ void L298nController::Stop() {
     StopLocked();
 }
 
-esp_err_t L298nController::SetSpeedPercent(int speed) {
-    if (speed < 0 || speed > 100)
-        return ESP_ERR_INVALID_ARG;
-    std::lock_guard lock(mutex_);
-    if (web_manual_)
-        return ESP_ERR_INVALID_STATE;
-    manual_override_ = true;
-    speed_percent_ = speed;
-    if (speed == 0)
-        DisableAutonomyLocked();
-    if (speed == 0 ||
-        (deadline_us_ > 0 && motion_ != Motion::kStop && esp_timer_get_time() >= deadline_us_)) {
-        StopLocked();
-    } else if (moving_ && !ApplySpeedLocked()) {
-        StopLocked();
-    }
-    // Changing speed never extends a safety deadline or restarts stopped motors.
-    // Keep hardware faults distinct from argument/ownership errors; Snapshot retains details.
-    return fault_ == ESP_OK ? ESP_OK : ESP_FAIL;
-}
-
 L298nMotorStatus L298nController::Snapshot() {
     std::lock_guard lock(mutex_);
     const bool distance_fresh =
         sensor_valid_ && esp_timer_get_time() - last_sensor_update_us_ <= kSensorStaleMs * 1000LL;
-    return {MotionName(motion_),
-            speed_percent_,
-            moving_ ? ActiveSpeedLocked() : 0,
-            moving_,
-            motion_ != Motion::kStop && !moving_,
-            web_manual_,
-            AutonomyModeName(autonomy_mode_),
-            follow_distance_cm_,
-            obstacle_distance_cm_,
-            std::min(follow_distance_cm_, kFollowMaxTargetCm),
-            ScaleDistanceForSpeed(obstacle_distance_cm_, speed_percent_),
-            ScaleDistanceForSpeed(obstacle_distance_cm_, web_speed_percent_),
-            distance_fresh ? measured_distance_cm_ : -1,
-            distance_fresh,
-            avoid_state_ == AvoidState::kBlocked,
-            fault_,
-            encoder_.Snapshot(),
-            DistanceMoveStateName(distance_move_state_),
-            distance_move_target_cm_,
-            distance_move_progress_cm_,
-            turn_target_degrees_,
-            turn_progress_degrees_,
-            imu_ready_,
-            GetMpu6050Status().error,
-            imu_axis_mismatch_,
-            yaw_degrees_,
-            gyro_z_dps_,
-            heading_hold_active_ && imu_ready_,
-            turn_uses_imu_,
-            kSpeedPiCalibrationValid,
-            speed_pi_active_,
-            speed_pi_target_rpm_,
-            CurrentLeftPwmPercentLocked(),
-            CurrentRightPwmPercentLocked(),
-            ControlOwnerLocked(),
-            proximity_warning_enabled_};
+    const auto imu = GetMpu6050Status();
+    L298nMotorStatus status{};
+    status.motion = MotionName(motion_);
+    status.speed_percent = web_speed_percent_;
+    status.active_speed_percent = moving_ ? ActiveSpeedLocked() : 0;
+    status.moving = moving_;
+    status.pending = motion_ != Motion::kStop && !moving_;
+    status.web_manual = web_manual_;
+    status.autonomy_mode = "manual";
+    status.follow_distance_cm = kDefaultFollowDistanceCm;
+    status.obstacle_distance_cm = kDefaultObstacleDistanceCm;
+    status.follow_target_effective_cm = kDefaultFollowDistanceCm;
+    status.obstacle_stop_effective_cm = kDefaultObstacleDistanceCm;
+    status.web_warning_effective_cm =
+        ScaleDistanceForSpeed(kDefaultObstacleDistanceCm, web_speed_percent_);
+    status.measured_distance_cm = distance_fresh ? measured_distance_cm_ : -1;
+    status.distance_valid = distance_fresh;
+    status.hardware_error = fault_;
+    status.encoder = encoder_.Snapshot();
+    status.distance_move_state = "disabled";
+    status.imu_ready = imu.ready;
+    status.imu_error = imu.error;
+    status.gyro_z_dps = imu.gyro_z_dps;
+    status.left_pwm_percent = CurrentLeftPwmPercentLocked();
+    status.right_pwm_percent = CurrentRightPwmPercentLocked();
+    status.control_owner = web_manual_ ? "web" : "none";
+    status.warning_sound_enabled = proximity_warning_enabled_;
+    return status;
 }
 
 L298nController::L298nController() {
@@ -193,27 +154,35 @@ void SetL298nWebConnected(bool connected) {
 L298nMotorStatus GetL298nMotorStatus() { return L298nController::Instance().Snapshot(); }
 
 esp_err_t SetL298nMotorSpeed(int speed_percent) {
-    return L298nController::Instance().SetSpeedPercent(speed_percent);
+    (void)speed_percent;
+    return ESP_ERR_NOT_SUPPORTED;
 }
 
 esp_err_t MoveL298nDistance(bool forward, int distance_cm, const char* owner) {
-    return L298nController::Instance().MoveDistanceFromCommand(forward, distance_cm, owner);
+    (void)forward;
+    (void)distance_cm;
+    (void)owner;
+    return ESP_ERR_NOT_SUPPORTED;
 }
 
 esp_err_t SetL298nFollowMode(bool enabled) {
-    return L298nController::Instance().SetFollowMode(enabled);
+    (void)enabled;
+    return ESP_ERR_NOT_SUPPORTED;
 }
 
 esp_err_t SetL298nObstacleAvoidance(bool enabled) {
-    return L298nController::Instance().SetObstacleAvoidance(enabled);
+    (void)enabled;
+    return ESP_ERR_NOT_SUPPORTED;
 }
 
 esp_err_t SetL298nFollowDistance(int distance_cm) {
-    return L298nController::Instance().SetFollowDistance(distance_cm);
+    (void)distance_cm;
+    return ESP_ERR_NOT_SUPPORTED;
 }
 
 esp_err_t SetL298nObstacleDistance(int distance_cm) {
-    return L298nController::Instance().SetObstacleDistance(distance_cm);
+    (void)distance_cm;
+    return ESP_ERR_NOT_SUPPORTED;
 }
 
 void StopL298nMotor() { L298nController::Instance().Stop(); }

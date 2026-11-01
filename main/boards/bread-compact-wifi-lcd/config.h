@@ -70,11 +70,6 @@
 #define MOTOR_RIGHT_IN1_PIN GPIO_NUM_11
 #define MOTOR_RIGHT_IN2_PIN GPIO_NUM_12
 #define MOTOR_RIGHT_EN_PIN GPIO_NUM_13
-// Effective track width for in-place turns, calibrated on the floor.
-#define ROBOT_TRACK_WIDTH_MM 110.0
-// Straight-distance calibration. With the previous 0.83 scale, commands of
-// 50/100/200 cm traveled about 60/110/210 cm; 0.78 balances those measurements.
-#define ROBOT_STRAIGHT_DISTANCE_SCALE 0.78
 
 // HC-SR04 uses 5 V power. ECHO must be level-shifted to 3.3 V before this GPIO.
 #define HCSR04_TRIGGER_PIN GPIO_NUM_14
@@ -89,17 +84,10 @@
 // Calibration: count rising edges during ONE complete WHEEL revolution.
 // Include the gearbox ratio if the encoder disc is on the motor shaft.
 // Zero means unknown: raw pulse counts work, but metres/RPM remain unavailable.
-#define FC03_LEFT_PULSES_PER_REV 20.3
-#define FC03_RIGHT_PULSES_PER_REV 20.8
+#define FC03_LEFT_PULSES_PER_REV 18.64
+#define FC03_RIGHT_PULSES_PER_REV 19.09
 #define FC03_LEFT_WHEEL_DIAMETER_MM 60.0
 #define FC03_RIGHT_WHEEL_DIAMETER_MM 60.0
-
-// Enter steady wheel RPM at 50% and 70% PWM to enable per-side PI. Measure on the floor,
-// with the normal battery and load, after speed has settled. Zero keeps PI disabled.
-#define FC03_LEFT_RPM_AT_PWM_50 183.3
-#define FC03_LEFT_RPM_AT_PWM_70 280.1
-#define FC03_RIGHT_RPM_AT_PWM_50 172.4
-#define FC03_RIGHT_RPM_AT_PWM_70 269.5
 
 // PCNT rejects pulses shorter than this (ESP32-S3: keep <= 12000 ns).
 #define FC03_GLITCH_FILTER_NS 10000

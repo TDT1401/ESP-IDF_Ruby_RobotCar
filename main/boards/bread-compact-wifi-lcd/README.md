@@ -8,45 +8,26 @@ The configured board uses an ESP32-S3-N16R8, I2S microphone, MAX98357A amplifier
 
 ## Capabilities enabled on this board
 
-- Voice assistant.
-- Follow mode.
-- Autonomous obstacle avoidance.
-- Manual web control with a HUD.
-- Web control at `http://<IP-address>:8080`.
-- Real-time obstacle distance measurement.
-- Two FC-03 encoders: wheel pulses, RPM and measured forward/backward moves.
-- MPU6050 heading feedback required for measured straight travel and angle turns.
-- Telegram integration.
+- Voice assistant, manual web/HUD driving, and Telegram status and stop commands.
+- Direct PWM output through L298N for forward, backward, and turns.
+- HC-SR04 distance, FC-03 wheel pulses/RPM, and raw MPU6050 gyro telemetry.
+
+Measured distance moves, measured angle turns, heading hold, speed PI, follow mode,
+and autonomous obstacle avoidance are disabled while the control architecture is redesigned.
+The web session watchdog stops the motors after 600 ms without a valid command.
 
 ## Source layout
 
-Robot features are grouped under `robot/`:
-
-```text
-robot/
-├── controller/  # Wheel output, measured motion, autonomous behavior and MCP tools
-├── sensors/     # FC-03 encoders, HC-SR04 and MPU6050
-├── web/         # HTTP server and embedded control page
-├── telegram/    # Telegram integration, messages and local configuration
-└── tests/       # Browser control regression tests
-```
-
-`compact_wifi_board_lcd.cc` initializes these modules. Board pins remain in
-`config.h`; `main/CMakeLists.txt` selects the robot sources when
-`CONFIG_BREAD_COMPACT_WIFI_LCD_L298N` is enabled.
-
-The controller keeps one shared state in `controller_internal.h`. Its implementation
-is split by function: `l298n_motor_driver.cc` writes wheel outputs,
-`motion_executor.cc` combines encoder and IMU feedback, and separate
-`follow.cc` and `obstacle_avoidance.cc` files implement autonomous
-behaviors. Web and MCP commands have their own source files.
+Robot code is under `robot/`. The controller uses `l298n_motor_driver.cc` for wheel
+outputs, `motion_executor.cc` for manual command timing, and `web_control.cc` for
+the browser session. Sensor tasks report telemetry but do not control wheel PWM.
+Board pins remain in `config.h`; `main/CMakeLists.txt` selects the sources.
 
 Run the browser tests from the repository root:
 
 ```sh
 node --test main/boards/bread-compact-wifi-lcd/robot/tests/web_page_test.cjs
 ```
-
 ## Components
 
 | Quantity | Component                  | Notes             |
@@ -168,29 +149,11 @@ The current simplex I2S configuration leaves GPIO4 and GPIO5 available for the I
 
 Keep the I²C pull-ups at 3.3 V; never pull SDA or SCL up to 5 V. Many breakout boards already include pull-ups. GPIO4/5 are dedicated to the MPU6050 in this configuration. If AD0 is tied to 3V3, change `MPU6050_I2C_ADDRESS` in [config.h](config.h) to `0x69`.
 
-Mount the module flat and firmly near the centre of the chassis, component side up.
-Keep the car still for about two seconds after boot while the gyro calibrates. The firmware
-samples gyro Z in a separate task, combines it with signed FC-03 wheel travel for heading,
-corrects straight travel with differential PWM, and brakes measured angle turns near the target.
-The driver accepts MPU-6050 identity `0x68` and MPU-6500-compatible identity `0x70`; the
-monitor logs which identity the connected module reports.
-
-Measured travel and angle turns require both calibrated encoders and a ready IMU.
-If either sensor fails during a measured movement, the car stops instead of changing
-measurement modes. Read `imu_ready`, `imu_error`, `imu_axis_mismatch`,
-`heading_degrees`, `gyro_z_dps`, `heading_hold_active`, and `turn_uses_imu` from
-`/api/status` or `self.motor.get_state`. `heading_degrees` is relative to startup;
-`turn_uses_imu` reports whether an IMU controlled turn is active or was last started.
-A left turn should increase `heading_degrees`; a reversed Z axis stops the turn and sets
-`imu_axis_mismatch`. Check the mounting and `MPU6050_GYRO_Z_SIGN` in `config.h` if needed.
-
-No lamp is connected and GPIO18 is unavailable, so the unused lamp MCP tools are disabled.
-IMU angle turns keep their cruising PWM until the final 25 degrees, then ramp down to
-at least 55% near the target. Test the final angle on the floor and adjust braking if
-needed. Physical floor tests are needed to tune `kTurnSlowdownWindowDegrees`,
-`kTurnStopLeadSeconds`, `kTurnKp`, `kTurnKd`, `kHeadingKp`, and
-`kHeadingKd` in `robot/controller/l298n_controller.cc`.
-
+Mount the module flat and keep the car still for about two seconds after boot while
+the gyro calibrates. The firmware reports raw gyro Z rate through `gyro_z_dps`,
+`imu_ready`, and `imu_error`. It does not calculate heading or use IMU data to
+correct motor PWM. FC-03 values are telemetry only. A left/right button rotates
+the motors in opposite directions at fixed PWM; it does not target an angle.
 ## Build and Flash
 
 Use ESP-IDF 6.1 (minimum 6.0.1). This is the only build command for this board: it selects
@@ -212,21 +175,12 @@ idf.py -p <SERIAL_PORT> flash monitor
 - To change the saved Wi-Fi network, hold `BOOT` for about 3 seconds while the device is running, then open `http://192.168.4.1` to configure Wi-Fi again.
 - To enable microphone logging, set `MIC_DEBUG` to `1` in `config.h`, then rebuild and flash the firmware.
 
-To drive forward 50 cm, say “move forward 50 cm” or call MCP
-`self.motor.forward_distance` with `distance_cm=50`; use `self.motor.backward_distance`
-to reverse. The motors stop when both wheels reach the target, or earlier on missing
-pulses, sensor failure, or a distance-scaled safety timeout. Forward travel also
-stops if HC-SR04 detects a nearby obstacle. `self.motor.get_state` and `/api/status`
-report `distance_move_state`, `distance_move_target_cm`, and `distance_move_progress_cm`.
-The tool returns when motion starts; `completed` confirms the measured target was reached.
-Wheel slip and calibration error can change the real travel distance.
-The short MCP names `self.motor.forward` and `self.motor.backward` now use the same
-measured distance command; `self.motor.left` and `self.motor.right` use a measured
-angle. Motor gestures based on fixed run times have been removed. Web drive buttons
-and the joystick remain held controls with a 600 ms connection watchdog.
-Distance moves start at a 50% PWM floor and begin slowing over the final 8 cm.
-Short moves use a triangular speed profile.
-
+Use the web page at `http://<IP-address>:8080` to drive manually with held
+buttons or the joystick. Forward and backward apply the same PWM to both
+motors without heading or speed feedback. Release the control or lose the web
+session for 600 ms and the motors stop. `self.motor.stop` remains available;
+`self.motor.get_state` reports PWM and
+raw sensor telemetry. Distance, angle, follow, and avoid commands are unavailable.
 ## Telegram Configuration
 
 1. Create a bot with [@BotFather](https://t.me/BotFather) and get its bot token.

@@ -9,38 +9,37 @@
 // Board-lifetime controller; call once after the LCD backlight is initialized.
 void InitializeL298nController();
 
-// Called only after initialization. Sleep expressions stop autonomous motion.
+// Legacy board callback; an active browser drive keeps its own safety deadline.
 void UpdateL298nEmotion(const char* emotion, bool speaking);
 
 enum class L298nWebCommand { kStop, kForward, kBackward, kLeft, kRight, kJoystick, kRelease };
 
 // Thread-safe board-local API. A single browser owns a renewable 600 ms session.
-// Expiry or network loss stops motors, invalidates the session and returns control to voice.
+// Expiry or network loss stops motors and invalidates the session.
 esp_err_t BeginL298nWebControl(uint32_t* session);
 esp_err_t CommandL298nWebControl(uint32_t session, uint32_t sequence, L298nWebCommand command,
                                  int speed_percent, bool proximity_warning_enabled,
                                  int joystick_x = 0, int joystick_y = 0);
 void SetL298nWebConnected(bool connected);
 
-// Thread-safe shared voice/Telegram speed setting (RAM only, 0..100 PWM percent).
-// Applies to active movement without extending its safety deadline; never starts motion.
-// Zero stops. Returns ESP_ERR_INVALID_STATE while web manual control owns the motors.
-// ESP_ERR_INVALID_ARG rejects out-of-range values; ESP_FAIL reports a hardware fault.
+// Compatibility entry point: only the web control command can set manual PWM.
+// Always returns ESP_ERR_NOT_SUPPORTED.
 esp_err_t SetL298nMotorSpeed(int speed_percent);
 
-// Start an encoder-controlled straight-line move with required IMU heading hold.
-// Distance is 1..1000 cm; forward movement also observes the obstacle stop threshold.
+// Compatibility entry point: measured-distance moves are disabled.
+// Always returns ESP_ERR_NOT_SUPPORTED and never starts a motor.
 esp_err_t MoveL298nDistance(bool forward, int distance_cm, const char* owner = "telegram");
 
-// Thread-safe HC-SR04 autonomous modes. Modes are mutually exclusive and RAM-only.
-// Disabling either active mode stops the motors. Manual/web movement also disables autonomy.
+// Compatibility entry points: autonomous modes and their settings are disabled.
+// Always return ESP_ERR_NOT_SUPPORTED.
 esp_err_t SetL298nFollowMode(bool enabled);
 esp_err_t SetL298nObstacleAvoidance(bool enabled);
 esp_err_t SetL298nFollowDistance(int distance_cm);
 esp_err_t SetL298nObstacleDistance(int distance_cm);
 void StopL298nMotor();
 
-// Read-only snapshot. PWM/moving describe outputs; encoder and IMU are measured feedback.
+// Read-only snapshot. PWM/moving describe outputs; encoder and raw gyro are telemetry only.
+// Legacy distance, heading and PI fields remain zero or disabled for API compatibility.
 struct L298nMotorStatus {
     const char* motion;
     int speed_percent;

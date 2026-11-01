@@ -100,14 +100,12 @@ inline constexpr char kMotionRight[] = "↪️ Xoay phải";
 inline constexpr char kMotionStopped[] = "⏹️ Đứng yên";
 
 inline constexpr char kMenu[] =
-    "<b>🤖 Ruby · ĐIỀU KHIỂN XE</b>\n"
-    "━━━━━━━━━━━━━━━━\n"
-    "Chọn chức năng bằng các nút bên dưới.\n"
-    "⬆️ Tiến / ⬇️ Lùi: chạm nút rồi nhập khoảng cách bằng cm (1–1000).\n"
-    "🎙️ Đánh thức Ruby để trò chuyện; 🌐 mở trang điều khiển xe.\n"
-    "📊 Trạng thái và các nút tự hành cũng có sẵn bên dưới.\n"
-    "Dùng /status để xem trạng thái xe.";
-
+    "<b>Ruby · Điều khiển xe</b>\n"
+    "Dùng trang web /web để lái thủ công bằng PWM.\n"
+    "Dùng /status để xem cảm biến và /stop để dừng. Chọn PWM trên HUD.\n"
+    "Lệnh theo cm/góc và chế độ tự hành đang tạm ngừng.";
+inline constexpr char kSpeedUnavailable[] =
+    "Lệnh /speed đang tạm ngừng. Mở /web và chọn mức PWM trên HUD để lái thủ công.";
 inline constexpr char kWakeRequested[] =
     "🎙️ Đã gửi yêu cầu đánh thức. Chờ Ruby chuyển sang lắng nghe rồi nói vào mic trên Ruby.\n"
     "Chạm nút 📊 Trạng thái nếu Ruby chưa phản hồi.";
@@ -155,8 +153,7 @@ inline constexpr char kDistanceMoveAccepted[] =
 inline constexpr char kDistanceMoveWebBusy[] =
     "🎮 Web đang giữ quyền điều khiển motor. Hãy trả quyền trên trang web rồi gửi lại lệnh.";
 inline constexpr char kDistanceMoveUnavailable[] =
-    "❌ Không thể chạy theo quãng đường: FC-03 chưa sẵn sàng/hiệu chuẩn, PWM đang bằng 0, hoặc "
-    "motor không thể chạy. Chạm nút 📊 Trạng thái để kiểm tra.";
+    "Lệnh theo quãng đường đang tạm ngừng. Dùng /web để lái thủ công.";
 
 inline constexpr char kFollowUsage[] =
     "Dùng <code>/follow on</code>, <code>/follow off</code> hoặc <code>/follow N</code> với N từ "
@@ -164,9 +161,8 @@ inline constexpr char kFollowUsage[] =
 inline constexpr char kAvoidUsage[] =
     "Dùng <code>/avoid on</code>, <code>/avoid off</code> hoặc <code>/avoid N</code> với N từ 10 "
     "đến 100 cm. Ví dụ: <code>/avoid 20</code>.";
-inline constexpr char kAutonomyUnavailable[] =
-    "❌ Không thể bật tự hành khi web đang điều khiển, tốc độ đang bằng 0 hoặc motor có lỗi.";
-inline constexpr char kEmergencyStopped[] = "⏹️ Motor đã dừng và chế độ tự hành đã tắt.";
+inline constexpr char kAutonomyUnavailable[] = "Follow và né vật cản đang tạm ngừng.";
+inline constexpr char kEmergencyStopped[] = "Motor đã dừng.";
 
 inline constexpr char kWebReadyHeader[] =
     "<b>🌐 ĐIỀU KHIỂN XE</b>\n"
@@ -201,6 +197,6 @@ inline constexpr char kUnknownCommand[] =
 
 // Telegram reply keyboard. Keep this as valid JSON.
 inline constexpr char kKeyboardJson[] =
-    R"({"keyboard":[["⬆️ Tiến theo cm","⬇️ Lùi theo cm"],["🎙️ Đánh thức","⏹️ Dừng xe"],["👣 Bật Follow","👣 Tắt Follow"],["🚧 Bật né vật cản","🚧 Tắt né vật cản"],["📊 Trạng thái","🌐 Mở trang web"],["🐢 Tốc độ 50%","🚗 Tốc độ 75%","⚡ Tốc độ 100%"],["📖 Trợ giúp"]],"resize_keyboard":true})";
+    R"({"keyboard":[["🎙️ Đánh thức","⏹️ Dừng xe"],["📊 Trạng thái","🌐 Mở trang web"],["📖 Trợ giúp"]],"resize_keyboard":true})";
 
 }  // namespace L298nTelegramText
