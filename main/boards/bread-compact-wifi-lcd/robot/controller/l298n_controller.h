@@ -38,8 +38,7 @@ esp_err_t SetL298nFollowDistance(int distance_cm);
 esp_err_t SetL298nObstacleDistance(int distance_cm);
 void StopL298nMotor();
 
-// Read-only snapshot. PWM/moving describe outputs; encoder and raw gyro are telemetry only.
-// Legacy distance, heading and PI fields remain zero or disabled for API compatibility.
+// Read-only snapshot. Speed PI is available after wheel RPM references are configured.
 struct L298nMotorStatus {
     const char* motion;
     int speed_percent;
@@ -73,6 +72,9 @@ struct L298nMotorStatus {
     bool speed_pi_calibrated;
     bool speed_pi_active;
     double speed_pi_target_rpm;
+    double speed_pi_left_target_rpm;
+    double speed_pi_right_target_rpm;
+    const char* speed_pi_fault;
     int left_pwm_percent;
     int right_pwm_percent;
     const char* control_owner;

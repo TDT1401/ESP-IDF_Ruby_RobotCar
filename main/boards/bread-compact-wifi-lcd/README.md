@@ -9,10 +9,10 @@ The configured board uses an ESP32-S3-N16R8, I2S microphone, MAX98357A amplifier
 ## Capabilities enabled on this board
 
 - Voice assistant, manual web/HUD driving, and Telegram status and stop commands.
-- Direct PWM output through L298N for forward, backward, and turns.
+- Manual forward, backward, and turns through L298N; optional per-wheel speed PI.
 - HC-SR04 distance, FC-03 wheel pulses/RPM, and raw MPU6050 gyro telemetry.
 
-Measured distance moves, measured angle turns, heading hold, speed PI, follow mode,
+Measured distance moves, measured angle turns, heading hold, follow mode,
 and autonomous obstacle avoidance are disabled while the control architecture is redesigned.
 The web session watchdog stops the motors after 600 ms without a valid command.
 
@@ -145,9 +145,35 @@ D0 must use 3.3 V logic. The onboard LED on GPIO48 is disabled when FC-03 is ena
 Calibration is in [config.h](config.h): `FC03_LEFT_PULSES_PER_REV` and
 `FC03_RIGHT_PULSES_PER_REV` set pulses per wheel revolution;
 `FC03_LEFT_WHEEL_DIAMETER_MM` and `FC03_RIGHT_WHEEL_DIAMETER_MM` set the outside
-wheel diameters in millimetres. Current values are **20.3 pulses/rev** for the left wheel,
-**20.8 pulses/rev** for the right wheel, and **60 mm** diameter for both wheels. Recalibrate
-these values for your own encoders and wheels.
+wheel diameters in millimetres. Current values are **20.01 pulses/rev** and **65 mm**
+diameter for both wheels. Recalibrate these values for your own encoders and wheels.
+
+### Phase 1 wheel speed PI
+
+The manual web buttons and joystick use separate left/right RPM targets. The
+initial [config.h](config.h) reference is **175 RPM at 100% PWM for each wheel**,
+based on the motor's approximate 6 V loaded specification. This is an estimate,
+not a measured wheel speed: the L298N voltage drop, battery and load can change
+the result. A 0% command stops a wheel immediately. The web speed percentage
+scales the reference RPM; it is a target scale, not the actual PWM duty.
+
+To correct the estimate, temporarily set either RPM reference to 0 for direct
+PWM, run at 100% with the car safely supported, and read `encoder.left.rpm` /
+`encoder.right.rpm` from `/api/status`. Replace the two
+`SPEED_PI_*_REFERENCE_RPM` values with the observed wheel speeds, then rebuild
+and flash. The wheel diameter affects distance, not RPM.
+
+The controller updates PI every 100 ms. `SPEED_PI_*_KP` and `SPEED_PI_*_KI` are
+independent initial gains for each wheel, not measured calibration values. Tune
+them on the physical car: if speed oscillates, lower Kp and Ki; if response is
+slow, raise Kp, then Ki to remove steady speed error. If PWM stays at 100% while
+measured RPM remains below target, lower the RPM reference to a reachable value.
+Test low/medium/high speed, changes in load, reverse, turns, stop, and direction
+changes. `/api/status` reports target RPM, measured encoder RPM, actual PWM, and
+`speed_pi_fault`. If an encoder fails or reports no pulses for two seconds while
+commanded, the controller stops the motors and releases the web session. Claim a
+new session only after checking the wheel and sensor. The FC-03 measures pulse
+rate, while wheel direction is inferred from the motor command.
 
 ### MPU6050 IMU
 
@@ -167,8 +193,8 @@ Keep the I²C pull-ups at 3.3 V; never pull SDA or SCL up to 5 V. Many breakout 
 Mount the module flat and keep the car still for about two seconds after boot while
 the gyro calibrates. The firmware reports raw gyro Z rate through `gyro_z_dps`,
 `imu_ready`, and `imu_error`. It does not calculate heading or use IMU data to
-correct motor PWM. FC-03 values are telemetry only. A left/right button rotates
-the motors in opposite directions at fixed PWM; it does not target an angle.
+correct motor PWM. A left/right button rotates the motors in opposite directions;
+it does not target an angle.
 ## Build and Flash
 
 Use ESP-IDF 6.1 (minimum 6.0.1). This is the only build command for this board: it selects

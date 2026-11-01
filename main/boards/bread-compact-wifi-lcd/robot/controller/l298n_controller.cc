@@ -2,6 +2,9 @@
 
 #include <esp_system.h>
 
+#include <cstdlib>
+
+#include "../../config.h"
 #include "../sensors/hcsr04_sensor.h"
 #include "../sensors/mpu6050_imu.h"
 
@@ -42,6 +45,20 @@ L298nMotorStatus L298nController::Snapshot() {
     status.distance_valid = distance_fresh;
     status.hardware_error = fault_;
     status.encoder = encoder_.Snapshot();
+    status.speed_pi_calibrated = SpeedPiReadyLocked();
+    status.speed_pi_active = moving_ && status.speed_pi_calibrated &&
+                             (requested_left_percent_ != 0 || requested_right_percent_ != 0);
+    if (SpeedPiConfiguredLocked()) {
+        status.speed_pi_left_target_rpm = std::abs(requested_left_percent_) *
+                                          SPEED_PI_LEFT_REFERENCE_RPM /
+                                          SPEED_PI_REFERENCE_PWM_PERCENT;
+        status.speed_pi_right_target_rpm = std::abs(requested_right_percent_) *
+                                           SPEED_PI_RIGHT_REFERENCE_RPM /
+                                           SPEED_PI_REFERENCE_PWM_PERCENT;
+    }
+    status.speed_pi_target_rpm =
+        (status.speed_pi_left_target_rpm + status.speed_pi_right_target_rpm) / 2.0;
+    status.speed_pi_fault = speed_pi_fault_;
     status.distance_move_state = "disabled";
     status.imu_ready = imu.ready;
     status.imu_error = imu.error;

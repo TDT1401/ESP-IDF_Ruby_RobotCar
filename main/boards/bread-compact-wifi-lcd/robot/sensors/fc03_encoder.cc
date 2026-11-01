@@ -182,11 +182,21 @@ void Fc03Encoder::Update(int64_t now_us) {
                 wheel.hz = wheel.hz > 0 ? wheel.hz * 0.5 + sample_hz * 0.5 : sample_hz;
             }
             counter.last_pulse_us = now_us;
+            if (wheel.hz > 0) {
+                counter.rate_decay_at_us =
+                    now_us + std::max<int64_t>(100000, static_cast<int64_t>(2000000.0 / wheel.hz));
+                counter.rate_stale_at_us =
+                    now_us + std::max(kRateStaleMinimumUs,
+                                      static_cast<int64_t>(3000000.0 / wheel.hz));
+            }
         } else if (counter.last_pulse_us > 0 && wheel.hz > 0) {
-            const int64_t stale_after_us =
-                std::max(kRateStaleMinimumUs, static_cast<int64_t>(3000000.0 / wheel.hz));
-            if (now_us - counter.last_pulse_us >= stale_after_us)
+            const int64_t elapsed_us = now_us - counter.last_pulse_us;
+            if (now_us >= counter.rate_stale_at_us) {
                 wheel.hz = 0;
+            } else if (now_us >= counter.rate_decay_at_us) {
+                // A missing expected edge lowers the estimate before it becomes stale.
+                wheel.hz = std::min(wheel.hz, 1000000.0 / elapsed_us);
+            }
         }
         if (counter.direction == 0 && delta != 0) {
             wheel.unknown_direction_pulses += delta;
@@ -234,6 +244,8 @@ void Fc03Encoder::SetDrive(int left, int right, int64_t now_us) {
             counter.coast_until_us = now_us + FC03_COAST_MS * 1000LL;
         } else {
             counter.last_pulse_us = 0;
+            counter.rate_decay_at_us = 0;
+            counter.rate_stale_at_us = 0;
             wheel.hz = 0;
             wheel.rpm = 0;
             if (counter.direction != commands[i]) {

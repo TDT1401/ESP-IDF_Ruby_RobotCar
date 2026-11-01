@@ -26,6 +26,7 @@ esp_err_t L298nController::BeginWebControl(uint32_t* session) {
     if (fault_ != ESP_OK)
         return fault_;
     StopLocked();
+    speed_pi_fault_ = "none";
     if (fault_ != ESP_OK)
         return fault_;
 #ifdef CONFIG_PM_ENABLE
@@ -99,8 +100,11 @@ esp_err_t L298nController::WebCommand(uint32_t session, uint32_t sequence, L298n
         if (wheels.left == 0 && wheels.right == 0) {
             StopLocked();
         } else {
-            if (!web_joystick_active_ && moving_)
+            if (!web_joystick_active_ && moving_) {
                 StopOutputsLocked();
+                web_joystick_pending_ = true;
+                start_at_us_ = now + kDirectionDelayUs;
+            }
             web_joystick_active_ = true;
             if (!ApplyWebDriveLocked(wheels.left, wheels.right)) {
                 StopLocked();
@@ -108,7 +112,7 @@ esp_err_t L298nController::WebCommand(uint32_t session, uint32_t sequence, L298n
                 return ESP_FAIL;
             }
             motion_ = motion;
-            moving_ = true;
+            moving_ = !web_joystick_pending_;
             deadline_us_ = web_control_.deadline_us();
         }
     } else {

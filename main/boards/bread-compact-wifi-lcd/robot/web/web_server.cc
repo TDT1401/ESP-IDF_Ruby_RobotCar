@@ -208,7 +208,8 @@ esp_err_t Status(httpd_req_t* req) {
     using Json = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
     Json json(cJSON_CreateObject(), cJSON_Delete);
     if (!json || !cJSON_AddBoolToObject(json.get(), "distance_valid", motor.distance_valid) ||
-        !cJSON_AddStringToObject(json.get(), "control_mode", "manual_pwm") ||
+        !cJSON_AddStringToObject(json.get(), "control_mode",
+                                 motor.speed_pi_active ? "speed_pi" : "manual_pwm") ||
         !cJSON_AddNumberToObject(json.get(), "distance_cm", motor.measured_distance_cm) ||
         !cJSON_AddStringToObject(json.get(), "autonomy_mode", motor.autonomy_mode) ||
         !cJSON_AddStringToObject(json.get(), "control_owner", motor.control_owner) ||
@@ -233,6 +234,11 @@ esp_err_t Status(httpd_req_t* req) {
         !cJSON_AddBoolToObject(json.get(), "speed_pi_calibrated", motor.speed_pi_calibrated) ||
         !cJSON_AddBoolToObject(json.get(), "speed_pi_active", motor.speed_pi_active) ||
         !cJSON_AddNumberToObject(json.get(), "speed_pi_target_rpm", motor.speed_pi_target_rpm) ||
+        !cJSON_AddNumberToObject(json.get(), "speed_pi_left_target_rpm",
+                                 motor.speed_pi_left_target_rpm) ||
+        !cJSON_AddNumberToObject(json.get(), "speed_pi_right_target_rpm",
+                                 motor.speed_pi_right_target_rpm) ||
+        !cJSON_AddStringToObject(json.get(), "speed_pi_fault", motor.speed_pi_fault) ||
         !cJSON_AddNumberToObject(json.get(), "left_pwm_percent", motor.left_pwm_percent) ||
         !cJSON_AddNumberToObject(json.get(), "right_pwm_percent", motor.right_pwm_percent) ||
         !cJSON_AddStringToObject(json.get(), "distance_move_state", motor.distance_move_state) ||

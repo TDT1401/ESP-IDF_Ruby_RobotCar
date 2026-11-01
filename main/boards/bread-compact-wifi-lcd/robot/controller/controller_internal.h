@@ -4,6 +4,7 @@
 #include "../domain/motion_policy.h"
 #include "../domain/web_control_session.h"
 #include "../drivers/l298n_motor_driver.h"
+#include "speed_pi.h"
 
 #include <esp_err.h>
 #include <esp_pm.h>
@@ -17,6 +18,7 @@ namespace ruby_robot {
 constexpr int kDefaultWebSpeedPercent = 75;
 constexpr int64_t kDirectionDelayUs = 50000;
 constexpr int64_t kTickUs = 10000;
+constexpr int64_t kSpeedPiPeriodUs = 100000;
 constexpr int kDefaultFollowDistanceCm = 30;
 constexpr int kDefaultObstacleDistanceCm = 20;
 constexpr int kSensorStaleMs = 250;
@@ -42,6 +44,12 @@ private:
     L298nMotorDriver driver_;
     WebControlSession web_control_;
     Fc03Encoder encoder_;
+    SpeedPi left_speed_pi_;
+    SpeedPi right_speed_pi_;
+    int requested_left_percent_ = 0;
+    int requested_right_percent_ = 0;
+    int64_t last_speed_pi_us_ = 0;
+    const char* speed_pi_fault_ = "none";
     int applied_left_pwm_percent_ = 0;
     int applied_right_pwm_percent_ = 0;
     esp_timer_handle_t timer_ = nullptr;
@@ -57,6 +65,7 @@ private:
     bool moving_ = false;
     esp_err_t fault_ = ESP_OK;
     bool web_joystick_active_ = false;
+    bool web_joystick_pending_ = false;
     int web_left_output_percent_ = 0;
     int web_right_output_percent_ = 0;
     int web_speed_percent_ = kDefaultWebSpeedPercent;
@@ -82,6 +91,10 @@ private:
     bool SetWheelPwmLocked(Wheel wheel, int percent);
     bool SetWheelDirectionLocked(Wheel wheel, int sign, bool inverted);
     bool ApplyMotorPwmLocked(int left_percent, int right_percent);
+    bool SetRequestedWheelsLocked(int left_percent, int right_percent);
+    bool UpdateSpeedPiLocked(int64_t now_us);
+    bool SpeedPiConfiguredLocked() const;
+    bool SpeedPiReadyLocked() const;
     int CurrentPwmPercentLocked(int side) const;
     int CurrentLeftPwmPercentLocked() const;
     int CurrentRightPwmPercentLocked() const;

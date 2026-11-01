@@ -1,6 +1,6 @@
 #pragma once
 
-// Manual PWM dashboard; autonomous controls are unavailable for now.
+// Manual driving dashboard; autonomous controls are unavailable for now.
 // Self-contained: no CDN, filesystem, Arduino runtime or Internet connection required.
 inline constexpr char kL298nWebPage[] = R"html(
 <!doctype html>
@@ -301,6 +301,28 @@ inline constexpr char kL298nWebPage[] = R"html(
             notifyAction(result[0],result[1]);
         }
         renderEncoder(data.encoder);
+        let piLine = $('speedPiState');
+        if (!piLine && typeof document.createElement === 'function') {
+          piLine = document.createElement('p');
+          piLine.id = 'speedPiState';
+          piLine.className = 'encoder-note';
+          $('encoderState').after(piLine);
+        }
+        const piNumber = value => Number.isFinite(value) ? value.toFixed(1) : '--';
+        if (piLine) piLine.textContent = data.speed_pi_fault && data.speed_pi_fault !== 'none'
+          ? 'PI tốc độ đã dừng: ' + data.speed_pi_fault
+          : data.speed_pi_active
+            ? 'PI L/R: mục tiêu ' + piNumber(data.speed_pi_left_target_rpm) + ' / ' +
+              piNumber(data.speed_pi_right_target_rpm) + ' RPM; đo ' +
+              piNumber(data.encoder?.left?.rpm) + ' / ' + piNumber(data.encoder?.right?.rpm) +
+              ' RPM; PWM ' + data.left_pwm_percent + ' / ' + data.right_pwm_percent + '%'
+            : data.speed_pi_calibrated ? 'PI tốc độ sẵn sàng' :
+              'PI tốc độ chờ RPM tham chiếu từng bánh trong config.h';
+        if (typeof document.querySelector === 'function') {
+          const speedLabel = document.querySelector('.hud-speed span');
+          if (speedLabel) speedLabel.textContent =
+            data.speed_pi_calibrated ? 'SPEED TARGET' : 'POWER OUTPUT';
+        }
         $('homeNetwork').textContent = data.wifi_connected === false ? 'Wi-Fi đã ngắt' :
           Number.isFinite(data.wifi_rssi) ? 'Wi-Fi ' + data.wifi_rssi + ' dBm' : 'Wi-Fi đã kết nối';
         $('homeUptime').textContent = Number.isFinite(data.uptime_seconds)
@@ -346,6 +368,7 @@ inline constexpr char kL298nWebPage[] = R"html(
         return true;
       } catch (_) {
         renderEncoder(null,true);
+        if ($('speedPiState')) $('speedPiState').textContent = 'Không có dữ liệu PI mới';
         $('distance').textContent = '-- cm';
         $('manualDistance').textContent = '-- cm';
         $('sensorState').textContent = 'Chưa lấy được dữ liệu SR04 mới';

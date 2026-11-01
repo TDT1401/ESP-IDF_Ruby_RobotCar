@@ -7,10 +7,10 @@ Bo mạch ESP32-S3-N16R8, microphone I2S, MAX98357A và màn hình TFT SPI.
 ## Chức năng
 
 - Trợ lý giọng nói, lái thủ công qua web/HUD, trạng thái và lệnh dừng qua Telegram.
-- Điều khiển PWM trực tiếp cho tiến, lùi và xoay bằng L298N.
+- Tiến, lùi và xoay bằng L298N; hỗ trợ PI tốc độ riêng cho từng bánh.
 - HC-SR04 đo khoảng cách; FC-03 báo xung/RPM; MPU6050 báo tốc độ quay Z.
 
-Tạm ngừng lệnh đi theo quãng đường, quay theo góc, giữ hướng PD, tốc độ PI,
+Tạm ngừng lệnh đi theo quãng đường, quay theo góc, giữ hướng PD,
 follow và tự hành né vật cản trong lúc thiết kế lại bộ điều khiển. Mất lệnh web
 trong 600 ms sẽ dừng motor.
 
@@ -129,7 +129,31 @@ D0 phải ở mức 3,3 V. Khi bật FC-03, LED tích hợp trên GPIO48 không 
 Hiệu chuẩn trong [config.h](../config.h): `FC03_LEFT_PULSES_PER_REV` và
 `FC03_RIGHT_PULSES_PER_REV` là số xung/vòng bánh; `FC03_LEFT_WHEEL_DIAMETER_MM` và
 `FC03_RIGHT_WHEEL_DIAMETER_MM` là đường kính bánh (mm). Hiện cả hai bánh đặt
-**20,3 xung/vòng** bên trái, **20,8 xung/vòng** bên phải và **60 mm**.
+**20,01 xung/vòng** và đường kính **65 mm** cho mỗi bánh.
+
+### Phase 1: PI tốc độ hai bánh
+
+Nút hướng và joystick dùng mục tiêu RPM riêng cho bánh trái/phải. Giá trị ban đầu
+trong [config.h](../config.h) là **175 RPM mỗi bánh tại PWM 100%**, lấy từ thông
+số motor 6 V có tải (khoảng 90 RPM ở 3 V và 200 RPM ở 6 V không tải). Đây là
+ước tính: sụt áp L298N, pin và tải thực tế có thể làm RPM bánh thấp hơn. Phần
+trăm trên web là tỷ lệ RPM mục tiêu, không phải PWM thực tế. Lệnh 0% dừng ngay.
+
+Khi có thời gian, tạm đặt một RPM tham chiếu bằng 0 để dùng PWM trực tiếp, kê
+xe an toàn, chạy ở 100% và xem `encoder.left.rpm` / `encoder.right.rpm` trong
+`/api/status`. Thay hai giá trị `SPEED_PI_*_REFERENCE_RPM` bằng RPM đo riêng
+từng bánh, rồi build và flash lại.
+Đường kính bánh ảnh hưởng quãng đường, không ảnh hưởng RPM.
+
+PI cập nhật mỗi 100 ms. Các giá trị `SPEED_PI_*_KP` và `SPEED_PI_*_KI` chỉ là
+điểm bắt đầu, cần chỉnh trên xe thật: nếu tốc độ dao động, giảm Kp và Ki; nếu
+đáp ứng chậm, tăng Kp rồi tăng Ki để giảm sai lệch ổn định. Nếu PWM đã ở 100%
+mà RPM đo vẫn thấp hơn mục tiêu, giảm RPM tham chiếu xuống mức xe đạt được. Thử
+tốc độ thấp/vừa/cao, thay đổi tải, chạy lùi, xoay, dừng và đảo chiều.
+`/api/status` báo RPM mục tiêu, RPM đo, PWM thực tế và `speed_pi_fault`.
+Nếu encoder lỗi hoặc bánh đang có lệnh chạy nhưng mất xung trong hai giây, xe
+dừng và hủy phiên web. Kiểm tra bánh và cảm biến trước khi kết nối lại. FC-03
+chỉ đo xung; chiều quay được suy ra từ lệnh motor.
 
 ### IMU MPU6050
 
@@ -148,8 +172,8 @@ Cấu hình I2S simplex hiện tại còn trống GPIO4 và GPIO5 cho IMU. Khôn
 
 Gắn module chắc chắn và giữ xe đứng yên khoảng hai giây sau khi bật nguồn để
 hiệu chuẩn gyro. `gyro_z_dps`, `imu_ready` và `imu_error` cho biết dữ liệu gyro
-thô. Firmware hiện không tính heading và không dùng IMU/FC-03 để sửa PWM.
-Nút xoay trái/phải quay hai motor ngược chiều bằng PWM cố định, không đo góc đích.
+thô. Firmware hiện không tính heading hoặc dùng IMU để sửa PWM.
+Nút xoay trái/phải quay hai motor ngược chiều, không đo góc đích.
 ## Build và Flash
 
 Dùng ESP-IDF 6.1 (tối thiểu 6.0.1). Đây là lệnh build duy nhất cho board này: màn

@@ -71,6 +71,20 @@
 #define MOTOR_RIGHT_IN2_PIN GPIO_NUM_12
 #define MOTOR_RIGHT_EN_PIN GPIO_NUM_13
 
+// Provisional Phase 1 reference: motor specification is about 175 RPM at 6 V
+// under load (90 RPM at 3 V, 200 RPM at 6 V unloaded). Assume 6 V motor supply
+// and use the loaded figure for both wheels at full PWM until FC-03 readings
+// allow separate per-wheel calibration. The L298N voltage drop and actual load
+// can make the achievable wheel RPM lower than this estimate.
+#define SPEED_PI_REFERENCE_PWM_PERCENT 100
+#define SPEED_PI_LEFT_REFERENCE_RPM 175.0
+#define SPEED_PI_RIGHT_REFERENCE_RPM 175.0
+// Initial gains in PWM-percent/RPM and PWM-percent/(RPM*s); tune on the car.
+#define SPEED_PI_LEFT_KP 0.25
+#define SPEED_PI_LEFT_KI 0.50
+#define SPEED_PI_RIGHT_KP 0.25
+#define SPEED_PI_RIGHT_KI 0.50
+
 // HC-SR04 uses 5 V power. ECHO must be level-shifted to 3.3 V before this GPIO.
 #define HCSR04_TRIGGER_PIN GPIO_NUM_14
 #define HCSR04_ECHO_PIN GPIO_NUM_39
@@ -84,10 +98,10 @@
 // Calibration: count rising edges during ONE complete WHEEL revolution.
 // Include the gearbox ratio if the encoder disc is on the motor shaft.
 // Zero means unknown: raw pulse counts work, but metres/RPM remain unavailable.
-#define FC03_LEFT_PULSES_PER_REV 20.09
-#define FC03_RIGHT_PULSES_PER_REV 20.12
-#define FC03_LEFT_WHEEL_DIAMETER_MM 60.0
-#define FC03_RIGHT_WHEEL_DIAMETER_MM 60.0
+#define FC03_LEFT_PULSES_PER_REV 20.01
+#define FC03_RIGHT_PULSES_PER_REV 20.01
+#define FC03_LEFT_WHEEL_DIAMETER_MM 65.0
+#define FC03_RIGHT_WHEEL_DIAMETER_MM 65.0
 
 // PCNT rejects pulses shorter than this (ESP32-S3: keep <= 12000 ns).
 #define FC03_GLITCH_FILTER_NS 10000
@@ -95,6 +109,7 @@
 #define FC03_COAST_MS 500
 // Log both counters every 2 seconds in monitor; set to 0 after calibration.
 #define FC03_DEBUG 0
+
 #endif
 
 #endif  // _BOARD_CONFIG_H_

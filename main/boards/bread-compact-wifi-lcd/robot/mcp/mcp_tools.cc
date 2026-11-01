@@ -22,6 +22,13 @@ ToolResult GetState() {
                                  esp_err_to_name(status.hardware_error)) ||
         !cJSON_AddNumberToObject(json.get(), "left_pwm_percent", status.left_pwm_percent) ||
         !cJSON_AddNumberToObject(json.get(), "right_pwm_percent", status.right_pwm_percent) ||
+        !cJSON_AddBoolToObject(json.get(), "speed_pi_calibrated", status.speed_pi_calibrated) ||
+        !cJSON_AddBoolToObject(json.get(), "speed_pi_active", status.speed_pi_active) ||
+        !cJSON_AddNumberToObject(json.get(), "speed_pi_left_target_rpm",
+                                 status.speed_pi_left_target_rpm) ||
+        !cJSON_AddNumberToObject(json.get(), "speed_pi_right_target_rpm",
+                                 status.speed_pi_right_target_rpm) ||
+        !cJSON_AddStringToObject(json.get(), "speed_pi_fault", status.speed_pi_fault) ||
         !cJSON_AddBoolToObject(json.get(), "distance_valid", status.distance_valid) ||
         !cJSON_AddNumberToObject(json.get(), "measured_distance_cm", status.measured_distance_cm) ||
         !cJSON_AddBoolToObject(json.get(), "imu_ready", status.imu_ready) ||
@@ -43,7 +50,7 @@ void RegisterL298nMcpTools() {
                    });
     server.AddTool(
         "self.motor.get_state",
-        "Read manual PWM, motor state, raw FC-03 encoder and MPU6050 gyro telemetry. "
-        "Distance moves, measured turns, PI speed control and heading hold are disabled.",
+        "Read motor PWM, speed PI targets, FC-03 encoder and MPU6050 gyro telemetry. "
+        "Distance moves, measured turns and heading hold are disabled.",
         PropertyList(), [](const PropertyList&) -> ToolResult { return GetState(); });
 }

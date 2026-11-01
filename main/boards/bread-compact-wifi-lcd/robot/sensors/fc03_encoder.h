@@ -60,6 +60,8 @@ private:
         int64_t coast_until_us = 0;
         int64_t drive_started_us = 0;
         int64_t last_pulse_us = 0;
+        int64_t rate_decay_at_us = 0;
+        int64_t rate_stale_at_us = 0;
     };
     Counter counters_[2];
     double completed_travel_m_ = 0;
