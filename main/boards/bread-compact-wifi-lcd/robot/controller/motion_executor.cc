@@ -7,11 +7,25 @@ namespace ruby_robot {
 
 void L298nController::StopLocked() {
     web_joystick_active_ = false;
+    command_interface_.StopMotion(esp_timer_get_time());
     StopOutputsLocked();
 }
 
+void L298nController::StopFailedMotionLocked(int64_t now_us) {
+    if (web_control_.active()) {
+        EndWebControlLocked();
+        return;
+    }
+    const bool time_drive = command_interface_.mode() == CommandMode::kTimeDrive;
+    StopLocked();
+    if (time_drive)
+        command_interface_.FailTimeDrive(now_us);
+}
+
 int L298nController::ActiveSpeedLocked() const {
-    return web_speed_percent_;
+    return command_interface_.mode() == CommandMode::kTimeDrive
+               ? command_interface_.time_drive().speed_percent()
+               : web_speed_percent_;
 }
 
 bool L298nController::PrepareMotionLocked(Motion motion) {
@@ -45,6 +59,14 @@ void L298nController::Tick() {
             StopLocked();
         return;
     }
+    if (command_interface_.TimeDriveExpired(now)) {
+        StopLocked();
+        if (fault_ == ESP_OK && command_interface_.time_drive().GetMetrics().samples > 0)
+            command_interface_.CompleteTimeDrive(now);
+        else
+            command_interface_.FailTimeDrive(now);
+        return;
+    }
     if (motion_ == Motion::kStop)
         return;
     if (deadline_us_ > 0 && now >= deadline_us_) {
@@ -52,10 +74,7 @@ void L298nController::Tick() {
         return;
     }
     if (moving_ && !UpdateSpeedPiLocked(now)) {
-        if (web_control_.active())
-            EndWebControlLocked();
-        else
-            StopLocked();
+        StopFailedMotionLocked(now);
         return;
     }
     if (web_joystick_active_) {
@@ -64,7 +83,7 @@ void L298nController::Tick() {
             const int right = web_right_output_percent_;
             web_joystick_pending_ = false;
             if (!ApplyWebDriveLocked(left, right)) {
-                EndWebControlLocked();
+                StopFailedMotionLocked(now);
                 return;
             }
             moving_ = true;
@@ -73,26 +92,28 @@ void L298nController::Tick() {
     }
     if (!moving_ && now >= start_at_us_) {
         if (!ApplyDirectionLocked()) {
-            if (web_control_.active())
-                EndWebControlLocked();
-            else
-                StopLocked();
+            StopFailedMotionLocked(now);
             return;
         }
         moving_ = true;
         SetMpu6050MotorActive(true);
         if (!ApplySpeedLocked()) {
-            if (web_control_.active())
-                EndWebControlLocked();
-            else
-                StopLocked();
+            StopFailedMotionLocked(now);
         }
     }
 }
 
 bool L298nController::ApplySpeedLocked() {
     const int speed = ActiveSpeedLocked();
-    return SetRequestedWheelsLocked(speed, speed);
+    if (command_interface_.mode() == CommandMode::kManual &&
+        !command_interface_.SubmitManual({speed, speed}))
+        return false;
+    return ApplyCommandLocked();
+}
+
+bool L298nController::ApplyCommandLocked() {
+    const auto wheels = command_interface_.wheels();
+    return SetRequestedWheelsLocked(wheels.left_percent, wheels.right_percent);
 }
 
 }  // namespace ruby_robot

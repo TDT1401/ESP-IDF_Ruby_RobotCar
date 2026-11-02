@@ -98,7 +98,13 @@ bool L298nController::UpdateSpeedPiLocked(int64_t now_us) {
                                                    encoder.right.rpm, std::abs(requested_right_percent_),
                                                    bounded_dt_s, SPEED_PI_RIGHT_KP, SPEED_PI_RIGHT_KI);
     last_speed_pi_us_ = now_us;
-    return ApplyMotorPwmLocked(left, right);
+    if (!ApplyMotorPwmLocked(left, right))
+        return false;
+    command_interface_.time_drive().RecordSample(
+        TargetRpm(requested_left_percent_, SPEED_PI_LEFT_REFERENCE_RPM),
+        TargetRpm(requested_right_percent_, SPEED_PI_RIGHT_REFERENCE_RPM), encoder.left.rpm,
+        encoder.right.rpm, left, right);
+    return true;
 }
 
 }  // namespace ruby_robot

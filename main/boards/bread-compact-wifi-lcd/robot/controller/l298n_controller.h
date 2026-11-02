@@ -4,6 +4,7 @@
 
 #include <cstdint>
 
+#include "../domain/motion_policy.h"
 #include "../sensors/fc03_encoder.h"
 
 // Board-lifetime controller; call once after the LCD backlight is initialized.
@@ -21,6 +22,11 @@ esp_err_t CommandL298nWebControl(uint32_t session, uint32_t sequence, L298nWebCo
                                  int speed_percent, bool proximity_warning_enabled,
                                  int joystick_x = 0, int joystick_y = 0);
 void SetL298nWebConnected(bool connected);
+
+// Drive in the requested direction through Speed PI for a bounded time, then stop.
+// Rejects an active manual session or unavailable encoder/PI.
+esp_err_t StartL298nTimeDrive(ruby_robot::Motion direction, int speed_percent,
+                              int duration_seconds, bool from_voice);
 
 // Compatibility entry point: only the web control command can set manual PWM.
 // Always returns ESP_ERR_NOT_SUPPORTED.
@@ -40,6 +46,23 @@ void StopL298nMotor();
 
 // Read-only snapshot. Speed PI is available after wheel RPM references are configured.
 struct L298nMotorStatus {
+    const char* command_mode;
+    const char* time_drive_state;
+    const char* time_drive_owner;
+    const char* time_drive_direction;
+    int time_drive_speed_percent;
+    int time_drive_duration_seconds;
+    int time_drive_elapsed_ms;
+    int time_drive_remaining_ms;
+    int time_drive_samples;
+    double time_drive_average_left_rpm;
+    double time_drive_average_right_rpm;
+    double time_drive_average_left_error_rpm;
+    double time_drive_average_right_error_rpm;
+    double time_drive_average_left_pwm_percent;
+    double time_drive_average_right_pwm_percent;
+    double time_drive_stddev_left_rpm;
+    double time_drive_stddev_right_rpm;
     const char* motion;
     int speed_percent;
     int active_speed_percent;

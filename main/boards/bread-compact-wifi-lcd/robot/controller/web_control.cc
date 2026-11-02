@@ -9,6 +9,8 @@ void L298nController::SetWebConnected(bool connected) {
     web_control_.SetConnected(connected);
     if (!connected && web_control_.active()) {
         EndWebControlLocked();
+    } else if (!connected && command_interface_.mode() == CommandMode::kTimeDrive) {
+        StopLocked();
     }
 }
 
@@ -17,7 +19,8 @@ esp_err_t L298nController::BeginWebControl(uint32_t* session) {
         return ESP_ERR_INVALID_ARG;
     std::lock_guard lock(mutex_);
     const int64_t now = esp_timer_get_time();
-    if (!web_control_.connected() || !MotionAllowed())
+    if (!web_control_.connected() || !MotionAllowed() ||
+        command_interface_.mode() == CommandMode::kTimeDrive)
         return ESP_ERR_INVALID_STATE;
     if (!web_control_.CanBegin(now))
         return ESP_ERR_INVALID_STATE;
@@ -29,9 +32,13 @@ esp_err_t L298nController::BeginWebControl(uint32_t* session) {
     speed_pi_fault_ = "none";
     if (fault_ != ESP_OK)
         return fault_;
+    if (!command_interface_.BeginManual())
+        return ESP_ERR_INVALID_STATE;
 #ifdef CONFIG_PM_ENABLE
-    if (!Check(esp_pm_lock_acquire(web_sleep_lock_)))
+    if (!Check(esp_pm_lock_acquire(web_sleep_lock_))) {
+        command_interface_.ReleaseManual();
         return ESP_FAIL;
+    }
     web_sleep_lock_held_ = true;
 #endif
     proximity_warning_enabled_ = true;
@@ -158,6 +165,7 @@ void L298nController::EndWebControlLocked() {
     web_control_.Revoke();
     ReleaseWebSleepLockLocked();
     StopLocked();
+    command_interface_.ReleaseManual();
 }
 
 }  // namespace ruby_robot

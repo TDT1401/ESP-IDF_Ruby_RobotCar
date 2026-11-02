@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 700" role="img" aria-labelledby="title description">
+  <title id="title">Hierarchical Layered Architecture for the Ruby RobotCar board</title>
+  <desc id="description">The Composition Root connects Presentation and Application. Presentation calls the Application API. Application owns Command Interface, safety, and mode transitions, and depends on the pure Domain Layer and the motor and sensor Infrastructure Layer.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#37516f"/>
+    </marker>
+    <style>
+      .title { font: 700 30px 'Segoe UI', Arial, sans-serif; fill: #13243b; }
+      .subtitle { font: 16px 'Segoe UI', Arial, sans-serif; fill: #52647b; }
+      .name { font: 700 22px 'Segoe UI', Arial, sans-serif; fill: #13243b; }
+      .path { font: 16px 'Consolas', 'Courier New', monospace; fill: #294361; }
+      .detail { font: 15px 'Segoe UI', Arial, sans-serif; fill: #52647b; }
+      .arrow-label { font: 600 13px 'Segoe UI', Arial, sans-serif; fill: #37516f; }
+      .badge { font: 700 15px 'Segoe UI', Arial, sans-serif; fill: #ffffff; text-anchor: middle; dominant-baseline: middle; }
+    </style>
+  </defs>
+
+  <rect width="1120" height="700" rx="24" fill="#f7f9fc"/>
+  <text x="48" y="52" class="title">Hierarchical Layered Architecture</text>
+  <text x="48" y="79" class="subtitle">Bread Compact Wi-Fi LCD / Ruby RobotCar</text>
+
+  <rect x="48" y="107" width="1024" height="88" rx="18" fill="#e8eefc" stroke="#9bafe0" stroke-width="2"/>
+  <circle cx="84" cy="151" r="19" fill="#586fb5"/>
+  <text x="84" y="152" class="badge">0</text>
+  <text x="118" y="142" class="name">Composition Root</text>
+  <text x="118" y="170" class="path">board factory · config.json · Kconfig · CMake · robot_board.cc</text>
+
+  <path d="M 560 195 L 560 228" stroke="#37516f" stroke-width="3" fill="none" marker-end="url(#arrow)"/>
+  <text x="578" y="217" class="arrow-label">wires APIs and callbacks</text>
+
+  <rect x="48" y="231" width="1024" height="110" rx="18" fill="#e7f7f8" stroke="#80cbd0" stroke-width="2"/>
+  <circle cx="84" cy="273" r="19" fill="#218c9a"/>
+  <text x="84" y="274" class="badge">1</text>
+  <text x="118" y="266" class="name">Presentation Layer</text>
+  <text x="118" y="294" class="path">robot/web · robot/telegram · robot/mcp · robot/serialization · robot_eye</text>
+  <text x="118" y="319" class="detail">Validate external input, call the controller API, render read-only status.</text>
+
+  <path d="M 560 341 L 560 374" stroke="#37516f" stroke-width="3" fill="none" marker-end="url(#arrow)"/>
+  <text x="578" y="364" class="arrow-label">commands and status requests</text>
+
+  <rect x="48" y="377" width="1024" height="115" rx="18" fill="#eaf0ff" stroke="#8eabe8" stroke-width="2"/>
+  <circle cx="84" cy="421" r="19" fill="#426bb6"/>
+  <text x="84" y="422" class="badge">2</text>
+  <text x="118" y="414" class="name">Application Layer</text>
+  <text x="118" y="442" class="path">robot/controller · robot/commands · L298nController · CommandInterface</text>
+  <text x="118" y="468" class="detail">Owns modes, mutex, safety deadlines, stop path, and one status snapshot.</text>
+
+  <path d="M 310 492 L 310 535" stroke="#37516f" stroke-width="3" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 810 492 L 810 535" stroke="#37516f" stroke-width="3" fill="none" marker-end="url(#arrow)"/>
+  <text x="328" y="521" class="arrow-label">pure rules</text>
+  <text x="828" y="521" class="arrow-label">I/O and readings</text>
+
+  <rect x="48" y="538" width="490" height="114" rx="18" fill="#f1ecfb" stroke="#b8a2df" stroke-width="2"/>
+  <circle cx="84" cy="579" r="19" fill="#8264b0"/>
+  <text x="84" y="580" class="badge">3a</text>
+  <text x="118" y="572" class="name">Domain Layer</text>
+  <text x="118" y="601" class="path">robot/domain · policy · lease</text>
+  <text x="118" y="628" class="detail">Hardware-independent calculations and lease rules.</text>
+
+  <rect x="582" y="538" width="490" height="114" rx="18" fill="#fff4e5" stroke="#e5bf80" stroke-width="2"/>
+  <circle cx="618" cy="579" r="19" fill="#b77b27"/>
+  <text x="618" y="580" class="badge">3b</text>
+  <text x="652" y="572" class="name">Infrastructure Layer</text>
+  <text x="652" y="601" class="path">robot/drivers · robot/sensors · config.h</text>
+  <text x="652" y="628" class="detail">Motor GPIO/PWM and sensor hardware.</text>
+
+  <text x="48" y="681" class="detail">Dependency direction: Presentation → Application → Domain / Infrastructure. Telemetry returns via Application snapshots.</text>
+</svg>

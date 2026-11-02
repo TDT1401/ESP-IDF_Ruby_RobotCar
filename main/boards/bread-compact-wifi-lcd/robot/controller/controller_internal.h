@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../commands/command_interface.h"
 #include "l298n_controller.h"
 #include "../domain/motion_policy.h"
 #include "../domain/web_control_session.h"
@@ -29,6 +30,8 @@ public:
     static L298nController& Instance();
 
     void Stop();
+    esp_err_t StartTimeDrive(Motion direction, int speed_percent, int duration_seconds,
+                             TimeDriveOwner owner);
     L298nMotorStatus Snapshot();
     void UpdateDistance(int distance_cm, bool valid);
     void ScheduleProximityWarning();
@@ -42,6 +45,7 @@ private:
     // Network callbacks and the timer share this controller. Keep the mutex scope short.
     std::mutex mutex_;
     L298nMotorDriver driver_;
+    CommandInterface command_interface_;
     WebControlSession web_control_;
     Fc03Encoder encoder_;
     SpeedPi left_speed_pi_;
@@ -82,11 +86,13 @@ private:
     void ReleaseWebSleepLockLocked();
     void EndWebControlLocked();
     void StopLocked();
+    void StopFailedMotionLocked(int64_t now_us);
     int ActiveSpeedLocked() const;
     bool PrepareMotionLocked(Motion motion);
     static bool MotionAllowed();
     void Tick();
     bool ApplySpeedLocked();
+    bool ApplyCommandLocked();
     void StopOutputsLocked();
     bool SetWheelPwmLocked(Wheel wheel, int percent);
     bool SetWheelDirectionLocked(Wheel wheel, int sign, bool inverted);

@@ -97,7 +97,7 @@ bool L298nController::ApplyWebDriveLocked(int left, int right) {
     ok = SetWheelDirectionLocked(Wheel::kLeft, left, invert_left) && ok;
     ok = SetWheelDirectionLocked(Wheel::kRight, right, invert_right) && ok;
     if (ok)
-        ok = SetRequestedWheelsLocked(left, right);
+        ok = command_interface_.SubmitManual({left, right}) && ApplyCommandLocked();
     if (ok) {
         web_left_output_percent_ = left;
         web_right_output_percent_ = right;

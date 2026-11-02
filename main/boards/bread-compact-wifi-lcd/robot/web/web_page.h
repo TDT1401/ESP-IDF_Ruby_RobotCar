@@ -31,7 +31,7 @@ inline constexpr char kL298nWebPage[] = R"html(
     #actionToast{position:fixed;z-index:50;top:max(12px,env(safe-area-inset-top));right:12px;display:flex;align-items:flex-start;gap:10px;width:min(380px,calc(100vw - 24px));padding:12px 15px;border:1px solid transparent;border-radius:13px;background:#102019;color:#dcffeb;box-shadow:0 12px 32px #0009;font-size:13px;line-height:1.5;opacity:0;transform:translateY(-8px);pointer-events:none;transition:opacity .18s,transform .18s}#actionToast.show{opacity:1;transform:none}#actionToast.success{border-color:#39e58c80}#actionToast.error{border-color:#ff4f7080;background:#2b101b;color:#ffe3e8;pointer-events:auto}#actionToastText{flex:1}#actionToastClose{padding:0 5px;border:0;background:transparent;color:inherit;font-size:19px;line-height:1}#actionToastClose[hidden]{display:none}
     #operationBar{position:fixed;z-index:30;right:14px;bottom:14px;display:flex;align-items:center;gap:12px;width:min(520px,calc(100vw - 28px));padding:12px 14px;border:1px solid #28d7ff75;border-radius:16px;background:#09162cf5;box-shadow:0 14px 38px #000b;color:#e7f8ff}#operationBar[hidden]{display:none}.operation-copy{flex:1;font-size:13px;line-height:1.4}.operation-copy small{display:block;margin-top:3px;color:#9fb0cd;font-size:11px}#operationStop{flex:none;border-color:#ff4f70a0;background:#8d2540;color:#fff;font-weight:800}
     .home-overview{display:grid;grid-template-columns:1fr 1fr auto;align-items:center;gap:9px;margin:18px 0 4px}.home-overview span{padding:11px 13px;border:1px solid var(--line);border-radius:13px;background:#080e1c;color:var(--muted);font-size:12px}.home-overview strong{color:var(--text)}.home-overview button{padding:11px 13px;font-size:12px}.home-updated{margin:0 0 16px;color:var(--muted);font-size:11px}body.operation-active main{padding-bottom:110px}
-    .home-section{margin-top:16px;padding:18px;border:1px solid var(--line);border-radius:16px;background:var(--panel2)}.home-section h3{margin:0 0 7px}.home-section p{margin:6px 0 12px;color:var(--muted);font-size:12px}.home-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.home-actions .danger{border-color:#ff4f70a0;background:linear-gradient(135deg,#9d2944,#5f1830);color:#fff;font-weight:850}.home-row{display:flex;flex-wrap:wrap;align-items:center;gap:9px;margin-top:11px}.home-row label{color:var(--muted);font-size:12px}.home-row input{width:105px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#050a14;color:var(--text);font:inherit}.home-row button{flex:1;min-width:100px}.home-detail{color:var(--muted);font-size:12px}.home-detail summary{cursor:pointer;color:var(--text);font-size:15px;font-weight:750}.home-detail p{margin-top:12px}
+    .home-section{margin-top:16px;padding:18px;border:1px solid var(--line);border-radius:16px;background:var(--panel2)}.home-section h3{margin:0 0 7px}.home-section p{margin:6px 0 12px;color:var(--muted);font-size:12px}.home-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.home-actions .danger{border-color:#ff4f70a0;background:linear-gradient(135deg,#9d2944,#5f1830);color:#fff;font-weight:850}.home-row{display:flex;flex-wrap:wrap;align-items:center;gap:9px;margin-top:11px}.home-row label{color:var(--muted);font-size:12px}.home-row input,.home-row select{width:105px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#050a14;color:var(--text);font:inherit}.home-row button{flex:1;min-width:100px}.home-detail{color:var(--muted);font-size:12px}.home-detail summary{cursor:pointer;color:var(--text);font-size:15px;font-weight:750}.home-detail p{margin-top:12px}
     .drive{position:relative;border:1px solid #28d7ff47;border-radius:18px;background:linear-gradient(145deg,#183558,#101b32);box-shadow:0 10px 20px #0005,inset 0 1px #ffffff18;color:#dff8ff;font-size:25px;font-weight:850;touch-action:none;user-select:none;-webkit-user-select:none}.drive:hover:not(:disabled){box-shadow:0 0 20px #28d7ff25,inset 0 1px #ffffff22}.drive small{display:block;margin-top:3px;color:#8eaac8;font-size:10px;font-weight:700;letter-spacing:.5px}.drive.held{transform:scale(.94);border-color:var(--cyan);background:#0a7998;box-shadow:0 0 26px #28d7ff55}.drive.held small{color:#fff}.hint{margin-top:14px;text-align:center}.status-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:18px 0}.status-card,.config-card{padding:15px;border:1px solid var(--line);border-radius:15px;background:#080e1c}.status-card span,.config-card label{display:block;color:var(--muted);font-size:11px;font-weight:750}.status-card strong{display:block;margin-top:7px;color:#dff8ff;font-size:15px}.config-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}.config-card input{width:100%;margin:10px 0 0;padding:11px;border:1px solid var(--line);border-radius:10px;background:#050a14;color:var(--text);font:inherit}.config-actions{display:flex;align-items:center;gap:12px;margin-top:14px}.config-actions button{min-width:150px}.config-hint{margin:0;color:var(--muted);font-size:11px}
     .landscape-hud{display:none}.hud-topbar{grid-column:1/-1;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 clamp(10px,2vw,26px);border-bottom:1px solid #28d7ff54;background:linear-gradient(90deg,#06132d,#10264a 50%,#06132d);box-shadow:0 8px 28px #00d9ff20}.hud-signal{display:flex;align-items:center;gap:7px;color:#70f6ff;font-size:10px;font-weight:850;letter-spacing:1.2px}.hud-signal:before{width:8px;height:8px;border-radius:50%;background:var(--success);box-shadow:0 0 13px var(--success);content:""}.hud-title{color:#34e8ff;font-size:clamp(14px,2.2vw,23px);font-weight:900;letter-spacing:1.6px;text-align:center;text-shadow:0 0 18px #00d9ffaa}.hud-exit{justify-self:end;padding:7px 11px;border-color:#28d7ff66;background:#0a1c37;color:#79f4ff;font-size:11px;font-weight:850}.hud-bank{position:relative;display:grid;grid-template-rows:auto 1fr;align-items:center;overflow:hidden;padding:clamp(11px,2vw,25px)}.hud-bank:before{position:absolute;inset:8% 3%;border:clamp(8px,1.1vw,15px) solid #253c65;border-top-color:#355787;border-bottom-color:#182b50;border-radius:42% 42% 27% 27%;box-shadow:inset 0 0 35px #0bdcff0c,0 0 34px #0bdcff0b;content:""}.hud-bank:after{position:absolute;inset:13% 7%;border:1px solid #28d7ff2c;border-radius:40% 40% 25% 25%;content:""}.hud-bank-label{position:relative;z-index:1;color:#6fefff;font-size:10px;font-weight:900;letter-spacing:2px;text-align:center;text-shadow:0 0 12px #00d9ff}.hud-controls{position:relative;z-index:1;display:grid;grid-template-columns:1fr 1fr;place-items:center;gap:clamp(8px,2vw,28px)}.hud-drive{width:clamp(68px,12vw,136px);height:clamp(68px,12vw,136px);padding:0;border:2px solid #36dfff7a;border-radius:50%;background:radial-gradient(circle at 40% 32%,#244d79,#0b1c38 58%,#050d1e 70%);box-shadow:inset 0 0 18px #55eaff38,inset 0 -12px 24px #0007,0 0 26px #00d9ff20;color:#9cf7ff;font-size:clamp(26px,4.5vw,49px);text-shadow:0 0 13px #00d9ff}.hud-drive small{font-size:9px}.hud-drive.held{transform:scale(.92);background:radial-gradient(circle,#15a6cb,#07516d 65%,#032335);box-shadow:inset 0 0 20px #fff4,0 0 32px #00d9ffaa}.hud-center{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(5px,1.2vh,12px);padding:8px;text-align:center}.hud-center:before{position:absolute;inset:12% -5% 3%;z-index:0;border:1px solid #28d7ff22;clip-path:polygon(22% 0,78% 0,100% 100%,0 100%);background:linear-gradient(180deg,#10284e45,transparent);content:""}.hud-center>*{position:relative;z-index:1}.hud-kicker{color:#667b9f;font-size:8px;font-weight:900;letter-spacing:2.3px}.hud-heading{color:#20e7ff;font-size:clamp(11px,1.6vw,17px);font-weight:900;letter-spacing:1.8px;text-shadow:0 0 13px #00d9ff}.hud-speed{display:grid;line-height:.9}.hud-speed output{color:#f4fbff;font-size:clamp(40px,8vw,92px);font-weight:900;letter-spacing:-4px;text-shadow:0 0 25px #247dff8a}.hud-speed span{margin-top:7px;color:#5b6e90;font-size:8px;font-weight:850;letter-spacing:2px}.speed-presets{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;width:min(100%,260px)}.speed-preset{padding:8px 6px;border-radius:999px;color:#8397b8;font-size:11px;font-weight:850}.speed-preset.active{border-color:#28d7ff9c;background:linear-gradient(135deg,#087fa4,#315bd8);box-shadow:0 0 18px #28d7ff4a;color:#fff}.hud-distance{display:flex;align-items:baseline;gap:8px;padding:7px 13px;border:1px solid #28d7ff3c;border-radius:999px;background:#031024c7}.hud-distance span{color:#637b9e;font-size:8px;font-weight:900;letter-spacing:1.2px}.hud-distance strong{color:#61f0ff;font-size:clamp(15px,2.4vw,25px);font-variant-numeric:tabular-nums}.hud-stop{min-width:110px;padding:8px 18px;border-color:#ff4f7080;border-radius:999px;background:linear-gradient(145deg,#7c1731,#3a1020);color:#ffdce4;font-size:12px;font-weight:850}.hud-stop small{display:inline;margin-left:5px}
     .hud-controls{width:min(100%,350px);margin:auto;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(3,auto);gap:clamp(4px,1vw,12px)}
@@ -65,7 +65,7 @@ inline constexpr char kL298nWebPage[] = R"html(
       <div class="telemetry-copy"><span class="distance-label">KHOẢNG CÁCH VẬT CẢN</span><strong id="distance" class="distance">-- cm</strong></div><span id="sensorState" class="sensor-state error">Đang chờ SR04…</span>
     </div>
     <div id="modeNotice" class="notice" role="status" aria-live="polite"></div>
-    <p class="notice">Chỉ lái thủ công bằng PWM. Xe chưa tự giữ thẳng hoặc tự dừng theo quãng đường.</p>
+    <p class="notice">Lái thủ công hoặc dùng TimeDrive để chạy theo thời gian. Xe chưa tự dừng theo quãng đường.</p>
     <div class="dashboard">
       <nav class="menu" aria-label="Chế độ điều khiển">
         <button id="manualTab" class="active">🏠 Home</button>
@@ -79,7 +79,8 @@ inline constexpr char kL298nWebPage[] = R"html(
           <div class="portrait-manual">
             <div class="home-overview" aria-label="Thông tin thiết bị"><span>📶 <strong id="homeNetwork">Đang kiểm tra Wi-Fi…</strong></span><span>⏱ <strong id="homeUptime">--</strong></span><button id="refreshHome" type="button">Làm mới</button></div>
             <p id="homeUpdated" class="home-updated">Chưa có dữ liệu trạng thái.</p>
-            <section class="home-section"><h3>Thao tác nhanh</h3><p>Nút Dừng xe ngắt lệnh lái thủ công đang chạy trong HUD.</p><div class="home-actions"><button id="emergencyStop" class="danger" type="button">⏹ Dừng xe</button><button id="wakeRobot" type="button">🎙 Đánh thức Ruby</button></div><p id="status" role="status" aria-live="polite"></p></section>
+            <section class="home-section"><h3>Thao tác nhanh</h3><p>Nút Dừng xe ngắt lệnh lái hoặc TimeDrive đang thực hiện.</p><div class="home-actions"><button id="emergencyStop" class="danger" type="button">⏹ Dừng xe</button><button id="wakeRobot" type="button">🎙 Đánh thức Ruby</button></div><p id="status" role="status" aria-live="polite"></p></section>
+            <section class="home-section"><h3>TimeDrive</h3><p>Chọn hướng, tốc độ và thời gian để kiểm tra Speed PI; xe tự dừng khi hết giờ. Cần FC-03 hoạt động. Hãy thử lần đầu khi bánh xe được kê khỏi mặt đất.</p><div class="home-row"><label for="timeDriveDirection">Hướng</label><select id="timeDriveDirection"><option value="forward">Tiến</option><option value="backward">Lùi</option><option value="turn_left">Xoay trái</option><option value="turn_right">Xoay phải</option></select><label for="timeDriveSpeed">Tốc độ mục tiêu</label><input id="timeDriveSpeed" type="number" min="10" max="100" step="1" value="50" inputmode="numeric"><span>%</span><label for="timeDriveSeconds">Thời gian</label><input id="timeDriveSeconds" type="number" min="1" max="30" step="1" value="5" inputmode="numeric"><span>giây</span><button id="timeDriveStart" type="button">Chạy</button></div><p id="timeDriveProgress" class="feature-state" role="status" aria-live="polite">Chưa có lệnh chạy.</p></section>
             <section class="home-section" hidden><h3>Đi theo quãng đường</h3><p>Cần FC-03 đã hiệu chuẩn. Xe tự dừng ở đích; phía sau không có cảm biến vật cản.</p><div class="home-row"><label for="moveDistance">Quãng đường</label><input id="moveDistance" type="number" min="1" max="1000" step="1" value="30" inputmode="numeric"><span>cm</span></div><div class="home-row"><button id="moveForward" type="button">⬆ Tiến</button><button id="moveBackward" type="button">⬇ Lùi</button></div><p id="moveProgress" class="feature-state" aria-live="polite"></p></section>
             <section class="home-section" hidden><h3>Chế độ tự hành</h3><p>Bật một chế độ tại một thời điểm; chỉnh khoảng cách ở phần cấu hình bên dưới.</p><div class="home-row"><button id="homeFollowToggle" type="button" aria-pressed="false">Bật Follow</button><button id="homeAvoidToggle" type="button" aria-pressed="false">Bật né vật cản</button></div></section>
             <section id="encoderPanel" hidden aria-live="polite">
@@ -100,7 +101,7 @@ inline constexpr char kL298nWebPage[] = R"html(
             </div>
             <div class="config-actions" hidden><button id="saveConfig" type="button">Lưu thông số</button><p class="config-hint">Áp dụng ngay trong firmware; giá trị sẽ về mặc định sau khi khởi động lại.</p></div>
             </details>
-            <details class="home-section home-detail"><summary>Thông tin thiết bị &amp; trợ giúp</summary><p>Địa chỉ web: <strong id="homeIp">--</strong> · RAM trống: <strong id="homeRam">--</strong> KB.</p><p>Dùng HUD để lái thủ công. Nút Dừng xe ngắt mọi chuyển động. Lệnh theo cm và tự hành hiện chưa hoạt động.</p></details>
+            <details class="home-section home-detail"><summary>Thông tin thiết bị &amp; trợ giúp</summary><p>Địa chỉ web: <strong id="homeIp">--</strong> · RAM trống: <strong id="homeRam">--</strong> KB.</p><p>Dùng HUD để lái thủ công. Có thể nói “lùi tốc độ 50% trong 5 giây” hoặc “xoay trái tốc độ 50% trong 3 giây”. Nút Dừng xe ngắt mọi chuyển động. Lệnh theo cm và tự hành hiện chưa hoạt động.</p></details>
           </div>
           <div class="hud-rotate" aria-live="polite"><div class="hud-rotate-icon">↻</div><strong>Xoay ngang màn hình để trải nghiệm.</strong><p id="hudRotateStatus">Đang kết nối điều khiển xe…</p><div class="hud-rotate-actions"><button id="hudRotateStop" class="mode-off" type="button">⏹ Dừng xe</button><button id="hudRotateConnect" type="button">Kết nối lại</button><button id="hudRotateExit" type="button">Quay lại</button></div></div>
           <div class="landscape-hud" aria-label="Buồng lái ngang">
@@ -140,6 +141,7 @@ inline constexpr char kL298nWebPage[] = R"html(
     let warningDistanceCm = 30, obstacleDistanceCm = 20;
     let toastTimer, lastStatusTime = '';
     let operationActive = false, operationKind = '', operationText = '', operationStale = false;
+    let timeDriveOwner = '';
 
     const modeNames = {manual:'Thủ công',follow:'Follow',avoid:'Né vật cản'};
 
@@ -168,7 +170,16 @@ inline constexpr char kL298nWebPage[] = R"html(
       render();
     }
 
+    function timeDriveDirectionLabel(direction) {
+      return ({forward:'Tiến',backward:'Lùi',turn_left:'Xoay trái',
+        turn_right:'Xoay phải'})[direction] || 'Di chuyển';
+    }
+
     function operationFromStatus(data) {
+      if (data.command_mode === 'time_drive')
+        return ['time_drive',timeDriveDirectionLabel(data.time_drive_direction) + ' ' +
+          data.time_drive_speed_percent +
+          '% · còn ' + Math.ceil(data.time_drive_remaining_ms / 1000) + ' giây'];
       if (data.autonomy_mode === 'follow') return ['autonomy','Follow đang bật'];
       if (data.autonomy_mode === 'obstacle_avoidance')
         return ['autonomy','Né vật cản đang bật'];
@@ -192,6 +203,11 @@ inline constexpr char kL298nWebPage[] = R"html(
     }
 
     function finishedOperation(data) {
+      if (operationKind === 'time_drive') {
+        if (data.time_drive_state === 'completed') return ['TimeDrive đã hoàn thành.',true];
+        if (data.time_drive_state === 'fault') return ['Xe dừng vì lỗi FC-03 hoặc motor.',false];
+        return ['TimeDrive đã bị ngắt.',false];
+      }
       if (operationKind === 'distance') {
         if (data.distance_move_state === 'completed') return ['Đã hoàn thành quãng đường.',true];
         if (data.distance_move_state === 'obstacle') return ['Xe đã dừng vì vật cản.',false];
@@ -286,6 +302,7 @@ inline constexpr char kL298nWebPage[] = R"html(
         const response = await fetch('/api/status',{cache:'no-store',signal:controller.signal});
         if (!response.ok) throw new Error(String(response.status));
         const data = await response.json();
+        timeDriveOwner = data.command_mode === 'time_drive' ? data.time_drive_owner : '';
         lastStatusTime = new Date().toLocaleTimeString('vi-VN');
         $('homeUpdated').textContent = 'Cập nhật lúc ' + lastStatusTime;
         const operation = operationFromStatus(data);
@@ -318,6 +335,33 @@ inline constexpr char kL298nWebPage[] = R"html(
               ' RPM; PWM ' + data.left_pwm_percent + ' / ' + data.right_pwm_percent + '%'
             : data.speed_pi_calibrated ? 'PI tốc độ sẵn sàng' :
               'PI tốc độ chờ RPM tham chiếu từng bánh trong config.h';
+        if ($('timeDriveProgress')) {
+          const driveState = ({running:'Đang chạy',completed:'Đã hoàn thành',
+            interrupted:'Đã ngắt',fault:'Lỗi'})[data.time_drive_state] ||
+            'Chưa có lệnh chạy';
+          $('timeDriveProgress').textContent = driveState +
+            (data.time_drive_state !== 'idle' ? ' · ' +
+              timeDriveDirectionLabel(data.time_drive_direction) : '') +
+            (data.time_drive_duration_seconds ? ' · ' +
+              (data.time_drive_elapsed_ms / 1000).toFixed(1) + '/' +
+              data.time_drive_duration_seconds + ' giây · mục tiêu ' +
+              data.time_drive_speed_percent + '%' : '') +
+            (data.command_mode === 'time_drive' ? ' · RPM mục tiêu ' +
+              piNumber(data.speed_pi_left_target_rpm) + '/' +
+              piNumber(data.speed_pi_right_target_rpm) + ' · đo ' +
+              piNumber(data.encoder?.left?.rpm) + '/' +
+              piNumber(data.encoder?.right?.rpm) + ' · PWM ' +
+              data.left_pwm_percent + '/' + data.right_pwm_percent + '%' : '') +
+            (data.time_drive_samples > 0 ? ' · TB RPM ' +
+              piNumber(data.time_drive_average_left_rpm) + '/' +
+              piNumber(data.time_drive_average_right_rpm) + ' · sai số TB ' +
+              piNumber(data.time_drive_average_left_error_rpm) + '/' +
+              piNumber(data.time_drive_average_right_error_rpm) + ' RPM · độ lệch chuẩn ' +
+              piNumber(data.time_drive_stddev_left_rpm) + '/' +
+              piNumber(data.time_drive_stddev_right_rpm) + ' RPM · PWM TB ' +
+              piNumber(data.time_drive_average_left_pwm_percent) + '/' +
+              piNumber(data.time_drive_average_right_pwm_percent) + '%' : '');
+        }
         if (typeof document.querySelector === 'function') {
           const speedLabel = document.querySelector('.hud-speed span');
           if (speedLabel) speedLabel.textContent =
@@ -453,6 +497,7 @@ inline constexpr char kL298nWebPage[] = R"html(
         $(id).disabled = actionBusy || operationActive;
       $('homeFollowToggle').disabled = actionBusy || (operationActive && currentMode !== 'follow');
       $('homeAvoidToggle').disabled = actionBusy || (operationActive && currentMode !== 'avoid');
+      if ($('timeDriveStart')) $('timeDriveStart').disabled = actionBusy || operationActive || Boolean(session);
       const showBar = operationActive && !hudMode;
       $('operationBar').hidden = !showBar;
       $('operationText').textContent = operationText + (operationStale ? ' · Chưa cập nhật mới' : '');
@@ -657,6 +702,11 @@ inline constexpr char kL298nWebPage[] = R"html(
           } else if (action === 'forward' || action === 'backward') {
             showOperation('Đã nhận lệnh ' + (action === 'forward' ? 'tiến ' : 'lùi ') +
               fields.distance_cm + ' cm','distance');
+          } else if (action === 'time_drive') {
+            timeDriveOwner = 'web';
+            showOperation(timeDriveDirectionLabel(fields.direction) + ' ' +
+              fields.speed_percent + '% · ' +
+              fields.duration_seconds + ' giây','time_drive');
           }
           notifyAction($('status').textContent,true);
         }
@@ -688,6 +738,26 @@ inline constexpr char kL298nWebPage[] = R"html(
       }
       void homeAction(action,{distance_cm:distance},'Đã nhận lệnh đi ' + distance + ' cm.',
         'Chưa thể di chuyển. Kiểm tra FC-03, tốc độ PWM và trạng thái xe.');
+    }
+
+    function startTimeDrive() {
+      if (operationActive || session) {
+        notifyAction('Dừng xe và rời phiên HUD trước khi dùng TimeDrive.',false);
+        return;
+      }
+      const direction = $('timeDriveDirection').value;
+      const speedPercent = Number($('timeDriveSpeed').value);
+      const durationSeconds = Number($('timeDriveSeconds').value);
+      if (!['forward','backward','turn_left','turn_right'].includes(direction) ||
+          !Number.isInteger(speedPercent) || speedPercent < 10 || speedPercent > 100 ||
+          !Number.isInteger(durationSeconds) || durationSeconds < 1 || durationSeconds > 30) {
+        notifyAction('Chọn hướng, tốc độ 10–100% và thời gian 1–30 giây.',false);
+        return;
+      }
+      void homeAction('time_drive',
+        {direction,speed_percent:speedPercent,duration_seconds:durationSeconds},
+        'Đã bắt đầu TimeDrive.',
+        'Không thể chạy. Kiểm tra phiên HUD, FC-03 và Speed PI.');
     }
 
     function saveSharedSpeed() {
@@ -838,6 +908,7 @@ inline constexpr char kL298nWebPage[] = R"html(
     });
     $('moveForward').addEventListener('click',() => moveDistance('forward'));
     $('moveBackward').addEventListener('click',() => moveDistance('backward'));
+    if ($('timeDriveStart')) $('timeDriveStart').addEventListener('click',startTimeDrive);
     $('saveSharedSpeed').addEventListener('click',saveSharedSpeed);
     $('sharedSpeed').addEventListener('keydown',event => {
       if (event.key === 'Enter') saveSharedSpeed();
@@ -902,7 +973,13 @@ inline constexpr char kL298nWebPage[] = R"html(
     window.addEventListener('keydown', event => {
       if (event.code === 'Space' && hudMode && session) { event.preventDefault(); stop(); }
     });
-    const pageLost = () => park('Đã dừng xe và trả quyền điều khiển về giọng nói.');
+    const pageLost = () => {
+      if (operationKind === 'time_drive' && timeDriveOwner === 'web')
+        fetch('/api/action',{method:'POST',headers:{'X-Robot-Control':'1',
+          'Content-Type':'application/json'},body:JSON.stringify({action:'stop'}),
+          keepalive:true}).catch(() => {});
+      park('Đã dừng xe và trả quyền điều khiển về giọng nói.');
+    };
     window.addEventListener('blur',() => {
       // Browser chrome/fullscreen changes can blur a still-visible cockpit.
       if (document.hidden) pageLost();
@@ -913,6 +990,7 @@ inline constexpr char kL298nWebPage[] = R"html(
     document.addEventListener('visibilitychange', () => { if (document.hidden) pageLost(); });
     void refreshTelemetry();
     setInterval(refreshTelemetry,2000);
+    setInterval(() => { if (operationKind === 'time_drive' && !document.hidden) void refreshTelemetry(); },500);
     setInterval(() => { if (hudMode && !document.hidden) void refreshTelemetry(); },250);
     setInterval(() => { if (hudMode && session && !releasing) { pending = true; void pump(); } },150);
     $('theme').addEventListener('click', () => document.body.classList.toggle('ultra'));
