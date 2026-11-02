@@ -194,8 +194,9 @@ esp_err_t Action(httpd_req_t* req) {
             !ReadInteger(json.get(), "speed_percent", 10, 100, &speed_percent) ||
             !ReadInteger(json.get(), "duration_seconds", 1, 30, &duration_seconds))
             return Reply(req, "400 Bad Request", "{\"error\":\"Invalid TimeDrive\"}");
-        const esp_err_t error = StartL298nTimeDrive(
-            direction, static_cast<int>(speed_percent), static_cast<int>(duration_seconds), false);
+        const esp_err_t error = StartL298nCommand(ruby_robot::TimeDriveRequest{
+            direction, static_cast<int>(speed_percent), static_cast<int>(duration_seconds),
+            ruby_robot::TimeDriveOwner::kWeb});
         if (error != ESP_OK)
             return Reply(req, "409 Conflict", "{\"error\":\"Drive busy or PI unavailable\"}");
         return Reply(req, "200 OK", "{\"ok\":true}");
@@ -227,35 +228,35 @@ esp_err_t Status(httpd_req_t* req) {
     using Json = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
     Json json(cJSON_CreateObject(), cJSON_Delete);
     if (!json || !cJSON_AddBoolToObject(json.get(), "distance_valid", motor.distance_valid) ||
-        !cJSON_AddStringToObject(json.get(), "command_mode", motor.command_mode) ||
-        !cJSON_AddStringToObject(json.get(), "time_drive_state", motor.time_drive_state) ||
-        !cJSON_AddStringToObject(json.get(), "time_drive_owner", motor.time_drive_owner) ||
-        !cJSON_AddStringToObject(json.get(), "time_drive_direction", motor.time_drive_direction) ||
+        !cJSON_AddStringToObject(json.get(), "command_mode", motor.command.mode) ||
+        !cJSON_AddStringToObject(json.get(), "time_drive_state", motor.command.time_drive.state) ||
+        !cJSON_AddStringToObject(json.get(), "time_drive_owner", motor.command.time_drive.owner) ||
+        !cJSON_AddStringToObject(json.get(), "time_drive_direction", motor.command.time_drive.direction) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_speed_percent",
-                                 motor.time_drive_speed_percent) ||
+                                 motor.command.time_drive.speed_percent) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_duration_seconds",
-                                 motor.time_drive_duration_seconds) ||
+                                 motor.command.time_drive.duration_seconds) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_elapsed_ms",
-                                 motor.time_drive_elapsed_ms) ||
+                                 motor.command.time_drive.elapsed_ms) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_remaining_ms",
-                                 motor.time_drive_remaining_ms) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_samples", motor.time_drive_samples) ||
+                                 motor.command.time_drive.remaining_ms) ||
+        !cJSON_AddNumberToObject(json.get(), "time_drive_samples", motor.command.time_drive.metrics.samples) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_average_left_rpm",
-                                 motor.time_drive_average_left_rpm) ||
+                                 motor.command.time_drive.metrics.average_left_rpm) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_average_right_rpm",
-                                 motor.time_drive_average_right_rpm) ||
+                                 motor.command.time_drive.metrics.average_right_rpm) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_average_left_error_rpm",
-                                 motor.time_drive_average_left_error_rpm) ||
+                                 motor.command.time_drive.metrics.average_left_error_rpm) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_average_right_error_rpm",
-                                 motor.time_drive_average_right_error_rpm) ||
+                                 motor.command.time_drive.metrics.average_right_error_rpm) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_average_left_pwm_percent",
-                                 motor.time_drive_average_left_pwm_percent) ||
+                                 motor.command.time_drive.metrics.average_left_pwm_percent) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_average_right_pwm_percent",
-                                 motor.time_drive_average_right_pwm_percent) ||
+                                 motor.command.time_drive.metrics.average_right_pwm_percent) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_stddev_left_rpm",
-                                 motor.time_drive_stddev_left_rpm) ||
+                                 motor.command.time_drive.metrics.stddev_left_rpm) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_stddev_right_rpm",
-                                 motor.time_drive_stddev_right_rpm) ||
+                                 motor.command.time_drive.metrics.stddev_right_rpm) ||
         !cJSON_AddStringToObject(json.get(), "control_mode",
                                  motor.speed_pi_active ? "speed_pi" : "manual_pwm") ||
         !cJSON_AddNumberToObject(json.get(), "distance_cm", motor.measured_distance_cm) ||

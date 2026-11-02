@@ -22,16 +22,38 @@ struct TimeDriveMetrics {
 enum class TimeDriveState { kIdle, kRunning, kCompleted, kInterrupted, kFault };
 enum class TimeDriveOwner { kWeb, kVoice };
 
+struct TimeDriveRequest {
+    Motion direction = Motion::kStop;
+    int speed_percent = 0;
+    int duration_seconds = 0;
+    TimeDriveOwner owner = TimeDriveOwner::kWeb;
+};
+
+struct TimeDriveSnapshot {
+    const char* state;
+    const char* owner;
+    const char* direction;
+    int speed_percent;
+    int duration_seconds;
+    int elapsed_ms;
+    int remaining_ms;
+    TimeDriveMetrics metrics;
+};
+
 // Owns one timed command and its Speed PI measurements; motor output stays in the controller.
 class TimeDriveCommand {
 public:
     static constexpr int kMinSeconds = 1;
     static constexpr int kMaxSeconds = 30;
     static constexpr int kMinSpeedPercent = 10;
+    static constexpr bool kRequiresWifi = true;
+    static constexpr bool kRequiresSpeedPi = true;
 
-    bool Start(Motion direction, int speed_percent, int duration_seconds,
-               TimeDriveOwner owner, int64_t now_us);
+    static bool Valid(const TimeDriveRequest& request);
+
+    bool Start(const TimeDriveRequest& request, int64_t now_us);
     bool Expired(int64_t now_us) const;
+    bool CompletionReady() const { return totals_.samples > 0; }
     void Complete(int64_t now_us);
     void Fail(int64_t now_us);
     void Interrupt(int64_t now_us);
@@ -39,6 +61,7 @@ public:
                       double left_measured_rpm, double right_measured_rpm,
                       int left_pwm_percent, int right_pwm_percent);
     TimeDriveMetrics GetMetrics() const;
+    TimeDriveSnapshot Snapshot(int64_t now_us) const;
 
     TimeDriveState state() const { return state_; }
     TimeDriveOwner owner() const { return owner_; }

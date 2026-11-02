@@ -27,9 +27,10 @@ factory and `robot/robot_board.cc` as the RobotCar composition root:
 1. `robot/web/`, `robot/telegram/`, and `robot/mcp/` adapt requests to the public
    control API in `robot/controller/l298n_controller.h`. `robot/serialization/`
    formats sensor telemetry for these adapters.
-2. `robot/commands/` holds the mode selector and each mode's wheel targets and
-   state. `robot/controller/` owns the mutex, watchdog, motion timing, warnings,
-   and stop path. Its mutex serializes network, sensor, and timer callbacks.
+2. `robot/commands/` holds the mode selector, requests, wheel targets, and
+   mode state. `robot/controller/` runs commands through one motor and stop path;
+   it owns the mutex, watchdog, motion timing, and warnings. Its mutex serializes
+   network, sensor, and timer callbacks.
    `robot/domain/` holds hardware-independent motion and lease rules.
 3. `robot/drivers/` owns motor GPIO and LEDC; `robot/sensors/` owns sensor hardware.
    Sensor readings never directly set wheel PWM.

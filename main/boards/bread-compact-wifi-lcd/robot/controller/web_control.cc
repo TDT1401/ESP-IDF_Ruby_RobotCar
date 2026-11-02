@@ -9,7 +9,7 @@ void L298nController::SetWebConnected(bool connected) {
     web_control_.SetConnected(connected);
     if (!connected && web_control_.active()) {
         EndWebControlLocked();
-    } else if (!connected && command_interface_.mode() == CommandMode::kTimeDrive) {
+    } else if (!connected && command_interface_.Active()) {
         StopLocked();
     }
 }
@@ -20,7 +20,7 @@ esp_err_t L298nController::BeginWebControl(uint32_t* session) {
     std::lock_guard lock(mutex_);
     const int64_t now = esp_timer_get_time();
     if (!web_control_.connected() || !MotionAllowed() ||
-        command_interface_.mode() == CommandMode::kTimeDrive)
+        command_interface_.Active())
         return ESP_ERR_INVALID_STATE;
     if (!web_control_.CanBegin(now))
         return ESP_ERR_INVALID_STATE;

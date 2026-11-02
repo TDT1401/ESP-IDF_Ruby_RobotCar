@@ -16,16 +16,14 @@ void L298nController::StopFailedMotionLocked(int64_t now_us) {
         EndWebControlLocked();
         return;
     }
-    const bool time_drive = command_interface_.mode() == CommandMode::kTimeDrive;
+    const bool active_command = command_interface_.Active();
     StopLocked();
-    if (time_drive)
-        command_interface_.FailTimeDrive(now_us);
+    if (active_command)
+        command_interface_.Fail(now_us);
 }
 
 int L298nController::ActiveSpeedLocked() const {
-    return command_interface_.mode() == CommandMode::kTimeDrive
-               ? command_interface_.time_drive().speed_percent()
-               : web_speed_percent_;
+    return command_interface_.Active() ? command_interface_.speed_percent() : web_speed_percent_;
 }
 
 bool L298nController::PrepareMotionLocked(Motion motion) {
@@ -59,12 +57,13 @@ void L298nController::Tick() {
             StopLocked();
         return;
     }
-    if (command_interface_.TimeDriveExpired(now)) {
+    if (command_interface_.Expired(now)) {
+        const bool completion_ready = command_interface_.CompletionReady();
         StopLocked();
-        if (fault_ == ESP_OK && command_interface_.time_drive().GetMetrics().samples > 0)
-            command_interface_.CompleteTimeDrive(now);
+        if (fault_ == ESP_OK && completion_ready)
+            command_interface_.Complete(now);
         else
-            command_interface_.FailTimeDrive(now);
+            command_interface_.Fail(now);
         return;
     }
     if (motion_ == Motion::kStop)

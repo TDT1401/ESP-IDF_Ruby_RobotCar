@@ -13,35 +13,35 @@ ToolResult GetState() {
     const auto status = GetL298nMotorStatus();
     CJsonUniquePtr json(cJSON_CreateObject());
     if (!json || !cJSON_AddStringToObject(json.get(), "motion", status.motion) ||
-        !cJSON_AddStringToObject(json.get(), "command_mode", status.command_mode) ||
-        !cJSON_AddStringToObject(json.get(), "time_drive_state", status.time_drive_state) ||
-        !cJSON_AddStringToObject(json.get(), "time_drive_direction", status.time_drive_direction) ||
-        !cJSON_AddStringToObject(json.get(), "time_drive_owner", status.time_drive_owner) ||
+        !cJSON_AddStringToObject(json.get(), "command_mode", status.command.mode) ||
+        !cJSON_AddStringToObject(json.get(), "time_drive_state", status.command.time_drive.state) ||
+        !cJSON_AddStringToObject(json.get(), "time_drive_direction", status.command.time_drive.direction) ||
+        !cJSON_AddStringToObject(json.get(), "time_drive_owner", status.command.time_drive.owner) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_speed_percent",
-                                 status.time_drive_speed_percent) ||
+                                 status.command.time_drive.speed_percent) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_duration_seconds",
-                                 status.time_drive_duration_seconds) ||
+                                 status.command.time_drive.duration_seconds) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_elapsed_ms",
-                                 status.time_drive_elapsed_ms) ||
+                                 status.command.time_drive.elapsed_ms) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_remaining_ms",
-                                 status.time_drive_remaining_ms) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_samples", status.time_drive_samples) ||
+                                 status.command.time_drive.remaining_ms) ||
+        !cJSON_AddNumberToObject(json.get(), "time_drive_samples", status.command.time_drive.metrics.samples) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_average_left_rpm",
-                                 status.time_drive_average_left_rpm) ||
+                                 status.command.time_drive.metrics.average_left_rpm) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_average_right_rpm",
-                                 status.time_drive_average_right_rpm) ||
+                                 status.command.time_drive.metrics.average_right_rpm) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_average_left_error_rpm",
-                                 status.time_drive_average_left_error_rpm) ||
+                                 status.command.time_drive.metrics.average_left_error_rpm) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_average_right_error_rpm",
-                                 status.time_drive_average_right_error_rpm) ||
+                                 status.command.time_drive.metrics.average_right_error_rpm) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_average_left_pwm_percent",
-                                 status.time_drive_average_left_pwm_percent) ||
+                                 status.command.time_drive.metrics.average_left_pwm_percent) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_average_right_pwm_percent",
-                                 status.time_drive_average_right_pwm_percent) ||
+                                 status.command.time_drive.metrics.average_right_pwm_percent) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_stddev_left_rpm",
-                                 status.time_drive_stddev_left_rpm) ||
+                                 status.command.time_drive.metrics.stddev_left_rpm) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_stddev_right_rpm",
-                                 status.time_drive_stddev_right_rpm) ||
+                                 status.command.time_drive.metrics.stddev_right_rpm) ||
         !cJSON_AddNumberToObject(json.get(), "speed_percent", status.speed_percent) ||
         !cJSON_AddNumberToObject(json.get(), "active_speed_percent", status.active_speed_percent) ||
         !cJSON_AddBoolToObject(json.get(), "moving", status.moving) ||
@@ -96,10 +96,9 @@ void RegisterL298nMcpTools() {
                 properties["direction"].value<std::string>().c_str());
             if (direction == ruby_robot::Motion::kStop)
                 return std::unexpected(std::string("Invalid TimeDrive direction"));
-            const esp_err_t error = StartL298nTimeDrive(
-                direction,
-                properties["speed_percent"].value<int>(),
-                properties["duration_seconds"].value<int>(), true);
+            const esp_err_t error = StartL298nCommand(ruby_robot::TimeDriveRequest{
+                direction, properties["speed_percent"].value<int>(),
+                properties["duration_seconds"].value<int>(), ruby_robot::TimeDriveOwner::kVoice});
             if (error != ESP_OK)
                 return std::unexpected(std::string("TimeDrive unavailable: ") +
                                        esp_err_to_name(error));

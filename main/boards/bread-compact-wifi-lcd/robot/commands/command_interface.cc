@@ -21,27 +21,62 @@ void CommandInterface::ReleaseManual() {
     }
 }
 
-bool CommandInterface::BeginTimeDrive(Motion direction, int speed_percent, int duration_seconds,
-                                      TimeDriveOwner owner, int64_t now_us) {
-    if (mode_ != CommandMode::kIdle ||
-        !time_drive_.Start(direction, speed_percent, duration_seconds, owner, now_us))
-        return false;
-    mode_ = CommandMode::kTimeDrive;
-    return true;
+bool CommandInterface::Valid(const CommandRequest& request) {
+    if (const auto* drive = std::get_if<TimeDriveRequest>(&request))
+        return TimeDriveCommand::Valid(*drive);
+    return false;
 }
 
-bool CommandInterface::TimeDriveExpired(int64_t now_us) const {
+CommandRequirements CommandInterface::Requirements(const CommandRequest& request) {
+    if (std::get_if<TimeDriveRequest>(&request))
+        return {TimeDriveCommand::kRequiresWifi, TimeDriveCommand::kRequiresSpeedPi};
+    return {true, true};
+}
+
+bool CommandInterface::Start(const CommandRequest& request, int64_t now_us) {
+    if (mode_ != CommandMode::kIdle || !Valid(request))
+        return false;
+    if (const auto* drive = std::get_if<TimeDriveRequest>(&request)) {
+        if (!time_drive_.Start(*drive, now_us))
+            return false;
+        mode_ = CommandMode::kTimeDrive;
+        return true;
+    }
+    return false;
+}
+
+Motion CommandInterface::direction() const {
+    return mode_ == CommandMode::kTimeDrive ? time_drive_.direction() : Motion::kStop;
+}
+
+int CommandInterface::speed_percent() const {
+    return mode_ == CommandMode::kTimeDrive ? time_drive_.speed_percent() : 0;
+}
+
+bool CommandInterface::Expired(int64_t now_us) const {
     return mode_ == CommandMode::kTimeDrive && time_drive_.Expired(now_us);
 }
 
-void CommandInterface::CompleteTimeDrive(int64_t now_us) {
+bool CommandInterface::CompletionReady() const {
+    return mode_ == CommandMode::kTimeDrive && time_drive_.CompletionReady();
+}
+
+void CommandInterface::Complete(int64_t now_us) {
     mode_ = CommandMode::kIdle;
     time_drive_.Complete(now_us);
 }
 
-void CommandInterface::FailTimeDrive(int64_t now_us) {
+void CommandInterface::Fail(int64_t now_us) {
     mode_ = CommandMode::kIdle;
     time_drive_.Fail(now_us);
+}
+
+void CommandInterface::RecordSpeedSample(double left_target_rpm, double right_target_rpm,
+                                         double left_measured_rpm, double right_measured_rpm,
+                                         int left_pwm_percent, int right_pwm_percent) {
+    if (mode_ == CommandMode::kTimeDrive)
+        time_drive_.RecordSample(left_target_rpm, right_target_rpm, left_measured_rpm,
+                                 right_measured_rpm, left_pwm_percent, right_pwm_percent);
 }
 
 void CommandInterface::StopMotion(int64_t now_us) {
@@ -59,6 +94,13 @@ WheelCommand CommandInterface::wheels() const {
     if (mode_ == CommandMode::kTimeDrive)
         return time_drive_.wheels();
     return {};
+}
+
+CommandSnapshot CommandInterface::Snapshot(int64_t now_us) const {
+    const char* owner = mode_ == CommandMode::kTimeDrive
+                            ? TimeDriveCommand::OwnerName(time_drive_.owner())
+                            : mode_ == CommandMode::kManual ? "web" : "none";
+    return {ModeName(mode_), owner, time_drive_.Snapshot(now_us)};
 }
 
 const char* CommandInterface::ModeName(CommandMode mode) {

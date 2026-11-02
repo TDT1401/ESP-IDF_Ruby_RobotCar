@@ -5,18 +5,24 @@
 
 namespace ruby_robot {
 
-bool TimeDriveCommand::Start(Motion direction, int speed_percent, int duration_seconds,
-                             TimeDriveOwner owner, int64_t now_us) {
-    if ((direction != Motion::kForward && direction != Motion::kBackward &&
-         direction != Motion::kLeft && direction != Motion::kRight) ||
-        speed_percent < kMinSpeedPercent || speed_percent > 100 ||
-        duration_seconds < kMinSeconds || duration_seconds > kMaxSeconds)
+bool TimeDriveCommand::Valid(const TimeDriveRequest& request) {
+    return (request.direction == Motion::kForward || request.direction == Motion::kBackward ||
+            request.direction == Motion::kLeft || request.direction == Motion::kRight) &&
+           request.speed_percent >= kMinSpeedPercent && request.speed_percent <= 100 &&
+           request.duration_seconds >= kMinSeconds && request.duration_seconds <= kMaxSeconds;
+}
+
+bool TimeDriveCommand::Start(const TimeDriveRequest& request, int64_t now_us) {
+    if (!Valid(request))
         return false;
+    const auto direction = request.direction;
+    const int speed_percent = request.speed_percent;
+    const int duration_seconds = request.duration_seconds;
     const int left_sign = direction == Motion::kBackward || direction == Motion::kLeft ? -1 : 1;
     const int right_sign = direction == Motion::kBackward || direction == Motion::kRight ? -1 : 1;
     wheels_ = {left_sign * speed_percent, right_sign * speed_percent};
     state_ = TimeDriveState::kRunning;
-    owner_ = owner;
+    owner_ = request.owner;
     direction_ = direction;
     speed_percent_ = speed_percent;
     duration_seconds_ = duration_seconds;
@@ -84,6 +90,11 @@ TimeDriveMetrics TimeDriveCommand::GetMetrics() const {
         result.average_right_pwm_percent /= result.samples;
     }
     return result;
+}
+
+TimeDriveSnapshot TimeDriveCommand::Snapshot(int64_t now_us) const {
+    return {StateName(state_), OwnerName(owner_), MotionName(direction_), speed_percent_,
+            duration_seconds_, ElapsedMs(now_us), RemainingMs(now_us), GetMetrics()};
 }
 
 int TimeDriveCommand::ElapsedMs(int64_t now_us) const {

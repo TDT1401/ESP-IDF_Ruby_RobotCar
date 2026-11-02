@@ -23,32 +23,28 @@ void L298nController::Stop() {
     command_interface_.ReleaseManual();
 }
 
-esp_err_t L298nController::StartTimeDrive(Motion direction, int speed_percent,
-                                          int duration_seconds, TimeDriveOwner owner) {
-    if ((direction != Motion::kForward && direction != Motion::kBackward &&
-         direction != Motion::kLeft && direction != Motion::kRight) ||
-        speed_percent < TimeDriveCommand::kMinSpeedPercent || speed_percent > 100 ||
-        duration_seconds < TimeDriveCommand::kMinSeconds ||
-        duration_seconds > TimeDriveCommand::kMaxSeconds)
+esp_err_t L298nController::StartCommand(const CommandRequest& request) {
+    if (!CommandInterface::Valid(request))
         return ESP_ERR_INVALID_ARG;
+    const auto requirements = CommandInterface::Requirements(request);
     std::lock_guard lock(mutex_);
-    if (!MotionAllowed() || !web_control_.connected() || web_control_.active() ||
-        command_interface_.mode() != CommandMode::kIdle)
+    if (!MotionAllowed() || (requirements.wifi && !web_control_.connected()) ||
+        web_control_.active() || command_interface_.mode() != CommandMode::kIdle)
         return ESP_ERR_INVALID_STATE;
     if (fault_ != ESP_OK)
         return fault_;
-    if (!SpeedPiReadyLocked())
+    if (requirements.speed_pi && !SpeedPiReadyLocked())
         return ESP_ERR_INVALID_STATE;
     StopLocked();
     if (fault_ != ESP_OK)
         return fault_;
     speed_pi_fault_ = "none";
     const int64_t now = esp_timer_get_time();
-    if (!command_interface_.BeginTimeDrive(direction, speed_percent, duration_seconds, owner, now))
+    if (!command_interface_.Start(request, now))
         return ESP_ERR_INVALID_STATE;
-    if (!PrepareMotionLocked(direction)) {
+    if (!PrepareMotionLocked(command_interface_.direction())) {
         StopLocked();
-        command_interface_.FailTimeDrive(esp_timer_get_time());
+        command_interface_.Fail(esp_timer_get_time());
         return fault_ != ESP_OK ? fault_ : ESP_FAIL;
     }
     return ESP_OK;
@@ -61,26 +57,7 @@ L298nMotorStatus L298nController::Snapshot() {
     const auto imu = GetMpu6050Status();
     L298nMotorStatus status{};
     const int64_t now = esp_timer_get_time();
-    status.command_mode = CommandInterface::ModeName(command_interface_.mode());
-    status.time_drive_state =
-        TimeDriveCommand::StateName(command_interface_.time_drive().state());
-    status.time_drive_owner =
-        TimeDriveCommand::OwnerName(command_interface_.time_drive().owner());
-    status.time_drive_direction = MotionName(command_interface_.time_drive().direction());
-    status.time_drive_speed_percent = command_interface_.time_drive().speed_percent();
-    status.time_drive_duration_seconds = command_interface_.time_drive().duration_seconds();
-    status.time_drive_elapsed_ms = command_interface_.time_drive().ElapsedMs(now);
-    status.time_drive_remaining_ms = command_interface_.time_drive().RemainingMs(now);
-    const auto drive_metrics = command_interface_.time_drive().GetMetrics();
-    status.time_drive_samples = drive_metrics.samples;
-    status.time_drive_average_left_rpm = drive_metrics.average_left_rpm;
-    status.time_drive_average_right_rpm = drive_metrics.average_right_rpm;
-    status.time_drive_average_left_error_rpm = drive_metrics.average_left_error_rpm;
-    status.time_drive_average_right_error_rpm = drive_metrics.average_right_error_rpm;
-    status.time_drive_average_left_pwm_percent = drive_metrics.average_left_pwm_percent;
-    status.time_drive_average_right_pwm_percent = drive_metrics.average_right_pwm_percent;
-    status.time_drive_stddev_left_rpm = drive_metrics.stddev_left_rpm;
-    status.time_drive_stddev_right_rpm = drive_metrics.stddev_right_rpm;
+    status.command = command_interface_.Snapshot(now);
     status.motion = MotionName(motion_);
     status.speed_percent = web_speed_percent_;
     status.active_speed_percent = moving_ ? ActiveSpeedLocked() : 0;
@@ -118,9 +95,7 @@ L298nMotorStatus L298nController::Snapshot() {
     status.gyro_z_dps = imu.gyro_z_dps;
     status.left_pwm_percent = CurrentLeftPwmPercentLocked();
     status.right_pwm_percent = CurrentRightPwmPercentLocked();
-    status.control_owner = command_interface_.mode() == CommandMode::kTimeDrive
-                               ? status.time_drive_owner
-                               : web_control_.active() ? "web" : "none";
+    status.control_owner = web_control_.active() ? "web" : status.command.owner;
     status.warning_sound_enabled = proximity_warning_enabled_;
     return status;
 }
@@ -195,11 +170,8 @@ void SetL298nWebConnected(bool connected) {
     L298nController::Instance().SetWebConnected(connected);
 }
 
-esp_err_t StartL298nTimeDrive(ruby_robot::Motion direction, int speed_percent,
-                              int duration_seconds, bool from_voice) {
-    return L298nController::Instance().StartTimeDrive(
-        direction, speed_percent, duration_seconds,
-        from_voice ? ruby_robot::TimeDriveOwner::kVoice : ruby_robot::TimeDriveOwner::kWeb);
+esp_err_t StartL298nCommand(const ruby_robot::CommandRequest& request) {
+    return L298nController::Instance().StartCommand(request);
 }
 
 L298nMotorStatus GetL298nMotorStatus() { return L298nController::Instance().Snapshot(); }

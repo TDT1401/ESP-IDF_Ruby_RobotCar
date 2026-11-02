@@ -100,7 +100,7 @@ bool L298nController::UpdateSpeedPiLocked(int64_t now_us) {
     last_speed_pi_us_ = now_us;
     if (!ApplyMotorPwmLocked(left, right))
         return false;
-    command_interface_.time_drive().RecordSample(
+    command_interface_.RecordSpeedSample(
         TargetRpm(requested_left_percent_, SPEED_PI_LEFT_REFERENCE_RPM),
         TargetRpm(requested_right_percent_, SPEED_PI_RIGHT_REFERENCE_RPM), encoder.left.rpm,
         encoder.right.rpm, left, right);

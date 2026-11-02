@@ -38,7 +38,7 @@ main/boards/bread-compact-wifi-lcd/
 │   ├── mcp/                    Presentation Layer: device-side MCP tools
 │   ├── serialization/          Presentation Layer: encoder → JSON
 │   ├── commands/               Application Layer: chế độ và mục tiêu hai bánh
-│   │   ├── command_interface.* Chọn một chế độ đang chạy
+│   │   ├── command_interface.* Chọn chế độ, request và trạng thái chung
 │   │   ├── manual_command.*    Mục tiêu hai bánh khi lái thủ công
 │   │   ├── time_drive_command.* Hướng, thời hạn và số liệu PI của TimeDrive
 │   │   └── wheel_command.h     Kiểu dữ liệu mục tiêu hai bánh
@@ -81,7 +81,9 @@ dùng API controller và cùng tuân theo một đường dừng motor.
 
 `CommandInterface` chọn một chế độ tại một thời điểm: `kIdle` (không chạy),
 `kManual` (lái thủ công) hoặc `kTimeDrive` (chạy theo thời gian). Mỗi chế độ giữ
-logic riêng trong `manual_command.*` hoặc `time_drive_command.*`.
+logic riêng trong `manual_command.*` hoặc `time_drive_command.*`. Controller nhận
+`CommandRequest` chung, rồi lấy mục tiêu hai bánh và điều kiện kết thúc từ
+`CommandInterface`; controller không cần biết cách `TimeDrive` tính thời hạn.
 
 `TimeDrive` nhận hướng, tốc độ và số giây; hướng có thể là tiến, lùi, xoay trái
 hoặc xoay phải. Xe tự dừng khi hết giờ. Nó không đo quãng đường hoặc góc xoay để
@@ -89,8 +91,11 @@ quyết định điểm dừng.
 
 Luồng chung: **Command Interface → Controller → Speed PI/PWM → Motor Driver**.
 `kManual` dùng Speed PI khi đã cấu hình; `kTimeDrive` yêu cầu Speed PI sẵn sàng.
-Khi thêm chế độ, đặt trạng thái và luật riêng của nó trong file mới; chỉ thêm
-phần chọn chế độ vào `CommandInterface`. Không cần viết lại Speed PI hoặc Motor Driver.
+Khi thêm chế độ dùng cùng đường chạy motor, đặt trạng thái và luật riêng trong
+file mới, rồi thêm request và phần chọn chế độ vào `CommandInterface`. Chỉ sửa
+Controller nếu chế độ cần năng lực phần cứng hoặc quy tắc an toàn mới. Đường chạy
+hiện tại giữ một hướng trong suốt lệnh; chế độ cần đổi hướng khi đang chạy sẽ cần
+thêm cơ chế đổi hướng an toàn dùng chung trước khi nối vào.
 
 ## 5. Control Flow and Safety
 

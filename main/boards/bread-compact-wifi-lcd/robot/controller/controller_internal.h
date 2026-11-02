@@ -30,8 +30,7 @@ public:
     static L298nController& Instance();
 
     void Stop();
-    esp_err_t StartTimeDrive(Motion direction, int speed_percent, int duration_seconds,
-                             TimeDriveOwner owner);
+    esp_err_t StartCommand(const CommandRequest& request);
     L298nMotorStatus Snapshot();
     void UpdateDistance(int distance_cm, bool valid);
     void ScheduleProximityWarning();
