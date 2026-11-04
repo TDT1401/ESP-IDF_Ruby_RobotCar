@@ -24,9 +24,10 @@ enum class TimeDriveOwner { kWeb, kVoice };
 
 struct TimeDriveRequest {
     Motion direction = Motion::kStop;
-    int speed_percent = 0;
+    int speed_percent = 0;  // For turns, 0 asks the controller to select the speed limit.
     int duration_seconds = 0;
     TimeDriveOwner owner = TimeDriveOwner::kWeb;
+    int angle_degrees = 0;  // Required for turns; duration is then a safety timeout.
 };
 
 struct TimeDriveSnapshot {
@@ -35,6 +36,7 @@ struct TimeDriveSnapshot {
     const char* direction;
     int speed_percent;
     int duration_seconds;
+    int angle_degrees;  // Signed: positive left, negative right.
     int elapsed_ms;
     int remaining_ms;
     TimeDriveMetrics metrics;
@@ -69,6 +71,7 @@ public:
     WheelCommand wheels() const { return wheels_; }
     int speed_percent() const { return speed_percent_; }
     int duration_seconds() const { return duration_seconds_; }
+    int angle_degrees() const { return angle_degrees_; }
     int ElapsedMs(int64_t now_us) const;
     int RemainingMs(int64_t now_us) const;
 
@@ -82,6 +85,7 @@ private:
     WheelCommand wheels_;
     int speed_percent_ = 0;
     int duration_seconds_ = 0;
+    int angle_degrees_ = 0;
     int64_t started_us_ = 0;
     int64_t deadline_us_ = 0;
     int64_t ended_us_ = 0;

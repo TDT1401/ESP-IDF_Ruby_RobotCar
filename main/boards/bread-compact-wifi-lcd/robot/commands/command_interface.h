@@ -14,6 +14,7 @@ using CommandRequest = std::variant<TimeDriveRequest>;
 struct CommandRequirements {
     bool wifi;
     bool speed_pi;
+    bool heading;
 };
 
 struct CommandSnapshot {
@@ -36,6 +37,8 @@ public:
     bool Active() const { return mode_ != CommandMode::kIdle && mode_ != CommandMode::kManual; }
     Motion direction() const;
     int speed_percent() const;
+    bool IsAngleTurn() const;
+    int angle_degrees() const;
     bool Expired(int64_t now_us) const;
     bool CompletionReady() const;
     void Complete(int64_t now_us);

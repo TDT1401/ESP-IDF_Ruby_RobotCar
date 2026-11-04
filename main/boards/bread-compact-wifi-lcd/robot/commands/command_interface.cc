@@ -28,9 +28,11 @@ bool CommandInterface::Valid(const CommandRequest& request) {
 }
 
 CommandRequirements CommandInterface::Requirements(const CommandRequest& request) {
-    if (std::get_if<TimeDriveRequest>(&request))
-        return {TimeDriveCommand::kRequiresWifi, TimeDriveCommand::kRequiresSpeedPi};
-    return {true, true};
+    if (const auto* drive = std::get_if<TimeDriveRequest>(&request))
+        return {TimeDriveCommand::kRequiresWifi, TimeDriveCommand::kRequiresSpeedPi,
+                drive->direction == Motion::kForward || drive->direction == Motion::kBackward ||
+                    drive->angle_degrees > 0};
+    return {true, true, false};
 }
 
 bool CommandInterface::Start(const CommandRequest& request, int64_t now_us) {
@@ -51,6 +53,14 @@ Motion CommandInterface::direction() const {
 
 int CommandInterface::speed_percent() const {
     return mode_ == CommandMode::kTimeDrive ? time_drive_.speed_percent() : 0;
+}
+
+bool CommandInterface::IsAngleTurn() const {
+    return mode_ == CommandMode::kTimeDrive && time_drive_.angle_degrees() > 0;
+}
+
+int CommandInterface::angle_degrees() const {
+    return mode_ == CommandMode::kTimeDrive ? time_drive_.angle_degrees() : 0;
 }
 
 bool CommandInterface::Expired(int64_t now_us) const {

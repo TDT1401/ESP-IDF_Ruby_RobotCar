@@ -5,6 +5,7 @@
 #include "../domain/motion_policy.h"
 #include "../domain/web_control_session.h"
 #include "../drivers/l298n_motor_driver.h"
+#include "heading_pd.h"
 #include "speed_pi.h"
 
 #include <esp_err.h>
@@ -20,6 +21,8 @@ constexpr int kDefaultWebSpeedPercent = 75;
 constexpr int64_t kDirectionDelayUs = 50000;
 constexpr int64_t kTickUs = 10000;
 constexpr int64_t kSpeedPiPeriodUs = 100000;
+constexpr int64_t kHeadingPdPeriodUs = 50000;
+constexpr int64_t kTurnSettleUs = 150000;
 constexpr int kDefaultFollowDistanceCm = 30;
 constexpr int kDefaultObstacleDistanceCm = 20;
 constexpr int kSensorStaleMs = 250;
@@ -53,6 +56,17 @@ private:
     int requested_right_percent_ = 0;
     int64_t last_speed_pi_us_ = 0;
     const char* speed_pi_fault_ = "none";
+    bool heading_hold_active_ = false;
+    bool heading_turn_active_ = false;
+    bool heading_turn_complete_ = false;
+    double heading_turn_start_degrees_ = 0;
+    double turn_progress_degrees_ = 0;
+    int64_t turn_settled_since_us_ = 0;
+    double heading_target_degrees_ = 0;
+    double heading_error_degrees_ = 0;
+    double heading_correction_rpm_ = 0;
+    int64_t last_heading_pd_us_ = 0;
+    const char* heading_fault_ = "none";
     int applied_left_pwm_percent_ = 0;
     int applied_right_pwm_percent_ = 0;
     esp_timer_handle_t timer_ = nullptr;
@@ -98,6 +112,7 @@ private:
     bool ApplyMotorPwmLocked(int left_percent, int right_percent);
     bool SetRequestedWheelsLocked(int left_percent, int right_percent);
     bool UpdateSpeedPiLocked(int64_t now_us);
+    bool UpdateHeadingPdLocked(int64_t now_us);
     bool SpeedPiConfiguredLocked() const;
     bool SpeedPiReadyLocked() const;
     int CurrentPwmPercentLocked(int side) const;

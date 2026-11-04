@@ -21,6 +21,8 @@ ToolResult GetState() {
                                  status.command.time_drive.speed_percent) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_duration_seconds",
                                  status.command.time_drive.duration_seconds) ||
+        !cJSON_AddNumberToObject(json.get(), "time_drive_angle_degrees",
+                                 status.command.time_drive.angle_degrees) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_elapsed_ms",
                                  status.command.time_drive.elapsed_ms) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_remaining_ms",
@@ -63,7 +65,22 @@ ToolResult GetState() {
         !cJSON_AddNumberToObject(json.get(), "measured_distance_cm", status.measured_distance_cm) ||
         !cJSON_AddBoolToObject(json.get(), "imu_ready", status.imu_ready) ||
         !cJSON_AddStringToObject(json.get(), "imu_error", esp_err_to_name(status.imu_error)) ||
+        !cJSON_AddBoolToObject(json.get(), "heading_valid", status.heading_valid) ||
+        !cJSON_AddNumberToObject(json.get(), "heading_degrees", status.heading_degrees) ||
         !cJSON_AddNumberToObject(json.get(), "gyro_z_dps", status.gyro_z_dps) ||
+        !cJSON_AddBoolToObject(json.get(), "heading_hold_active", status.heading_hold_active) ||
+        !cJSON_AddNumberToObject(json.get(), "heading_target_degrees",
+                                 status.heading_target_degrees) ||
+        !cJSON_AddNumberToObject(json.get(), "heading_error_degrees",
+                                 status.heading_error_degrees) ||
+        !cJSON_AddNumberToObject(json.get(), "heading_correction_rpm",
+                                 status.heading_correction_rpm) ||
+        !cJSON_AddStringToObject(json.get(), "heading_fault", status.heading_fault) ||
+        !cJSON_AddNumberToObject(json.get(), "turn_target_degrees",
+                                 status.turn_target_degrees) ||
+        !cJSON_AddNumberToObject(json.get(), "turn_progress_degrees",
+                                 status.turn_progress_degrees) ||
+        !cJSON_AddBoolToObject(json.get(), "turn_uses_imu", status.turn_uses_imu) ||
         !AddFc03EncoderJson(json.get(), status.encoder))
         return std::unexpected("Could not allocate motor status.");
     return json.release();
@@ -80,25 +97,33 @@ void RegisterL298nMcpTools() {
                    });
     server.AddTool(
         "self.motor.get_state",
-        "Read motor PWM, speed PI targets, FC-03 encoder and MPU6050 gyro telemetry. "
-        "Distance moves, measured turns and heading hold are disabled.",
+        "Read motor PWM, speed PI targets, FC-03 encoder and relative MPU6050 heading. "
+        "Timed forward/backward commands hold heading; angle turns use gyro feedback.",
         PropertyList(), [](const PropertyList&) -> ToolResult { return GetState(); });
     server.AddTool(
         "self.motor.run_time_drive",
-        "Drive forward, backward, turn left or turn right for a set number of seconds, then stop. "
-        "direction: forward, backward, turn_left or turn_right. "
-        "Requires calibrated FC-03 encoders; speed_percent is a target scale.",
+        "Drive forward or backward for a set number of seconds, or turn left/right by "
+        "angle_degrees. duration_seconds is the maximum turn time. Requires calibrated "
+        "FC-03 encoders and a valid gyro heading.",
         PropertyList({Property("direction", kPropertyTypeString).SetMaxLength(10),
                       Property("speed_percent", kPropertyTypeInteger, 10, 100),
-                      Property("duration_seconds", kPropertyTypeInteger, 1, 30)}),
+                      Property("duration_seconds", kPropertyTypeInteger, 1, 30),
+                      Property("angle_degrees", kPropertyTypeInteger, 0, 0, 180)}),
         [](const PropertyList& properties) -> ToolResult {
             const auto direction = ruby_robot::ParseTimeDriveDirection(
                 properties["direction"].value<std::string>().c_str());
             if (direction == ruby_robot::Motion::kStop)
                 return std::unexpected(std::string("Invalid TimeDrive direction"));
+            const int angle = properties["angle_degrees"].value<int>();
+            const bool turn = direction == ruby_robot::Motion::kLeft ||
+                              direction == ruby_robot::Motion::kRight;
+            if ((turn && angle < 5) || (!turn && angle != 0))
+                return std::unexpected(std::string("angle_degrees must be 5-180 for turns, "
+                                                   "or 0 for forward/backward"));
             const esp_err_t error = StartL298nCommand(ruby_robot::TimeDriveRequest{
                 direction, properties["speed_percent"].value<int>(),
-                properties["duration_seconds"].value<int>(), ruby_robot::TimeDriveOwner::kVoice});
+                properties["duration_seconds"].value<int>(), ruby_robot::TimeDriveOwner::kVoice,
+                angle});
             if (error != ESP_OK)
                 return std::unexpected(std::string("TimeDrive unavailable: ") +
                                        esp_err_to_name(error));

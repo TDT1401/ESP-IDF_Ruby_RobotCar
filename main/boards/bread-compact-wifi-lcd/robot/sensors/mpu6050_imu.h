@@ -6,6 +6,9 @@
 
 struct Mpu6050Status {
     bool ready = false;
+    bool heading_valid = false;  // False after a sample gap too long to integrate safely.
+    // Relative to the heading when startup calibration completes; left is positive.
+    double heading_degrees = 0;
     double gyro_z_dps = 0;
     double bias_z_dps = 0;
     int64_t sampled_at_us = 0;

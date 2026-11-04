@@ -6,6 +6,14 @@ namespace ruby_robot {
 
 void L298nController::StopOutputsLocked() {
     SetMpu6050MotorActive(false);
+    heading_hold_active_ = false;
+    heading_turn_active_ = false;
+    heading_turn_complete_ = false;
+    turn_settled_since_us_ = 0;
+    heading_target_degrees_ = 0;
+    heading_error_degrees_ = 0;
+    heading_correction_rpm_ = 0;
+    last_heading_pd_us_ = 0;
     applied_left_pwm_percent_ = 0;
     applied_right_pwm_percent_ = 0;
     requested_left_percent_ = 0;

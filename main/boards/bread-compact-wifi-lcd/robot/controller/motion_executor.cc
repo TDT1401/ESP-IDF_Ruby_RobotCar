@@ -58,7 +58,10 @@ void L298nController::Tick() {
         return;
     }
     if (command_interface_.Expired(now)) {
-        const bool completion_ready = command_interface_.CompletionReady();
+        const bool angle_turn = command_interface_.IsAngleTurn();
+        const bool completion_ready = !angle_turn && command_interface_.CompletionReady();
+        if (angle_turn)
+            heading_fault_ = "turn_timeout";
         StopLocked();
         if (fault_ == ESP_OK && completion_ready)
             command_interface_.Complete(now);
@@ -72,9 +75,20 @@ void L298nController::Tick() {
         StopLocked();
         return;
     }
-    if (moving_ && !UpdateSpeedPiLocked(now)) {
-        StopFailedMotionLocked(now);
-        return;
+    if (moving_) {
+        if (!UpdateHeadingPdLocked(now)) {
+            StopFailedMotionLocked(now);
+            return;
+        }
+        if (heading_turn_complete_) {
+            StopLocked();
+            command_interface_.Complete(now);
+            return;
+        }
+        if (!UpdateSpeedPiLocked(now)) {
+            StopFailedMotionLocked(now);
+            return;
+        }
     }
     if (web_joystick_active_) {
         if (web_joystick_pending_ && now >= start_at_us_) {
@@ -103,6 +117,8 @@ void L298nController::Tick() {
 }
 
 bool L298nController::ApplySpeedLocked() {
+    if (heading_hold_active_)
+        return UpdateHeadingPdLocked(esp_timer_get_time());
     const int speed = ActiveSpeedLocked();
     if (command_interface_.mode() == CommandMode::kManual &&
         !command_interface_.SubmitManual({speed, speed}))

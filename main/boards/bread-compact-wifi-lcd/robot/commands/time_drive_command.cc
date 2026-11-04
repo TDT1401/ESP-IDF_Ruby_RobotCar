@@ -6,10 +6,14 @@
 namespace ruby_robot {
 
 bool TimeDriveCommand::Valid(const TimeDriveRequest& request) {
-    return (request.direction == Motion::kForward || request.direction == Motion::kBackward ||
-            request.direction == Motion::kLeft || request.direction == Motion::kRight) &&
+    const bool straight = request.direction == Motion::kForward ||
+                          request.direction == Motion::kBackward;
+    const bool turn = request.direction == Motion::kLeft || request.direction == Motion::kRight;
+    return (straight || turn) &&
            request.speed_percent >= kMinSpeedPercent && request.speed_percent <= 100 &&
-           request.duration_seconds >= kMinSeconds && request.duration_seconds <= kMaxSeconds;
+           request.duration_seconds >= kMinSeconds && request.duration_seconds <= kMaxSeconds &&
+           (straight ? request.angle_degrees == 0
+                     : request.angle_degrees >= 5 && request.angle_degrees <= 180);
 }
 
 bool TimeDriveCommand::Start(const TimeDriveRequest& request, int64_t now_us) {
@@ -26,6 +30,7 @@ bool TimeDriveCommand::Start(const TimeDriveRequest& request, int64_t now_us) {
     direction_ = direction;
     speed_percent_ = speed_percent;
     duration_seconds_ = duration_seconds;
+    angle_degrees_ = request.angle_degrees;
     started_us_ = now_us;
     deadline_us_ = now_us + duration_seconds * 1000000LL;
     ended_us_ = 0;
@@ -93,8 +98,10 @@ TimeDriveMetrics TimeDriveCommand::GetMetrics() const {
 }
 
 TimeDriveSnapshot TimeDriveCommand::Snapshot(int64_t now_us) const {
+    const int signed_angle = direction_ == Motion::kRight ? -angle_degrees_ : angle_degrees_;
     return {StateName(state_), OwnerName(owner_), MotionName(direction_), speed_percent_,
-            duration_seconds_, ElapsedMs(now_us), RemainingMs(now_us), GetMetrics()};
+            duration_seconds_, signed_angle, ElapsedMs(now_us), RemainingMs(now_us),
+            GetMetrics()};
 }
 
 int TimeDriveCommand::ElapsedMs(int64_t now_us) const {

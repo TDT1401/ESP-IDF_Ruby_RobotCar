@@ -70,9 +70,14 @@ struct L298nMotorStatus {
     bool imu_ready;
     esp_err_t imu_error;
     bool imu_axis_mismatch;
+    bool heading_valid;
     double heading_degrees;
     double gyro_z_dps;
     bool heading_hold_active;
+    double heading_target_degrees;
+    double heading_error_degrees;
+    double heading_correction_rpm;
+    const char* heading_fault;
     bool turn_uses_imu;
     bool speed_pi_calibrated;
     bool speed_pi_active;

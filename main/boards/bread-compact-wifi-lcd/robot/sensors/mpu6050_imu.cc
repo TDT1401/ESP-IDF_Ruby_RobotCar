@@ -42,7 +42,12 @@ constexpr uint8_t kGyroConfig = 0x1B;
 constexpr uint8_t kGyroZHigh = 0x47;
 constexpr int kCalibrationSamples = 200;
 constexpr int kSamplePeriodMs = 10;
-constexpr int64_t kStatusLogIntervalUs = 5000000;
+constexpr int64_t kReadHealthLogIntervalUs = 5000000;
+constexpr int64_t kHeadingLogIntervalUs = 1000000;
+constexpr int64_t kMaximumIntegrationGapUs = 100000;
+constexpr int64_t kStationaryDelayUs = 2000000;
+constexpr double kStationaryRateDps = 0.3;
+constexpr double kBiasTimeConstantSeconds = 30.0;
 constexpr int kPersistentReadErrorSamples = 5;
 constexpr double kGyroScale = 131.0;  // LSB/(degree/s) at +/-250 degrees/s.
 static_assert(MPU6050_SDA_PIN != MPU6050_SCL_PIN);
@@ -72,16 +77,21 @@ void SampleTask(void*) {
     double calibration_squares = 0;
     int calibration_count = 0;
     double bias = 0;
+    double heading = 0;
+    double previous_rate = 0;
     bool calibrated = false;
+    bool heading_valid = false;
+    int64_t previous_sample_us = 0;
+    int64_t stationary_since_us = 0;
     int consecutive_errors = 0;
-    int64_t last_status_log_us = 0;
+    int64_t last_heading_log_us = 0;
     int64_t last_read_health_log_us = esp_timer_get_time();
     int read_attempts = 0;
     int read_errors = 0;
     esp_err_t last_read_error = ESP_OK;
     bool reported_motor_active = false;
     auto report_read_health = [&](int64_t now) {
-        if (now - last_read_health_log_us < kStatusLogIntervalUs)
+        if (now - last_read_health_log_us < kReadHealthLogIntervalUs)
             return;
         if (read_errors > 0) {
             IMU_LOGW("Gyro Z I2C read errors: %d/%d samples in 5 s (last: %s)", read_errors,
@@ -97,6 +107,12 @@ void SampleTask(void*) {
         const int64_t now = esp_timer_get_time();
         ++read_attempts;
         if (error != ESP_OK) {
+            stationary_since_us = 0;
+            if (!calibrated) {
+                calibration_sum = 0;
+                calibration_squares = 0;
+                calibration_count = 0;
+            }
             ++read_errors;
             last_read_error = error;
             ++consecutive_errors;
@@ -104,6 +120,7 @@ void SampleTask(void*) {
                 IMU_LOGW("Gyro Z read failed at register 0x%02x: %s (%d consecutive)", kGyroZHigh,
                          esp_err_to_name(error), consecutive_errors);
             portENTER_CRITICAL(&status_lock);
+            status.ready = false;
             status.error = error;
             portEXIT_CRITICAL(&status_lock);
             report_read_health(now);
@@ -134,6 +151,9 @@ void SampleTask(void*) {
                 if (variance <= 4.0 && std::abs(mean) <= 20.0) {
                     bias = mean;
                     calibrated = true;
+                    heading_valid = true;
+                    previous_sample_us = now;
+                    previous_rate = 0;
                     IMU_LOGI("Gyro Z bias %.3f deg/s; calibration complete", bias);
                 } else {
                     IMU_LOGW(
@@ -146,17 +166,57 @@ void SampleTask(void*) {
                 }
             }
         }
+        const bool motors_running = motor_active.load(std::memory_order_relaxed);
+        double corrected_rate = calibrated ? rate - bias : 0;
+        if (calibrated) {
+            const int64_t elapsed_us = previous_sample_us == 0 ? 0 : now - previous_sample_us;
+            const bool continuous = elapsed_us > 0 && elapsed_us <= kMaximumIntegrationGapUs;
+            if (continuous) {
+                const double dt_s = elapsed_us / 1000000.0;
+                heading += (previous_rate + corrected_rate) * 0.5 * dt_s;
+            } else {
+                stationary_since_us = 0;
+                if (previous_sample_us != 0 && elapsed_us > kMaximumIntegrationGapUs) {
+                    if (heading_valid) {
+                        IMU_LOGW("Heading lost sample continuity (%lld us); restart with car "
+                                 "still to restore its zero reference",
+                                 static_cast<long long>(elapsed_us));
+                    }
+                    heading_valid = false;
+                }
+            }
+
+            // A stopped motor and near-zero yaw rate provide a conservative window
+            // for tracking thermal bias. This cannot identify a very slow hand turn.
+            if (continuous && !motors_running && std::abs(corrected_rate) <= kStationaryRateDps) {
+                if (stationary_since_us == 0)
+                    stationary_since_us = now;
+                if (now - stationary_since_us >= kStationaryDelayUs) {
+                    const double dt_s = elapsed_us / 1000000.0;
+                    bias += (rate - bias) * dt_s / kBiasTimeConstantSeconds;
+                    corrected_rate = rate - bias;
+                }
+            } else {
+                stationary_since_us = 0;
+            }
+            previous_sample_us = now;
+            previous_rate = corrected_rate;
+        }
         portENTER_CRITICAL(&status_lock);
         status.ready = calibrated;
-        status.gyro_z_dps = calibrated ? rate - bias : 0;
+        status.heading_valid = heading_valid;
+        status.heading_degrees = heading;
+        status.gyro_z_dps = corrected_rate;
         status.bias_z_dps = bias;
         status.sampled_at_us = now;
         status.error = ESP_OK;
         portEXIT_CRITICAL(&status_lock);
         report_read_health(now);
-        if (calibrated && now - last_status_log_us >= kStatusLogIntervalUs) {
-            IMU_LOGI("IMU ready: gyro_z=%.2f deg/s, bias=%.3f deg/s", rate - bias, bias);
-            last_status_log_us = now;
+        if (calibrated && now - last_heading_log_us >= kHeadingLogIntervalUs) {
+            IMU_LOGI("heading=%.2f deg, valid=%d, gyro_z=%.3f deg/s, bias_z=%.3f deg/s, "
+                     "bias_tracking=%d", heading, heading_valid, corrected_rate, bias,
+                     stationary_since_us != 0 && now - stationary_since_us >= kStationaryDelayUs);
+            last_heading_log_us = now;
         }
         vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(kSamplePeriodMs));
     }
@@ -256,8 +316,15 @@ void InitializeMpu6050() {
 
 Mpu6050Status GetMpu6050Status() {
     portENTER_CRITICAL(&status_lock);
-    const Mpu6050Status copy = status;
+    Mpu6050Status copy = status;
     portEXIT_CRITICAL(&status_lock);
+    if (!copy.ready)
+        copy.heading_valid = false;
+    if (copy.ready && esp_timer_get_time() - copy.sampled_at_us > kMaximumIntegrationGapUs) {
+        copy.ready = false;
+        copy.heading_valid = false;
+        copy.error = ESP_ERR_TIMEOUT;
+    }
     return copy;
 }
 

@@ -148,7 +148,7 @@ esp_err_t Command(httpd_req_t* req) {
 }
 
 esp_err_t Action(httpd_req_t* req) {
-    char body[96];
+    char body[160];
     if (!IsControlRequest(req) || req->content_len == 0 || req->content_len >= sizeof(body)) {
         Reply(req, "400 Bad Request", "{\"error\":\"Invalid request\"}");
         return ESP_FAIL;
@@ -182,23 +182,29 @@ esp_err_t Action(httpd_req_t* req) {
         return Reply(req, "200 OK", "{\"ok\":true}");
     }
 
-    if (strcmp(action->valuestring, "time_drive") == 0 &&
-        cJSON_GetArraySize(json.get()) == 4) {
-        uint32_t speed_percent, duration_seconds;
+    if (strcmp(action->valuestring, "time_drive") == 0) {
+        uint32_t speed_percent = 0, duration_seconds, angle_degrees = 0;
         const cJSON* direction_json = cJSON_GetObjectItemCaseSensitive(json.get(), "direction");
+        const cJSON* angle_json = cJSON_GetObjectItemCaseSensitive(json.get(), "angle_degrees");
+        const cJSON* speed_json = cJSON_GetObjectItemCaseSensitive(json.get(), "speed_percent");
         const ruby_robot::Motion direction =
             cJSON_IsString(direction_json)
                 ? ruby_robot::ParseTimeDriveDirection(direction_json->valuestring)
                 : ruby_robot::Motion::kStop;
+        const bool turn =
+            direction == ruby_robot::Motion::kLeft || direction == ruby_robot::Motion::kRight;
         if (direction == ruby_robot::Motion::kStop ||
-            !ReadInteger(json.get(), "speed_percent", 10, 100, &speed_percent) ||
-            !ReadInteger(json.get(), "duration_seconds", 1, 30, &duration_seconds))
+            cJSON_GetArraySize(json.get()) != 3 + (turn ? 1 : 0) + (speed_json ? 1 : 0) ||
+            (turn != (angle_json != nullptr)) || (!turn && !speed_json) ||
+            (speed_json && !ReadInteger(json.get(), "speed_percent", 10, 100, &speed_percent)) ||
+            !ReadInteger(json.get(), "duration_seconds", 1, 30, &duration_seconds) ||
+            (turn && !ReadInteger(json.get(), "angle_degrees", 5, 180, &angle_degrees)))
             return Reply(req, "400 Bad Request", "{\"error\":\"Invalid TimeDrive\"}");
         const esp_err_t error = StartL298nCommand(ruby_robot::TimeDriveRequest{
             direction, static_cast<int>(speed_percent), static_cast<int>(duration_seconds),
-            ruby_robot::TimeDriveOwner::kWeb});
+            ruby_robot::TimeDriveOwner::kWeb, static_cast<int>(angle_degrees)});
         if (error != ESP_OK)
-            return Reply(req, "409 Conflict", "{\"error\":\"Drive busy or PI unavailable\"}");
+            return Reply(req, "409 Conflict", "{\"error\":\"Drive busy or sensor unavailable\"}");
         return Reply(req, "200 OK", "{\"ok\":true}");
     }
 
@@ -236,6 +242,8 @@ esp_err_t Status(httpd_req_t* req) {
                                  motor.command.time_drive.speed_percent) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_duration_seconds",
                                  motor.command.time_drive.duration_seconds) ||
+        !cJSON_AddNumberToObject(json.get(), "time_drive_angle_degrees",
+                                 motor.command.time_drive.angle_degrees) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_elapsed_ms",
                                  motor.command.time_drive.elapsed_ms) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_remaining_ms",
@@ -301,9 +309,17 @@ esp_err_t Status(httpd_req_t* req) {
         !cJSON_AddBoolToObject(json.get(), "imu_ready", motor.imu_ready) ||
         !cJSON_AddStringToObject(json.get(), "imu_error", esp_err_to_name(motor.imu_error)) ||
         !cJSON_AddBoolToObject(json.get(), "imu_axis_mismatch", motor.imu_axis_mismatch) ||
+        !cJSON_AddBoolToObject(json.get(), "heading_valid", motor.heading_valid) ||
         !cJSON_AddNumberToObject(json.get(), "heading_degrees", motor.heading_degrees) ||
         !cJSON_AddNumberToObject(json.get(), "gyro_z_dps", motor.gyro_z_dps) ||
         !cJSON_AddBoolToObject(json.get(), "heading_hold_active", motor.heading_hold_active) ||
+        !cJSON_AddNumberToObject(json.get(), "heading_target_degrees",
+                                 motor.heading_target_degrees) ||
+        !cJSON_AddNumberToObject(json.get(), "heading_error_degrees",
+                                 motor.heading_error_degrees) ||
+        !cJSON_AddNumberToObject(json.get(), "heading_correction_rpm",
+                                 motor.heading_correction_rpm) ||
+        !cJSON_AddStringToObject(json.get(), "heading_fault", motor.heading_fault) ||
         !cJSON_AddBoolToObject(json.get(), "turn_uses_imu", motor.turn_uses_imu) ||
         !AddFc03EncoderJson(json.get(), motor.encoder))
         return Reply(req, "500 Internal Server Error", "{\"error\":\"Status unavailable\"}");

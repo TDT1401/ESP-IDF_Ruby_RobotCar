@@ -59,7 +59,7 @@
 #define MPU6050_SDA_PIN GPIO_NUM_4
 #define MPU6050_SCL_PIN GPIO_NUM_5
 #define MPU6050_I2C_ADDRESS 0x68
-// Set to 1 to print MPU6050 diagnostics to Serial Monitor, then rebuild and flash.
+// Set to 1 to log heading, gyro Z, bias and MPU6050 diagnostics to Serial Monitor.
 #define MPU6050_DEBUG 0
 // Flat module, component side up: a physical left turn must give positive gyro Z.
 // Set to -1.0 only if the module's Z axis points down.
@@ -84,6 +84,26 @@
 #define SPEED_PI_LEFT_KI 0.50
 #define SPEED_PI_RIGHT_KP 0.25
 #define SPEED_PI_RIGHT_KI 0.50
+
+// Initial straight-heading PD gains in RPM/degree and RPM/(degree/s); tune on the car.
+// The correction is also limited to half the base wheel RPM to preserve direction.
+#define HEADING_PD_KP_RPM_PER_DEG 0.8
+#define HEADING_PD_KD_RPM_PER_DPS 0.15
+#define HEADING_PD_MAX_CORRECTION_RPM 35.0
+// Angle turns use the requested speed as an RPM ceiling and stop inside this window.
+// Used by the controller when an angle turn does not specify a speed.
+#define HEADING_TURN_AUTO_SPEED_PERCENT 70
+// Turn P gain = requested RPM / slowdown angle; gyro damping uses HEADING_PD_KD above.
+#define HEADING_TURN_SLOWDOWN_DEGREES 45.0
+#define HEADING_TURN_TOLERANCE_DEGREES 2.0
+#define HEADING_TURN_SETTLE_RATE_DPS 8.0
+#define HEADING_TURN_MIN_RPM 12.0
+// Provisional friction feedforward for skid turns, in PWM percent. Tune each side
+// on the floor. PI may reduce output below this; a zero RPM target always stops.
+#define HEADING_TURN_LEFT_FRICTION_PWM_PERCENT 60.0
+#define HEADING_TURN_RIGHT_FRICTION_PWM_PERCENT 60.0
+// Set to 1 to log heading feedback, wheel RPM targets/measurements and PWM at 5 Hz.
+#define HEADING_PD_DEBUG 0
 
 // HC-SR04 uses 5 V power. ECHO must be level-shifted to 3.3 V before this GPIO.
 #define HCSR04_TRIGGER_PIN GPIO_NUM_14

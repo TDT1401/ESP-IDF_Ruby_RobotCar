@@ -1,12 +1,48 @@
 #include "controller_internal.h"
 
+#include <esp_log.h>
 #include <esp_system.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 #include <cstdlib>
+#include <cstring>
 
 #include "../../config.h"
 #include "../sensors/hcsr04_sensor.h"
 #include "../sensors/mpu6050_imu.h"
+
+#if HEADING_PD_DEBUG
+namespace {
+
+void HeadingMonitorTask(void*) {
+    bool fault_reported = false;
+    while (true) {
+        vTaskDelay(pdMS_TO_TICKS(200));
+        const auto status = GetL298nMotorStatus();
+        if (!status.heading_hold_active) {
+            if (!fault_reported && (std::strcmp(status.heading_fault, "none") != 0 ||
+                                    std::strcmp(status.speed_pi_fault, "none") != 0)) {
+                ESP_LOGW("HeadingPD", "control stopped: heading=%s, speed_pi=%s",
+                         status.heading_fault, status.speed_pi_fault);
+                fault_reported = true;
+            }
+            continue;
+        }
+        fault_reported = false;
+        ESP_LOGI("HeadingPD", "limit=%d%%, ref=%.2f deg, actual=%.2f deg, error=%.2f deg, "
+                              "gyro=%.2f deg/s, correction=%.2f RPM, "
+                              "left=%.1f/%.1f RPM PWM=%d, right=%.1f/%.1f RPM PWM=%d",
+                 status.active_speed_percent, status.heading_target_degrees, status.heading_degrees,
+                 status.heading_error_degrees, status.gyro_z_dps, status.heading_correction_rpm,
+                 status.speed_pi_left_target_rpm, status.encoder.left.rpm, status.left_pwm_percent,
+                 status.speed_pi_right_target_rpm, status.encoder.right.rpm,
+                 status.right_pwm_percent);
+    }
+}
+
+}  // namespace
+#endif
 
 namespace ruby_robot {
 
@@ -24,9 +60,17 @@ void L298nController::Stop() {
 }
 
 esp_err_t L298nController::StartCommand(const CommandRequest& request) {
-    if (!CommandInterface::Valid(request))
+    static_assert(HEADING_TURN_AUTO_SPEED_PERCENT >= TimeDriveCommand::kMinSpeedPercent &&
+                  HEADING_TURN_AUTO_SPEED_PERCENT <= 100);
+    auto resolved_request = request;
+    if (auto* drive = std::get_if<TimeDriveRequest>(&resolved_request);
+        drive && drive->speed_percent == 0 &&
+        (drive->direction == Motion::kLeft || drive->direction == Motion::kRight)) {
+        drive->speed_percent = HEADING_TURN_AUTO_SPEED_PERCENT;
+    }
+    if (!CommandInterface::Valid(resolved_request))
         return ESP_ERR_INVALID_ARG;
-    const auto requirements = CommandInterface::Requirements(request);
+    const auto requirements = CommandInterface::Requirements(resolved_request);
     std::lock_guard lock(mutex_);
     if (!MotionAllowed() || (requirements.wifi && !web_control_.connected()) ||
         web_control_.active() || command_interface_.mode() != CommandMode::kIdle)
@@ -35,17 +79,35 @@ esp_err_t L298nController::StartCommand(const CommandRequest& request) {
         return fault_;
     if (requirements.speed_pi && !SpeedPiReadyLocked())
         return ESP_ERR_INVALID_STATE;
+    Mpu6050Status imu;
+    if (requirements.heading) {
+        imu = GetMpu6050Status();
+        if (!imu.ready || !imu.heading_valid) {
+            heading_fault_ = !imu.ready ? "imu_unavailable" : "heading_invalid";
+            return ESP_ERR_INVALID_STATE;
+        }
+    }
     StopLocked();
     if (fault_ != ESP_OK)
         return fault_;
     speed_pi_fault_ = "none";
+    heading_fault_ = "none";
     const int64_t now = esp_timer_get_time();
-    if (!command_interface_.Start(request, now))
+    if (!command_interface_.Start(resolved_request, now))
         return ESP_ERR_INVALID_STATE;
     if (!PrepareMotionLocked(command_interface_.direction())) {
         StopLocked();
         command_interface_.Fail(esp_timer_get_time());
         return fault_ != ESP_OK ? fault_ : ESP_FAIL;
+    }
+    if (requirements.heading) {
+        heading_hold_active_ = true;
+        heading_turn_active_ = command_interface_.IsAngleTurn();
+        heading_turn_start_degrees_ = imu.heading_degrees;
+        turn_progress_degrees_ = 0;
+        const int angle = command_interface_.angle_degrees();
+        const int sign = command_interface_.direction() == Motion::kLeft ? 1 : -1;
+        heading_target_degrees_ = imu.heading_degrees + sign * angle;
     }
     return ESP_OK;
 }
@@ -58,6 +120,11 @@ L298nMotorStatus L298nController::Snapshot() {
     L298nMotorStatus status{};
     const int64_t now = esp_timer_get_time();
     status.command = command_interface_.Snapshot(now);
+    if (command_interface_.mode() != CommandMode::kManual) {
+        status.turn_target_degrees = status.command.time_drive.angle_degrees;
+        status.turn_progress_degrees = turn_progress_degrees_;
+        status.turn_uses_imu = status.turn_target_degrees != 0;
+    }
     status.motion = MotionName(motion_);
     status.speed_percent = web_speed_percent_;
     status.active_speed_percent = moving_ ? ActiveSpeedLocked() : 0;
@@ -92,7 +159,14 @@ L298nMotorStatus L298nController::Snapshot() {
     status.distance_move_state = "disabled";
     status.imu_ready = imu.ready;
     status.imu_error = imu.error;
+    status.heading_valid = imu.heading_valid;
+    status.heading_degrees = imu.heading_degrees;
     status.gyro_z_dps = imu.gyro_z_dps;
+    status.heading_hold_active = heading_hold_active_;
+    status.heading_target_degrees = heading_target_degrees_;
+    status.heading_error_degrees = heading_error_degrees_;
+    status.heading_correction_rpm = heading_correction_rpm_;
+    status.heading_fault = heading_fault_;
     status.left_pwm_percent = CurrentLeftPwmPercentLocked();
     status.right_pwm_percent = CurrentRightPwmPercentLocked();
     status.control_owner = web_control_.active() ? "web" : status.command.owner;
@@ -141,6 +215,10 @@ using ruby_robot::L298nController;
 void InitializeL298nController() {
     // Singleton and sensor callbacks live for the entire firmware lifetime.
     L298nController::Instance();
+#if HEADING_PD_DEBUG
+    if (xTaskCreate(HeadingMonitorTask, "heading_monitor", 3072, nullptr, 2, nullptr) != pdPASS)
+        ESP_LOGW("HeadingPD", "Could not start heading monitor");
+#endif
     StartFc03Monitor([]() { return L298nController::Instance().Snapshot().encoder; });
     InitializeHcsr04Sensor([](int distance_cm, bool valid) {
         auto& controller = L298nController::Instance();
