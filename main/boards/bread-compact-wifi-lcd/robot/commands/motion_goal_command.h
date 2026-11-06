@@ -67,7 +67,7 @@ public:
     static constexpr int kMinAngleDegrees = 5;
     static constexpr int kMaxAngleDegrees = 180;
     static constexpr int kMinTurnSpeedPercent = 10;
-    static constexpr int64_t kTurnTimeoutUs = 30000000;
+    static constexpr int64_t kTurnTimeoutUs = 5000000;
 
     static bool Valid(const DistanceDriveRequest& request);
     static bool Valid(const AngleTurnRequest& request);
