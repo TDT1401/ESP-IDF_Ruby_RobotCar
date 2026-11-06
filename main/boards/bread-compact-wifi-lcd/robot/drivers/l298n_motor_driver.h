@@ -16,7 +16,8 @@ public:
     // operations even when an earlier one fails.
     esp_err_t Stop();
     esp_err_t SetPwm(Wheel wheel, int percent);
-    esp_err_t SetDirection(Wheel wheel, int sign, bool inverted);
+    // Accept logical wheel signs; apply the board's wiring inversion here.
+    esp_err_t SetDirection(Wheel wheel, int sign);
 };
 
 }  // namespace ruby_robot

@@ -34,7 +34,6 @@ bool L298nController::PrepareMotionLocked(Motion motion) {
 #endif
     motion_ = motion;
     start_at_us_ = esp_timer_get_time() + kDirectionDelayUs;
-    deadline_us_ = 0;
     return true;
 }
 
@@ -71,10 +70,6 @@ void L298nController::Tick() {
     }
     if (motion_ == Motion::kStop)
         return;
-    if (deadline_us_ > 0 && now >= deadline_us_) {
-        StopLocked();
-        return;
-    }
     if (moving_) {
         if (!UpdateHeadingPdLocked(now)) {
             StopFailedMotionLocked(now);

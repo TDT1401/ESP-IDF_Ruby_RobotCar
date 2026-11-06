@@ -19,8 +19,7 @@ esp_err_t L298nController::BeginWebControl(uint32_t* session) {
         return ESP_ERR_INVALID_ARG;
     std::lock_guard lock(mutex_);
     const int64_t now = esp_timer_get_time();
-    if (!web_control_.connected() || !MotionAllowed() ||
-        command_interface_.Active())
+    if (!web_control_.connected() || !MotionAllowed() || command_interface_.Active())
         return ESP_ERR_INVALID_STATE;
     if (!web_control_.CanBegin(now))
         return ESP_ERR_INVALID_STATE;
@@ -120,12 +119,10 @@ esp_err_t L298nController::WebCommand(uint32_t session, uint32_t sequence, L298n
             }
             motion_ = motion;
             moving_ = !web_joystick_pending_;
-            deadline_us_ = web_control_.deadline_us();
         }
     } else {
         if (web_joystick_active_) {
             StopLocked();
-            web_joystick_active_ = false;
         }
         // Heartbeats refresh the deadline without interrupting PWM or the direction delay.
         if (motion_ != motion) {
@@ -135,7 +132,6 @@ esp_err_t L298nController::WebCommand(uint32_t session, uint32_t sequence, L298n
                 return ESP_FAIL;
             }
         }
-        deadline_us_ = web_control_.deadline_us();
         if (moving_ && !ApplySpeedLocked()) {
             EndWebControlLocked();
             return ESP_FAIL;

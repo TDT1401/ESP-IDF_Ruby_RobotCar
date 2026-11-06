@@ -30,7 +30,6 @@ public:
     }
     void Refresh(int64_t now_us) { deadline_us_ = now_us + kTimeoutMs * 1000LL; }
     bool Expired(int64_t now_us) const { return active() && now_us >= deadline_us_; }
-    int64_t deadline_us() const { return deadline_us_; }
     void Revoke() {
         token_ = 0;
         sequence_ = 0;

@@ -1,11 +1,11 @@
 #pragma once
 
 #include "../commands/command_interface.h"
-#include "l298n_controller.h"
 #include "../domain/motion_policy.h"
 #include "../domain/web_control_session.h"
 #include "../drivers/l298n_motor_driver.h"
 #include "heading_pd.h"
+#include "l298n_controller.h"
 #include "speed_pi.h"
 
 #include <esp_err.h>
@@ -78,7 +78,6 @@ private:
 #endif
     Motion motion_ = Motion::kStop;
     int64_t start_at_us_ = 0;
-    int64_t deadline_us_ = 0;
     bool moving_ = false;
     esp_err_t fault_ = ESP_OK;
     bool web_joystick_active_ = false;
@@ -107,17 +106,12 @@ private:
     bool ApplySpeedLocked();
     bool ApplyCommandLocked();
     void StopOutputsLocked();
-    bool SetWheelPwmLocked(Wheel wheel, int percent);
-    bool SetWheelDirectionLocked(Wheel wheel, int sign, bool inverted);
     bool ApplyMotorPwmLocked(int left_percent, int right_percent);
     bool SetRequestedWheelsLocked(int left_percent, int right_percent);
     bool UpdateSpeedPiLocked(int64_t now_us);
     bool UpdateHeadingPdLocked(int64_t now_us);
     bool SpeedPiConfiguredLocked() const;
     bool SpeedPiReadyLocked() const;
-    int CurrentPwmPercentLocked(int side) const;
-    int CurrentLeftPwmPercentLocked() const;
-    int CurrentRightPwmPercentLocked() const;
     bool ApplyWebDriveLocked(int left, int right);
     bool ApplyDirectionLocked();
 };

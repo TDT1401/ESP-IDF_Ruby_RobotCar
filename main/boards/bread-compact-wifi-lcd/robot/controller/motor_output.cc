@@ -29,7 +29,6 @@ void L298nController::StopOutputsLocked() {
     web_right_output_percent_ = 0;
     web_joystick_pending_ = false;
     start_at_us_ = 0;
-    deadline_us_ = 0;
 #ifdef CONFIG_PM_ENABLE
     if (sleep_lock_held_) {
         Check(esp_pm_lock_release(sleep_lock_));
@@ -38,33 +37,15 @@ void L298nController::StopOutputsLocked() {
 #endif
 }
 
-bool L298nController::SetWheelPwmLocked(Wheel wheel, int percent) {
-    return Check(driver_.SetPwm(wheel, percent));
-}
-
-bool L298nController::SetWheelDirectionLocked(Wheel wheel, int sign, bool inverted) {
-    return Check(driver_.SetDirection(wheel, sign, inverted));
-}
-
 bool L298nController::ApplyMotorPwmLocked(int left_percent, int right_percent) {
-    const bool ok = SetWheelPwmLocked(Wheel::kLeft, left_percent) &&
-                    SetWheelPwmLocked(Wheel::kRight, right_percent);
+    const bool ok = Check(driver_.SetPwm(Wheel::kLeft, left_percent)) &&
+                    Check(driver_.SetPwm(Wheel::kRight, right_percent));
     if (ok) {
         applied_left_pwm_percent_ = left_percent;
         applied_right_pwm_percent_ = right_percent;
     }
     return ok;
 }
-
-int L298nController::CurrentPwmPercentLocked(int side) const {
-    if (!moving_)
-        return 0;
-    return side == 0 ? applied_left_pwm_percent_ : applied_right_pwm_percent_;
-}
-
-int L298nController::CurrentLeftPwmPercentLocked() const { return CurrentPwmPercentLocked(0); }
-
-int L298nController::CurrentRightPwmPercentLocked() const { return CurrentPwmPercentLocked(1); }
 
 bool L298nController::ApplyWebDriveLocked(int left, int right) {
     encoder_.Update(esp_timer_get_time());
@@ -87,23 +68,13 @@ bool L298nController::ApplyWebDriveLocked(int left, int right) {
     }
 
     bool ok = true;
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N_INVERT_LEFT
-    constexpr bool invert_left = true;
-#else
-    constexpr bool invert_left = false;
-#endif
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N_INVERT_RIGHT
-    constexpr bool invert_right = true;
-#else
-    constexpr bool invert_right = false;
-#endif
     // Zero PWM before changing direction; SetRequestedWheelsLocked restarts it.
     if (left == 0)
-        ok = SetWheelPwmLocked(Wheel::kLeft, 0) && ok;
+        ok = Check(driver_.SetPwm(Wheel::kLeft, 0)) && ok;
     if (right == 0)
-        ok = SetWheelPwmLocked(Wheel::kRight, 0) && ok;
-    ok = SetWheelDirectionLocked(Wheel::kLeft, left, invert_left) && ok;
-    ok = SetWheelDirectionLocked(Wheel::kRight, right, invert_right) && ok;
+        ok = Check(driver_.SetPwm(Wheel::kRight, 0)) && ok;
+    ok = Check(driver_.SetDirection(Wheel::kLeft, left)) && ok;
+    ok = Check(driver_.SetDirection(Wheel::kRight, right)) && ok;
     if (ok)
         ok = command_interface_.SubmitManual({left, right}) && ApplyCommandLocked();
     if (ok) {
@@ -122,18 +93,8 @@ bool L298nController::ApplyDirectionLocked() {
     const int encoder_left = left_forward ? 1 : -1;
     const int encoder_right = right_forward ? 1 : -1;
     encoder_.Update(esp_timer_get_time());
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N_INVERT_LEFT
-    constexpr bool invert_left = true;
-#else
-    constexpr bool invert_left = false;
-#endif
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N_INVERT_RIGHT
-    constexpr bool invert_right = true;
-#else
-    constexpr bool invert_right = false;
-#endif
-    const bool ok = SetWheelDirectionLocked(Wheel::kLeft, encoder_left, invert_left) &&
-                    SetWheelDirectionLocked(Wheel::kRight, encoder_right, invert_right);
+    const bool ok = Check(driver_.SetDirection(Wheel::kLeft, encoder_left)) &&
+                    Check(driver_.SetDirection(Wheel::kRight, encoder_right));
     if (ok)
         encoder_.SetDrive(encoder_left, encoder_right, esp_timer_get_time());
     return ok;

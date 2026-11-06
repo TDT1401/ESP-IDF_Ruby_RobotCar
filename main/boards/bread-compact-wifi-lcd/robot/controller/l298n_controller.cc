@@ -30,9 +30,10 @@ void HeadingMonitorTask(void*) {
             continue;
         }
         fault_reported = false;
-        ESP_LOGI("HeadingPD", "limit=%d%%, ref=%.2f deg, actual=%.2f deg, error=%.2f deg, "
-                              "gyro=%.2f deg/s, correction=%.2f RPM, "
-                              "left=%.1f/%.1f RPM PWM=%d, right=%.1f/%.1f RPM PWM=%d",
+        ESP_LOGI("HeadingPD",
+                 "limit=%d%%, ref=%.2f deg, actual=%.2f deg, error=%.2f deg, "
+                 "gyro=%.2f deg/s, correction=%.2f RPM, "
+                 "left=%.1f/%.1f RPM PWM=%d, right=%.1f/%.1f RPM PWM=%d",
                  status.active_speed_percent, status.heading_target_degrees, status.heading_degrees,
                  status.heading_error_degrees, status.gyro_z_dps, status.heading_correction_rpm,
                  status.speed_pi_left_target_rpm, status.encoder.left.rpm, status.left_pwm_percent,
@@ -53,10 +54,7 @@ L298nController& L298nController::Instance() {
 
 void L298nController::Stop() {
     std::lock_guard lock(mutex_);
-    web_control_.Revoke();  // A spoken stop also invalidates in-flight browser commands.
-    ReleaseWebSleepLockLocked();
-    StopLocked();
-    command_interface_.ReleaseManual();
+    EndWebControlLocked();  // A spoken stop also invalidates in-flight browser commands.
 }
 
 esp_err_t L298nController::StartCommand(const CommandRequest& request) {
@@ -167,8 +165,8 @@ L298nMotorStatus L298nController::Snapshot() {
     status.heading_error_degrees = heading_error_degrees_;
     status.heading_correction_rpm = heading_correction_rpm_;
     status.heading_fault = heading_fault_;
-    status.left_pwm_percent = CurrentLeftPwmPercentLocked();
-    status.right_pwm_percent = CurrentRightPwmPercentLocked();
+    status.left_pwm_percent = moving_ ? applied_left_pwm_percent_ : 0;
+    status.right_pwm_percent = moving_ ? applied_right_pwm_percent_ : 0;
     status.control_owner = web_control_.active() ? "web" : status.command.owner;
     status.warning_sound_enabled = proximity_warning_enabled_;
     return status;
@@ -254,36 +252,16 @@ esp_err_t StartL298nCommand(const ruby_robot::CommandRequest& request) {
 
 L298nMotorStatus GetL298nMotorStatus() { return L298nController::Instance().Snapshot(); }
 
-esp_err_t SetL298nMotorSpeed(int speed_percent) {
-    (void)speed_percent;
-    return ESP_ERR_NOT_SUPPORTED;
-}
+esp_err_t SetL298nMotorSpeed(int) { return ESP_ERR_NOT_SUPPORTED; }
 
-esp_err_t MoveL298nDistance(bool forward, int distance_cm, const char* owner) {
-    (void)forward;
-    (void)distance_cm;
-    (void)owner;
-    return ESP_ERR_NOT_SUPPORTED;
-}
+esp_err_t MoveL298nDistance(bool, int, const char*) { return ESP_ERR_NOT_SUPPORTED; }
 
-esp_err_t SetL298nFollowMode(bool enabled) {
-    (void)enabled;
-    return ESP_ERR_NOT_SUPPORTED;
-}
+esp_err_t SetL298nFollowMode(bool) { return ESP_ERR_NOT_SUPPORTED; }
 
-esp_err_t SetL298nObstacleAvoidance(bool enabled) {
-    (void)enabled;
-    return ESP_ERR_NOT_SUPPORTED;
-}
+esp_err_t SetL298nObstacleAvoidance(bool) { return ESP_ERR_NOT_SUPPORTED; }
 
-esp_err_t SetL298nFollowDistance(int distance_cm) {
-    (void)distance_cm;
-    return ESP_ERR_NOT_SUPPORTED;
-}
+esp_err_t SetL298nFollowDistance(int) { return ESP_ERR_NOT_SUPPORTED; }
 
-esp_err_t SetL298nObstacleDistance(int distance_cm) {
-    (void)distance_cm;
-    return ESP_ERR_NOT_SUPPORTED;
-}
+esp_err_t SetL298nObstacleDistance(int) { return ESP_ERR_NOT_SUPPORTED; }
 
 void StopL298nMotor() { L298nController::Instance().Stop(); }

@@ -112,9 +112,9 @@ Không coi các tần số này là thông số cố định trước khi đo xu
 **Công việc:**
 
 - [x] Lấy heading tương đối từ gyro Z và kiểm soát drift.
-- [ ] Cài Heading PD tạo tốc độ mục tiêu hai bên.
-- [ ] Tích hợp Speed PI bên trong Heading PD.
-- [ ] Test chạy thẳng ở nhiều tốc độ, quay tại chỗ 90°/180°.
+- [x] Cài Heading PD tạo tốc độ mục tiêu hai bên.
+- [x] Tích hợp Speed PI bên trong Heading PD.
+- [x] Test chạy thẳng ở nhiều tốc độ, quay tại chỗ 90°/180°.
 
 **Done khi:** Xe có thể giữ hướng và quay theo góc đặt, đánh giá bằng **đo thực tế độc lập** (thước, vạch sàn, video); không chỉ dựa vào số IMU.
 

@@ -2,6 +2,7 @@
 
 #include <driver/gpio.h>
 #include <driver/ledc.h>
+#include <sdkconfig.h>
 
 #include <cstdint>
 #include <initializer_list>
@@ -16,9 +17,7 @@ constexpr auto kTimer = LEDC_TIMER_1;  // LCD backlight owns timer/channel 0.
 constexpr auto kLeftChannel = LEDC_CHANNEL_1;
 constexpr auto kRightChannel = LEDC_CHANNEL_2;
 
-ledc_channel_t Channel(Wheel wheel) {
-    return wheel == Wheel::kLeft ? kLeftChannel : kRightChannel;
-}
+ledc_channel_t Channel(Wheel wheel) { return wheel == Wheel::kLeft ? kLeftChannel : kRightChannel; }
 
 gpio_num_t In1(Wheel wheel) {
     return wheel == Wheel::kLeft ? MOTOR_LEFT_IN1_PIN : MOTOR_RIGHT_IN1_PIN;
@@ -87,7 +86,18 @@ esp_err_t L298nMotorDriver::SetPwm(Wheel wheel, int percent) {
     return error == ESP_OK ? ledc_update_duty(kMode, channel) : error;
 }
 
-esp_err_t L298nMotorDriver::SetDirection(Wheel wheel, int sign, bool inverted) {
+esp_err_t L298nMotorDriver::SetDirection(Wheel wheel, int sign) {
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N_INVERT_LEFT
+    constexpr bool invert_left = true;
+#else
+    constexpr bool invert_left = false;
+#endif
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N_INVERT_RIGHT
+    constexpr bool invert_right = true;
+#else
+    constexpr bool invert_right = false;
+#endif
+    const bool inverted = wheel == Wheel::kLeft ? invert_left : invert_right;
     const bool forward = (sign > 0) != inverted;
     const int in1_level = sign == 0 ? 0 : forward;
     const int in2_level = sign == 0 ? 0 : !forward;
