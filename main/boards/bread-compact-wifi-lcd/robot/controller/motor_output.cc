@@ -5,6 +5,7 @@
 namespace ruby_robot {
 
 void L298nController::StopOutputsLocked() {
+    last_motor_stop_us_ = esp_timer_get_time();
     SetMpu6050MotorActive(false);
     heading_hold_active_ = false;
     heading_turn_active_ = false;

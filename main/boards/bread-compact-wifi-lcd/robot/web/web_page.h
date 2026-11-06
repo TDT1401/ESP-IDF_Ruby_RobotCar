@@ -65,7 +65,7 @@ inline constexpr char kL298nWebPage[] = R"html(
       <div class="telemetry-copy"><span class="distance-label">KHOẢNG CÁCH VẬT CẢN</span><strong id="distance" class="distance">-- cm</strong></div><span id="sensorState" class="sensor-state error">Đang chờ SR04…</span>
     </div>
     <div id="modeNotice" class="notice" role="status" aria-live="polite"></div>
-    <p class="notice">Lái thủ công hoặc dùng TimeDrive để chạy theo thời gian. Xe chưa tự dừng theo quãng đường.</p>
+    <p class="notice">Lái thủ công, tiến/lùi theo cm hoặc xoay theo góc.</p>
     <div class="dashboard">
       <nav class="menu" aria-label="Chế độ điều khiển">
         <button id="manualTab" class="active">🏠 Home</button>
@@ -79,9 +79,8 @@ inline constexpr char kL298nWebPage[] = R"html(
           <div class="portrait-manual">
             <div class="home-overview" aria-label="Thông tin thiết bị"><span>📶 <strong id="homeNetwork">Đang kiểm tra Wi-Fi…</strong></span><span>⏱ <strong id="homeUptime">--</strong></span><button id="refreshHome" type="button">Làm mới</button></div>
             <p id="homeUpdated" class="home-updated">Chưa có dữ liệu trạng thái.</p>
-            <section class="home-section"><h3>Thao tác nhanh</h3><p>Nút Dừng xe ngắt lệnh lái hoặc TimeDrive đang thực hiện.</p><div class="home-actions"><button id="emergencyStop" class="danger" type="button">⏹ Dừng xe</button><button id="wakeRobot" type="button">🎙 Đánh thức Ruby</button></div><p id="status" role="status" aria-live="polite"></p></section>
-            <section class="home-section"><h3>TimeDrive</h3><p>Tiến/lùi chạy theo thời gian và giữ hướng. Xoay trái/phải tự điều chỉnh tốc độ và dừng theo góc đặt; thời gian là giới hạn an toàn. Cần FC-03 và MPU6050 hoạt động. Hãy thử lần đầu khi bánh xe được kê khỏi mặt đất.</p><div class="home-row"><label for="timeDriveDirection">Hướng</label><select id="timeDriveDirection"><option value="forward">Tiến</option><option value="backward">Lùi</option><option value="turn_left">Xoay trái</option><option value="turn_right">Xoay phải</option></select><label id="timeDriveSpeedLabel" for="timeDriveSpeed">Tốc độ mục tiêu</label><input id="timeDriveSpeed" type="number" min="10" max="100" step="1" value="50" inputmode="numeric"><span id="timeDriveSpeedUnit">%</span><span id="timeDriveAutoSpeed" hidden>Tốc độ tự động theo góc còn lại</span><label id="timeDriveAngleLabel" for="timeDriveAngle" hidden>Góc xoay</label><input id="timeDriveAngle" type="number" min="5" max="180" step="1" value="90" inputmode="numeric" hidden><span id="timeDriveAngleUnit" hidden>độ</span><label id="timeDriveSecondsLabel" for="timeDriveSeconds">Thời gian</label><input id="timeDriveSeconds" type="number" min="1" max="30" step="1" value="5" inputmode="numeric"><span>giây</span><button id="timeDriveStart" type="button">Chạy</button></div><p id="timeDriveProgress" class="feature-state" role="status" aria-live="polite">Chưa có lệnh chạy.</p></section>
-            <section class="home-section" hidden><h3>Đi theo quãng đường</h3><p>Cần FC-03 đã hiệu chuẩn. Xe tự dừng ở đích; phía sau không có cảm biến vật cản.</p><div class="home-row"><label for="moveDistance">Quãng đường</label><input id="moveDistance" type="number" min="1" max="1000" step="1" value="30" inputmode="numeric"><span>cm</span></div><div class="home-row"><button id="moveForward" type="button">⬆ Tiến</button><button id="moveBackward" type="button">⬇ Lùi</button></div><p id="moveProgress" class="feature-state" aria-live="polite"></p></section>
+            <section class="home-section"><h3>Thao tác nhanh</h3><p>Nút Dừng xe ngắt lệnh di chuyển đang thực hiện.</p><div class="home-actions"><button id="emergencyStop" class="danger" type="button">⏹ Dừng xe</button><button id="wakeRobot" type="button">🎙 Đánh thức Ruby</button></div><p id="status" role="status" aria-live="polite"></p></section>
+            <section class="home-section"><h3>Đi theo quãng đường</h3><p>Tiến/lùi theo cm bằng FC-03; tốc độ tự tính theo cấu hình và quãng đường còn lại. Xoay trái/phải theo góc bằng MPU6050. Cần cảm biến và pose hợp lệ; chưa tự tránh vật cản.</p><div class="home-row"><label for="moveDistance">Quãng đường tiến/lùi</label><input id="moveDistance" type="number" min="5" max="1000" step="1" value="50" inputmode="numeric"><span>cm</span></div><div class="home-row"><button id="moveForward" type="button">⬆ Tiến</button><button id="moveBackward" type="button">⬇ Lùi</button></div><div class="home-row"><label for="moveAngle">Góc xoay</label><input id="moveAngle" type="number" min="5" max="180" step="1" value="90" inputmode="numeric"><span>độ</span><button id="moveLeft" type="button">↶ Xoay trái</button><button id="moveRight" type="button">↷ Xoay phải</button></div><div class="home-row"><button id="resetPose" type="button">Đặt gốc (0, 0, 0)</button></div><p id="moveProgress" class="feature-state" aria-live="polite"></p><p id="poseState" class="feature-state" aria-live="polite">Đang chờ vị trí tương đối…</p></section>
             <section class="home-section" hidden><h3>Chế độ tự hành</h3><p>Bật một chế độ tại một thời điểm; chỉnh khoảng cách ở phần cấu hình bên dưới.</p><div class="home-row"><button id="homeFollowToggle" type="button" aria-pressed="false">Bật Follow</button><button id="homeAvoidToggle" type="button" aria-pressed="false">Bật né vật cản</button></div></section>
             <section id="encoderPanel" hidden aria-live="polite">
               <div class="status-grid">
@@ -101,7 +100,7 @@ inline constexpr char kL298nWebPage[] = R"html(
             </div>
             <div class="config-actions" hidden><button id="saveConfig" type="button">Lưu thông số</button><p class="config-hint">Áp dụng ngay trong firmware; giá trị sẽ về mặc định sau khi khởi động lại.</p></div>
             </details>
-            <details class="home-section home-detail"><summary>Thông tin thiết bị &amp; trợ giúp</summary><p>Địa chỉ web: <strong id="homeIp">--</strong> · RAM trống: <strong id="homeRam">--</strong> KB.</p><p>Dùng HUD để lái thủ công. Có thể nói “lùi tốc độ 50% trong 5 giây” hoặc “xoay trái tốc độ 50% trong 3 giây”. Nút Dừng xe ngắt mọi chuyển động. Lệnh theo cm và tự hành hiện chưa hoạt động.</p></details>
+            <details class="home-section home-detail"><summary>Thông tin thiết bị &amp; trợ giúp</summary><p>Địa chỉ web: <strong id="homeIp">--</strong> · RAM trống: <strong id="homeRam">--</strong> KB.</p><p>Dùng HUD để lái thủ công, nhập quãng đường theo cm để tiến/lùi hoặc nhập góc để xoay. Nút Dừng xe ngắt mọi chuyển động.</p></details>
           </div>
           <div class="hud-rotate" aria-live="polite"><div class="hud-rotate-icon">↻</div><strong>Xoay ngang màn hình để trải nghiệm.</strong><p id="hudRotateStatus">Đang kết nối điều khiển xe…</p><div class="hud-rotate-actions"><button id="hudRotateStop" class="mode-off" type="button">⏹ Dừng xe</button><button id="hudRotateConnect" type="button">Kết nối lại</button><button id="hudRotateExit" type="button">Quay lại</button></div></div>
           <div class="landscape-hud" aria-label="Buồng lái ngang">
@@ -141,7 +140,8 @@ inline constexpr char kL298nWebPage[] = R"html(
     let warningDistanceCm = 30, obstacleDistanceCm = 20;
     let toastTimer, lastStatusTime = '';
     let operationActive = false, operationKind = '', operationText = '', operationStale = false;
-    let timeDriveOwner = '';
+    let distanceDriveOwner = '';
+    let turnOwner = '';
 
     const modeNames = {manual:'Thủ công',follow:'Follow',avoid:'Né vật cản'};
 
@@ -170,34 +170,12 @@ inline constexpr char kL298nWebPage[] = R"html(
       render();
     }
 
-    function timeDriveDirectionLabel(direction) {
-      return ({forward:'Tiến',backward:'Lùi',turn_left:'Xoay trái',
-        turn_right:'Xoay phải'})[direction] || 'Di chuyển';
-    }
-
-    function timeDriveIsTurn(direction) {
-      return direction === 'turn_left' || direction === 'turn_right';
-    }
-
-    function updateTimeDriveInputs() {
-      const turn = timeDriveIsTurn($('timeDriveDirection').value);
-      for (const id of ['timeDriveAngleLabel','timeDriveAngle','timeDriveAngleUnit'])
-        $(id).hidden = !turn;
-      for (const id of ['timeDriveSpeedLabel','timeDriveSpeed','timeDriveSpeedUnit'])
-        $(id).hidden = turn;
-      $('timeDriveSpeed').disabled = turn;
-      $('timeDriveAutoSpeed').hidden = !turn;
-      $('timeDriveSecondsLabel').textContent = turn ? 'Tối đa' : 'Thời gian';
-    }
-
     function operationFromStatus(data) {
-      if (data.command_mode === 'time_drive')
-        return ['time_drive',timeDriveDirectionLabel(data.time_drive_direction) + ' ' +
-          (data.time_drive_angle_degrees ? 'theo góc' : data.time_drive_speed_percent + '%') +
-          ' · còn ' + Math.ceil(data.time_drive_remaining_ms / 1000) + ' giây' +
-          (data.time_drive_angle_degrees ? ' · ' +
-            Math.round(data.turn_progress_degrees || 0) + '/' +
-            data.time_drive_angle_degrees + '°' : '')];
+      if (data.command_mode === 'time_drive' && data.time_drive_angle_degrees > 0) {
+        const direction = data.time_drive_direction === 'turn_left' ? 'Xoay trái' : 'Xoay phải';
+        return ['turn',direction + ' ' + Math.round(data.turn_progress_degrees || 0) +
+          '/' + data.time_drive_angle_degrees + '°'];
+      }
       if (data.autonomy_mode === 'follow') return ['autonomy','Follow đang bật'];
       if (data.autonomy_mode === 'obstacle_avoidance')
         return ['autonomy','Né vật cản đang bật'];
@@ -221,14 +199,16 @@ inline constexpr char kL298nWebPage[] = R"html(
     }
 
     function finishedOperation(data) {
-      if (operationKind === 'time_drive') {
-        if (data.time_drive_state === 'completed') return ['TimeDrive đã hoàn thành.',true];
+      if (operationKind === 'turn') {
+        if (data.time_drive_state === 'completed') return ['Đã xoay đến góc đặt.',true];
         if (data.time_drive_state === 'fault')
           return ['Xe dừng vì lỗi cảm biến, motor hoặc quá thời gian.',false];
-        return ['TimeDrive đã bị ngắt.',false];
+        return ['Lệnh xoay đã bị ngắt.',false];
       }
       if (operationKind === 'distance') {
         if (data.distance_move_state === 'completed') return ['Đã hoàn thành quãng đường.',true];
+        if (data.distance_move_state === 'fault')
+          return ['Lệnh quãng đường dừng do lỗi: ' + (data.distance_drive?.fault || 'control_error'),false];
         if (data.distance_move_state === 'obstacle') return ['Xe đã dừng vì vật cản.',false];
         if (data.distance_move_state === 'no_pulses' ||
             data.distance_move_state === 'encoder_error') return ['Xe đã dừng vì lỗi FC-03.',false];
@@ -321,7 +301,8 @@ inline constexpr char kL298nWebPage[] = R"html(
         const response = await fetch('/api/status',{cache:'no-store',signal:controller.signal});
         if (!response.ok) throw new Error(String(response.status));
         const data = await response.json();
-        timeDriveOwner = data.command_mode === 'time_drive' ? data.time_drive_owner : '';
+        distanceDriveOwner = data.command_mode === 'distance_drive' ? data.distance_drive?.owner : '';
+        turnOwner = data.command_mode === 'time_drive' ? data.time_drive_owner : '';
         lastStatusTime = new Date().toLocaleTimeString('vi-VN');
         $('homeUpdated').textContent = 'Cập nhật lúc ' + lastStatusTime;
         const operation = operationFromStatus(data);
@@ -354,37 +335,6 @@ inline constexpr char kL298nWebPage[] = R"html(
               ' RPM; PWM ' + data.left_pwm_percent + ' / ' + data.right_pwm_percent + '%'
             : data.speed_pi_calibrated ? 'PI tốc độ sẵn sàng' :
               'PI tốc độ chờ RPM tham chiếu từng bánh trong config.h';
-        if ($('timeDriveProgress')) {
-          const driveState = ({running:'Đang chạy',completed:'Đã hoàn thành',
-            interrupted:'Đã ngắt',fault:'Lỗi'})[data.time_drive_state] ||
-            'Chưa có lệnh chạy';
-          $('timeDriveProgress').textContent = driveState +
-            (data.time_drive_state !== 'idle' ? ' · ' +
-              timeDriveDirectionLabel(data.time_drive_direction) : '') +
-            (data.time_drive_duration_seconds ? ' · ' +
-              (data.time_drive_elapsed_ms / 1000).toFixed(1) + '/' +
-              data.time_drive_duration_seconds + ' giây' +
-              (data.time_drive_angle_degrees ? '' : ' · mục tiêu ' +
-                data.time_drive_speed_percent + '%') : '') +
-            (data.time_drive_angle_degrees ? ' · góc ' +
-              Math.round(data.turn_progress_degrees || 0) + '/' +
-              data.time_drive_angle_degrees + '°' : '') +
-            (data.command_mode === 'time_drive' ? ' · RPM mục tiêu ' +
-              piNumber(data.speed_pi_left_target_rpm) + '/' +
-              piNumber(data.speed_pi_right_target_rpm) + ' · đo ' +
-              piNumber(data.encoder?.left?.rpm) + '/' +
-              piNumber(data.encoder?.right?.rpm) + ' · PWM ' +
-              data.left_pwm_percent + '/' + data.right_pwm_percent + '%' : '') +
-            (data.time_drive_samples > 0 ? ' · TB RPM ' +
-              piNumber(data.time_drive_average_left_rpm) + '/' +
-              piNumber(data.time_drive_average_right_rpm) + ' · sai số TB ' +
-              piNumber(data.time_drive_average_left_error_rpm) + '/' +
-              piNumber(data.time_drive_average_right_error_rpm) + ' RPM · độ lệch chuẩn ' +
-              piNumber(data.time_drive_stddev_left_rpm) + '/' +
-              piNumber(data.time_drive_stddev_right_rpm) + ' RPM · PWM TB ' +
-              piNumber(data.time_drive_average_left_pwm_percent) + '/' +
-              piNumber(data.time_drive_average_right_pwm_percent) + '%' : '');
-        }
         if (typeof document.querySelector === 'function') {
           const speedLabel = document.querySelector('.hud-speed span');
           if (speedLabel) speedLabel.textContent =
@@ -405,10 +355,26 @@ inline constexpr char kL298nWebPage[] = R"html(
         const moveState = ({pending:'Đang chuẩn bị',moving:'Đang di chuyển',
           completed:'Đã hoàn thành',interrupted:'Đã ngắt',timeout:'Hết thời gian',
           no_pulses:'Không có xung FC-03',encoder_error:'Lỗi FC-03',
-          obstacle:'Đã dừng vì vật cản'})[data.distance_move_state] || '';
-        $('moveProgress').textContent = moveState && data.distance_move_target_cm > 0
-          ? moveState + ' · ' + Math.round(data.distance_move_progress_cm || 0) +
-            '/' + data.distance_move_target_cm + ' cm' : moveState;
+          obstacle:'Đã dừng vì vật cản',fault:'Lỗi: ' + (data.distance_drive?.fault || 'control_error')})[data.distance_move_state] || '';
+        if (data.command_mode === 'time_drive' && data.time_drive_angle_degrees > 0) {
+          $('moveProgress').textContent = operationFromStatus(data)?.[1] || '';
+        } else {
+          $('moveProgress').textContent = moveState && data.distance_move_target_cm > 0
+            ? moveState + ' · ' + Math.round(data.distance_move_progress_cm || 0) +
+              '/' + data.distance_move_target_cm + ' cm' : moveState;
+          if (data.distance_drive && data.distance_move_target_cm > 0)
+            $('moveProgress').textContent += ' · sai số quãng đường ' +
+              piNumber(data.distance_drive.error_m * 100) + ' cm · sai số vị trí ước lượng ' +
+              piNumber(data.distance_drive.position_error_m * 100) + ' cm';
+        }
+        if ($('poseState')) {
+          const pose = data.odometry;
+          $('poseState').textContent = pose?.valid
+            ? 'Vị trí tương đối: x ' + pose.x_m.toFixed(3) + ' m · y ' + pose.y_m.toFixed(3) +
+              ' m · θ ' + (pose.theta_rad * 180 / Math.PI).toFixed(1) + '°'
+            : 'Pose chưa hợp lệ: ' + (pose?.fault || 'đang chờ cảm biến') +
+              '. Dừng xe, chờ đứng yên rồi đặt lại gốc.';
+        }
         obstacleDistanceCm = Number.isFinite(data.obstacle_distance_cm)
           ? data.obstacle_distance_cm : 20;
         warningDistanceCm = Number.isFinite(data.warning_distance_cm)
@@ -435,6 +401,7 @@ inline constexpr char kL298nWebPage[] = R"html(
         return true;
       } catch (_) {
         renderEncoder(null,true);
+        if ($('poseState')) $('poseState').textContent = 'Chưa lấy được dữ liệu vị trí mới';
         if ($('speedPiState')) $('speedPiState').textContent = 'Không có dữ liệu PI mới';
         $('distance').textContent = '-- cm';
         $('manualDistance').textContent = '-- cm';
@@ -516,11 +483,12 @@ inline constexpr char kL298nWebPage[] = R"html(
       const actionBusy = homeBusy || autonomyBusy || busy || releasing;
       for (const id of ['followOff','avoidOff','wakeRobot','saveSharedSpeed'])
         $(id).disabled = actionBusy;
-      for (const id of ['followOn','avoidOn','moveForward','moveBackward'])
+      for (const id of ['followOn','avoidOn','moveForward','moveBackward','moveLeft','moveRight'])
         $(id).disabled = actionBusy || operationActive;
       $('homeFollowToggle').disabled = actionBusy || (operationActive && currentMode !== 'follow');
       $('homeAvoidToggle').disabled = actionBusy || (operationActive && currentMode !== 'avoid');
-      if ($('timeDriveStart')) $('timeDriveStart').disabled = actionBusy || operationActive || Boolean(session);
+      for (const id of ['moveForward','moveBackward','moveLeft','moveRight','resetPose'])
+        if ($(id)) $(id).disabled = actionBusy || operationActive || Boolean(session);
       const showBar = operationActive && !hudMode;
       $('operationBar').hidden = !showBar;
       $('operationText').textContent = operationText + (operationStale ? ' · Chưa cập nhật mới' : '');
@@ -723,14 +691,13 @@ inline constexpr char kL298nWebPage[] = R"html(
             operationKind = '';
             render();
           } else if (action === 'forward' || action === 'backward') {
+            distanceDriveOwner = 'web';
             showOperation('Đã nhận lệnh ' + (action === 'forward' ? 'tiến ' : 'lùi ') +
               fields.distance_cm + ' cm','distance');
-          } else if (action === 'time_drive') {
-            timeDriveOwner = 'web';
-            showOperation(timeDriveDirectionLabel(fields.direction) + ' ' +
-              (fields.angle_degrees ? 'tự điều chỉnh tốc độ · ' : fields.speed_percent + '% · ') +
-              (fields.angle_degrees ? fields.angle_degrees + '° · tối đa ' : '') +
-              fields.duration_seconds + ' giây','time_drive');
+          } else if (action === 'turn_left' || action === 'turn_right') {
+            turnOwner = 'web';
+            showOperation('Đã nhận lệnh xoay ' + (action === 'turn_left' ? 'trái ' : 'phải ') +
+              fields.angle_degrees + '°','turn');
           }
           notifyAction($('status').textContent,true);
         }
@@ -750,43 +717,33 @@ inline constexpr char kL298nWebPage[] = R"html(
     }
 
     function moveDistance(action) {
-      if (operationActive) {
-        notifyAction('Dừng xe trước khi gửi lệnh di chuyển khác.',false);
+      if (operationActive || session) {
+        notifyAction('Dừng xe và rời phiên HUD trước khi gửi lệnh quãng đường.',false);
         return;
       }
       const distance = Number($('moveDistance').value);
-      if (!Number.isInteger(distance) || distance < 1 || distance > 1000) {
-        $('status').textContent = 'Nhập quãng đường nguyên từ 1 đến 1000 cm.';
+      if (!Number.isInteger(distance) || distance < 5 || distance > 1000) {
+        $('status').textContent = 'Nhập quãng đường từ 5 đến 1000 cm.';
         notifyAction($('status').textContent,false);
         return;
       }
-      void homeAction(action,{distance_cm:distance},'Đã nhận lệnh đi ' + distance + ' cm.',
-        'Chưa thể di chuyển. Kiểm tra FC-03, tốc độ PWM và trạng thái xe.');
+      void homeAction(action,{distance_cm:distance},
+        'Đã nhận lệnh đi ' + distance + ' cm.',
+        'Chưa thể di chuyển. Kiểm tra FC-03, MPU6050, pose và chờ xe đứng yên.');
     }
 
-    function startTimeDrive() {
+    function turnAngle(action) {
       if (operationActive || session) {
-        notifyAction('Dừng xe và rời phiên HUD trước khi dùng TimeDrive.',false);
+        notifyAction('Dừng xe và rời phiên HUD trước khi gửi lệnh xoay.',false);
         return;
       }
-      const direction = $('timeDriveDirection').value;
-      const speedPercent = Number($('timeDriveSpeed').value);
-      const durationSeconds = Number($('timeDriveSeconds').value);
-      const turn = timeDriveIsTurn(direction);
-      const angleDegrees = Number($('timeDriveAngle').value);
-      if (!['forward','backward','turn_left','turn_right'].includes(direction) ||
-          (!turn && (!Number.isInteger(speedPercent) || speedPercent < 10 || speedPercent > 100)) ||
-          !Number.isInteger(durationSeconds) || durationSeconds < 1 || durationSeconds > 30 ||
-          (turn && (!Number.isInteger(angleDegrees) || angleDegrees < 5 || angleDegrees > 180))) {
-        notifyAction(turn ? 'Chọn góc xoay 5–180° và thời gian tối đa 1–30 giây.' :
-          'Chọn tốc độ 10–100% và thời gian 1–30 giây.',false);
+      const angle = Number($('moveAngle').value);
+      if (!Number.isInteger(angle) || angle < 5 || angle > 180) {
+        notifyAction('Nhập góc xoay từ 5 đến 180°.',false);
         return;
       }
-      void homeAction('time_drive',
-        {direction,duration_seconds:durationSeconds,
-          ...(turn ? {angle_degrees:angleDegrees} : {speed_percent:speedPercent})},
-        'Đã bắt đầu TimeDrive.',
-        'Không thể chạy. Kiểm tra phiên HUD, FC-03, MPU6050 và Speed PI.');
+      void homeAction(action,{angle_degrees:angle},'Đã nhận lệnh xoay ' + angle + '°.',
+        'Chưa thể xoay. Kiểm tra MPU6050, FC-03 và chờ xe đứng yên.');
     }
 
     function saveSharedSpeed() {
@@ -937,11 +894,13 @@ inline constexpr char kL298nWebPage[] = R"html(
     });
     $('moveForward').addEventListener('click',() => moveDistance('forward'));
     $('moveBackward').addEventListener('click',() => moveDistance('backward'));
-    if ($('timeDriveStart')) $('timeDriveStart').addEventListener('click',startTimeDrive);
-    if ($('timeDriveDirection')) {
-      $('timeDriveDirection').addEventListener('change',updateTimeDriveInputs);
-      updateTimeDriveInputs();
-    }
+    $('moveLeft').addEventListener('click',() => turnAngle('turn_left'));
+    $('moveRight').addEventListener('click',() => turnAngle('turn_right'));
+    if ($('resetPose')) $('resetPose').addEventListener('click',() => {
+      if (operationActive || session) return;
+      void homeAction('reset_odometry',{},'Đã đặt gốc vị trí tương đối.',
+        'Dừng xe, rời phiên HUD và chờ cảm biến ổn định trước khi đặt gốc.');
+    });
     $('saveSharedSpeed').addEventListener('click',saveSharedSpeed);
     $('sharedSpeed').addEventListener('keydown',event => {
       if (event.key === 'Enter') saveSharedSpeed();
@@ -1007,7 +966,8 @@ inline constexpr char kL298nWebPage[] = R"html(
       if (event.code === 'Space' && hudMode && session) { event.preventDefault(); stop(); }
     });
     const pageLost = () => {
-      if (operationKind === 'time_drive' && timeDriveOwner === 'web')
+      if ((operationKind === 'distance' && distanceDriveOwner === 'web') ||
+          (operationKind === 'turn' && turnOwner === 'web'))
         fetch('/api/action',{method:'POST',headers:{'X-Robot-Control':'1',
           'Content-Type':'application/json'},body:JSON.stringify({action:'stop'}),
           keepalive:true}).catch(() => {});
@@ -1023,7 +983,7 @@ inline constexpr char kL298nWebPage[] = R"html(
     document.addEventListener('visibilitychange', () => { if (document.hidden) pageLost(); });
     void refreshTelemetry();
     setInterval(refreshTelemetry,2000);
-    setInterval(() => { if (operationKind === 'time_drive' && !document.hidden) void refreshTelemetry(); },500);
+    setInterval(() => { if ((operationKind === 'distance' || operationKind === 'turn') && !document.hidden) void refreshTelemetry(); },200);
     setInterval(() => { if (hudMode && !document.hidden) void refreshTelemetry(); },250);
     setInterval(() => { if (hudMode && session && !releasing) { pending = true; void pump(); } },150);
     $('theme').addEventListener('click', () => document.body.classList.toggle('ultra'));

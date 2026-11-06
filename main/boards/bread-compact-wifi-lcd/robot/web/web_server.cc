@@ -15,6 +15,7 @@
 
 #include "../controller/l298n_controller.h"
 #include "../serialization/fc03_json.h"
+#include "../serialization/odometry_json.h"
 #include "application.h"
 #include "web_page.h"
 #include "wifi_manager.h"
@@ -182,29 +183,23 @@ esp_err_t Action(httpd_req_t* req) {
         return Reply(req, "200 OK", "{\"ok\":true}");
     }
 
-    if (strcmp(action->valuestring, "time_drive") == 0) {
-        uint32_t speed_percent = 0, duration_seconds, angle_degrees = 0;
-        const cJSON* direction_json = cJSON_GetObjectItemCaseSensitive(json.get(), "direction");
-        const cJSON* angle_json = cJSON_GetObjectItemCaseSensitive(json.get(), "angle_degrees");
-        const cJSON* speed_json = cJSON_GetObjectItemCaseSensitive(json.get(), "speed_percent");
-        const ruby_robot::Motion direction =
-            cJSON_IsString(direction_json)
-                ? ruby_robot::ParseTimeDriveDirection(direction_json->valuestring)
-                : ruby_robot::Motion::kStop;
-        const bool turn =
-            direction == ruby_robot::Motion::kLeft || direction == ruby_robot::Motion::kRight;
-        if (direction == ruby_robot::Motion::kStop ||
-            cJSON_GetArraySize(json.get()) != 3 + (turn ? 1 : 0) + (speed_json ? 1 : 0) ||
-            (turn != (angle_json != nullptr)) || (!turn && !speed_json) ||
-            (speed_json && !ReadInteger(json.get(), "speed_percent", 10, 100, &speed_percent)) ||
-            !ReadInteger(json.get(), "duration_seconds", 1, 30, &duration_seconds) ||
-            (turn && !ReadInteger(json.get(), "angle_degrees", 5, 180, &angle_degrees)))
-            return Reply(req, "400 Bad Request", "{\"error\":\"Invalid TimeDrive\"}");
-        const esp_err_t error = StartL298nCommand(ruby_robot::TimeDriveRequest{
-            direction, static_cast<int>(speed_percent), static_cast<int>(duration_seconds),
-            ruby_robot::TimeDriveOwner::kWeb, static_cast<int>(angle_degrees)});
-        if (error != ESP_OK)
-            return Reply(req, "409 Conflict", "{\"error\":\"Drive busy or sensor unavailable\"}");
+    if (strcmp(action->valuestring, "reset_odometry") == 0 && cJSON_GetArraySize(json.get()) == 1) {
+        if (ResetL298nOdometry() != ESP_OK)
+            return Reply(req, "409 Conflict",
+                         "{\"error\":\"Stop, release HUD and wait for sensors\"}");
+        return Reply(req, "200 OK", "{\"ok\":true}");
+    }
+
+    const bool turn_left = strcmp(action->valuestring, "turn_left") == 0;
+    const bool turn_right = strcmp(action->valuestring, "turn_right") == 0;
+    if (turn_left || turn_right) {
+        uint32_t angle_degrees = 0;
+        if (cJSON_GetArraySize(json.get()) != 2 ||
+            !ReadInteger(json.get(), "angle_degrees", 5, 180, &angle_degrees))
+            return Reply(req, "400 Bad Request", "{\"error\":\"Invalid angle\"}");
+        const int angle = static_cast<int>(angle_degrees) * (turn_left ? 1 : -1);
+        if (RotateL298nAngle(angle, ruby_robot::TimeDriveOwner::kWeb) != ESP_OK)
+            return Reply(req, "409 Conflict", "{\"error\":\"Controller unavailable\"}");
         return Reply(req, "200 OK", "{\"ok\":true}");
     }
 
@@ -213,7 +208,7 @@ esp_err_t Action(httpd_req_t* req) {
     const bool backward = strcmp(action->valuestring, "backward") == 0;
     uint32_t value = 0;
     if ((!set_speed && !forward && !backward) || cJSON_GetArraySize(json.get()) != 2 ||
-        !ReadInteger(json.get(), set_speed ? "speed" : "distance_cm", set_speed ? 0 : 1,
+        !ReadInteger(json.get(), set_speed ? "speed" : "distance_cm", set_speed ? 0 : 5,
                      set_speed ? 100 : 1000, &value))
         return Reply(req, "400 Bad Request", "{\"error\":\"Invalid action\"}");
     const auto error = set_speed ? ESP_ERR_NOT_SUPPORTED
@@ -237,7 +232,8 @@ esp_err_t Status(httpd_req_t* req) {
         !cJSON_AddStringToObject(json.get(), "command_mode", motor.command.mode) ||
         !cJSON_AddStringToObject(json.get(), "time_drive_state", motor.command.time_drive.state) ||
         !cJSON_AddStringToObject(json.get(), "time_drive_owner", motor.command.time_drive.owner) ||
-        !cJSON_AddStringToObject(json.get(), "time_drive_direction", motor.command.time_drive.direction) ||
+        !cJSON_AddStringToObject(json.get(), "time_drive_direction",
+                                 motor.command.time_drive.direction) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_speed_percent",
                                  motor.command.time_drive.speed_percent) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_duration_seconds",
@@ -248,7 +244,8 @@ esp_err_t Status(httpd_req_t* req) {
                                  motor.command.time_drive.elapsed_ms) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_remaining_ms",
                                  motor.command.time_drive.remaining_ms) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_samples", motor.command.time_drive.metrics.samples) ||
+        !cJSON_AddNumberToObject(json.get(), "time_drive_samples",
+                                 motor.command.time_drive.metrics.samples) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_average_left_rpm",
                                  motor.command.time_drive.metrics.average_left_rpm) ||
         !cJSON_AddNumberToObject(json.get(), "time_drive_average_right_rpm",
@@ -321,7 +318,8 @@ esp_err_t Status(httpd_req_t* req) {
                                  motor.heading_correction_rpm) ||
         !cJSON_AddStringToObject(json.get(), "heading_fault", motor.heading_fault) ||
         !cJSON_AddBoolToObject(json.get(), "turn_uses_imu", motor.turn_uses_imu) ||
-        !AddFc03EncoderJson(json.get(), motor.encoder))
+        !AddFc03EncoderJson(json.get(), motor.encoder) ||
+        !AddOdometryJson(json.get(), motor.odometry, motor.command.distance_drive))
         return Reply(req, "500 Internal Server Error", "{\"error\":\"Status unavailable\"}");
     std::unique_ptr<char, decltype(&cJSON_free)> body(cJSON_PrintUnformatted(json.get()),
                                                       cJSON_free);

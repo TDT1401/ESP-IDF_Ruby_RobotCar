@@ -97,13 +97,28 @@
 #define HEADING_TURN_SLOWDOWN_DEGREES 45.0
 #define HEADING_TURN_TOLERANCE_DEGREES 2.0
 #define HEADING_TURN_SETTLE_RATE_DPS 8.0
-#define HEADING_TURN_MIN_RPM 12.0
+#define HEADING_TURN_MIN_RPM 20.0
 // Provisional friction feedforward for skid turns, in PWM percent. Tune each side
 // on the floor. PI may reduce output below this; a zero RPM target always stops.
 #define HEADING_TURN_LEFT_FRICTION_PWM_PERCENT 60.0
 #define HEADING_TURN_RIGHT_FRICTION_PWM_PERCENT 60.0
 // Set to 1 to log heading feedback, wheel RPM targets/measurements and PWM at 5 Hz.
 #define HEADING_PD_DEBUG 0
+
+// Phase 3: provisional distance profile; tune against independent floor measurements.
+#define DISTANCE_DRIVE_MAX_SPEED_PERCENT 90
+#define DISTANCE_DRIVE_ACCELERATION_MPS2 0.30
+#define DISTANCE_DRIVE_DECELERATION_MPS2 0.30
+#define DISTANCE_DRIVE_MIN_SPEED_PERCENT 25
+#define DISTANCE_DRIVE_TOLERANCE_MM 20.0
+#define DISTANCE_DRIVE_SETTLE_RPM 3.0
+#define DISTANCE_DRIVE_SETTLE_MS 300
+// Effective skid-steer track width, not necessarily the physical wheel spacing.
+// Calibrate in mm: 1000 * (right_m - left_m) / independent turn angle (radians).
+// Zero keeps encoder-only heading unavailable; gyro-based pose/distance still work.
+#define ODOMETRY_TRACK_WIDTH_MM 0.0
+// CSV pose/distance telemetry at 5 Hz, outside the motor timer task.
+#define ODOMETRY_DEBUG 0
 
 // HC-SR04 uses 5 V power. ECHO must be level-shifted to 3.3 V before this GPIO.
 #define HCSR04_TRIGGER_PIN GPIO_NUM_14

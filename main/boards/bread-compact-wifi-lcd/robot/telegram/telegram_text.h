@@ -101,9 +101,10 @@ inline constexpr char kMotionStopped[] = "⏹️ Đứng yên";
 
 inline constexpr char kMenu[] =
     "<b>Ruby · Điều khiển xe</b>\n"
-    "Dùng trang web /web để lái thủ công bằng PWM.\n"
-    "Dùng /status để xem cảm biến và /stop để dừng. Chọn PWM trên HUD.\n"
-    "Lệnh theo cm/góc và chế độ tự hành đang tạm ngừng.";
+    "Dùng /web để lái thủ công, chạy quãng đường hoặc xoay góc.\n"
+    "Dùng /forward 50 hoặc /backward 50 để đi 50 cm (5–1000 cm).\n"
+    "Dùng /reset_pose khi đứng yên để đặt gốc vị trí, /status để xem và /stop để dừng.\n"
+    "Follow và né vật cản đang tạm ngừng.";
 inline constexpr char kSpeedUnavailable[] =
     "Lệnh /speed đang tạm ngừng. Mở /web và chọn mức PWM trên HUD để lái thủ công.";
 inline constexpr char kWakeRequested[] =
@@ -139,21 +140,21 @@ inline constexpr char kSpeedHardwareError[] =
     "động lại.";
 
 inline constexpr char kDistanceMoveUsage[] =
-    "Khoảng cách phải là số nguyên từ 1 đến 1000 cm. Cần hai encoder FC-03 đã được hiệu chuẩn.";
+    "Dùng /forward 50 hoặc /backward 50 (5–1000 cm). Cần FC-03, MPU6050 và pose hợp lệ.";
 inline constexpr char kForwardDistancePrompt[] =
-    "⬆️ Nhập quãng đường muốn tiến bằng cm (1–1000). Ví dụ: <code>100</code>.";
+    "⬆️ Gửi <code>/forward 50</code> để tiến 50 cm (5–1000 cm).";
 inline constexpr char kBackwardDistancePrompt[] =
-    "⬇️ Nhập quãng đường muốn lùi bằng cm (1–1000). Ví dụ: <code>100</code>.";
+    "⬇️ Gửi <code>/backward 50</code> để lùi 50 cm (5–1000 cm).";
 inline constexpr char kDistanceInputInvalid[] =
     "Hãy nhập một số nguyên từ 1 đến 1000 cm. Xe chưa bắt đầu chạy.";
 inline constexpr char kDistanceInputExpired[] =
     "Yêu cầu nhập quãng đường đã hết hạn. Chạm nút Tiến hoặc Lùi để bắt đầu lại.";
 inline constexpr char kDistanceMoveAccepted[] =
-    "✅ Đã nhận lệnh chạy theo quãng đường encoder. Motor tự dừng khi đạt mục tiêu.";
+    "✅ Đã nhận lệnh quãng đường. Dùng /status để xem, /stop để dừng.";
 inline constexpr char kDistanceMoveWebBusy[] =
     "🎮 Web đang giữ quyền điều khiển motor. Hãy trả quyền trên trang web rồi gửi lại lệnh.";
 inline constexpr char kDistanceMoveUnavailable[] =
-    "Lệnh theo quãng đường đang tạm ngừng. Dùng /web để lái thủ công.";
+    "Chưa thể chạy: kiểm tra pose, FC-03, MPU6050, rời phiên HUD và chờ xe đứng yên.";
 
 inline constexpr char kFollowUsage[] =
     "Dùng <code>/follow on</code>, <code>/follow off</code> hoặc <code>/follow N</code> với N từ "

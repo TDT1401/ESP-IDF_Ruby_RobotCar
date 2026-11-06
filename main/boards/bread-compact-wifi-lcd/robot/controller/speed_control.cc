@@ -104,13 +104,16 @@ bool L298nController::UpdateHeadingPdLocked(int64_t now_us) {
         heading_fault_ = !imu.ready ? "imu_unavailable" : "heading_invalid";
         return false;
     }
-    if (last_heading_pd_us_ != 0 && now_us - last_heading_pd_us_ < kHeadingPdPeriodUs)
+    const int speed = ActiveSpeedLocked();
+    // A distance goal reaching its braking point must zero the targets immediately.
+    if (last_heading_pd_us_ != 0 && now_us - last_heading_pd_us_ < kHeadingPdPeriodUs &&
+        (speed != 0 || (requested_left_percent_ == 0 && requested_right_percent_ == 0)))
         return true;
 
     // Use a common wheel RPM even if the two sides have different reference RPM.
     const double reference_rpm =
         std::min(SPEED_PI_LEFT_REFERENCE_RPM, SPEED_PI_RIGHT_REFERENCE_RPM);
-    const double base_rpm = reference_rpm * ActiveSpeedLocked() / SPEED_PI_REFERENCE_PWM_PERCENT;
+    const double base_rpm = reference_rpm * speed / SPEED_PI_REFERENCE_PWM_PERCENT;
     const double error = heading_target_degrees_ - imu.heading_degrees;
     HeadingPdTargets targets{};
     if (heading_turn_active_) {

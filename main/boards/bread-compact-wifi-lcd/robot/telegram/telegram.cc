@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <charconv>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -144,6 +145,23 @@ std::string StatusMessage() {
     message += uptime_text;
     message += "\n\n";
 
+    if (motor.odometry.valid) {
+        char pose_text[192];
+        snprintf(pose_text, sizeof(pose_text), "Pose: x=%.3f m, y=%.3f m, theta=%.3f rad\n",
+                 motor.odometry.x_m, motor.odometry.y_m, motor.odometry.theta_rad);
+        message += pose_text;
+    } else {
+        message += std::string("Pose: ") + motor.odometry.fault + "\n";
+    }
+    const auto& distance = motor.command.distance_drive;
+    if (distance.target_m != 0) {
+        char drive_text[192];
+        snprintf(drive_text, sizeof(drive_text),
+                 "Distance: %s, %.3f/%.3f m, error=%.3f m, position_error=%.3f m, %s\n",
+                 distance.state, distance.progress_m, distance.target_m, distance.error_m,
+                 distance.position_error_m, distance.fault);
+        message += drive_text;
+    }
     message += L298nTelegramText::kDivider;
     message += "\n\n" + std::string(L298nTelegramText::kNetworkSection) + "\n";
     message += L298nTelegramText::kWifiLabel;
@@ -433,9 +451,19 @@ private:
     }
 
     void HandleDistanceMove(const std::string& argument, bool forward) {
-        (void)argument;
-        (void)forward;
-        Send(L298nTelegramText::kDistanceMoveUnavailable, true);
+        int distance_cm = 0;
+        const auto result =
+            std::from_chars(argument.data(), argument.data() + argument.size(), distance_cm);
+        if (result.ec != std::errc{} || result.ptr != argument.data() + argument.size() ||
+            distance_cm < ruby_robot::DistanceDriveCommand::kMinDistanceCm ||
+            distance_cm > ruby_robot::DistanceDriveCommand::kMaxDistanceCm) {
+            Send(L298nTelegramText::kDistanceMoveUsage, true);
+            return;
+        }
+        const esp_err_t error = MoveL298nDistance(forward, distance_cm, "telegram");
+        Send(error == ESP_OK ? L298nTelegramText::kDistanceMoveAccepted
+                             : L298nTelegramText::kDistanceMoveUnavailable,
+             true);
     }
 
     void HandleAutonomy(const std::string& raw_argument, bool follow) {
@@ -445,8 +473,9 @@ private:
     }
 
     void RequestDistanceInput(bool forward) {
-        (void)forward;
-        Send(L298nTelegramText::kDistanceMoveUnavailable, true);
+        Send(forward ? L298nTelegramText::kForwardDistancePrompt
+                     : L298nTelegramText::kBackwardDistancePrompt,
+             true);
     }
 
     bool HandleButton(const std::string& input) {
@@ -526,6 +555,10 @@ private:
             HandleDistanceMove(argument, true);
         else if (command == "/backward")
             HandleDistanceMove(argument, false);
+        else if (command == "/reset_pose" && argument.empty())
+            Send(ResetL298nOdometry() == ESP_OK ? "Đã đặt gốc vị trí (0, 0, 0)."
+                                                : "Dừng xe, rời HUD và chờ cảm biến ổn định.",
+                 true);
         else if (command == "/follow")
             HandleAutonomy(argument, true);
         else if (command == "/avoid")

@@ -34,6 +34,7 @@ public:
 
     void Stop();
     esp_err_t StartCommand(const CommandRequest& request);
+    esp_err_t ResetOdometry();
     L298nMotorStatus Snapshot();
     void UpdateDistance(int distance_cm, bool valid);
     void ScheduleProximityWarning();
@@ -50,6 +51,8 @@ private:
     CommandInterface command_interface_;
     WebControlSession web_control_;
     Fc03Encoder encoder_;
+    Odometry odometry_;
+    int64_t last_motor_stop_us_ = 0;
     SpeedPi left_speed_pi_;
     SpeedPi right_speed_pi_;
     int requested_left_percent_ = 0;
@@ -98,7 +101,12 @@ private:
     void ReleaseWebSleepLockLocked();
     void EndWebControlLocked();
     void StopLocked();
-    void StopFailedMotionLocked(int64_t now_us);
+    void StopFailedMotionLocked(int64_t now_us, const char* fault = "control_error");
+    void FinishCommandLocked(int64_t now_us, bool completed, const char* fault = "control_error");
+    OdometrySample ReadOdometrySampleLocked(int64_t now_us);
+    void UpdateOdometryLocked(int64_t now_us);
+    bool OdometryStationaryLocked(int64_t now_us) const;
+    static DistanceDriveLimits DistanceLimits();
     int ActiveSpeedLocked() const;
     bool PrepareMotionLocked(Motion motion);
     static bool MotionAllowed();

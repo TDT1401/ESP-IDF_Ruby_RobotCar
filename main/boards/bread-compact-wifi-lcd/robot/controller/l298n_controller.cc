@@ -5,6 +5,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 
@@ -12,14 +13,33 @@
 #include "../sensors/hcsr04_sensor.h"
 #include "../sensors/mpu6050_imu.h"
 
-#if HEADING_PD_DEBUG
+#if HEADING_PD_DEBUG || ODOMETRY_DEBUG
 namespace {
 
-void HeadingMonitorTask(void*) {
+void ControlMonitorTask(void*) {
+#if HEADING_PD_DEBUG
     bool fault_reported = false;
+#endif
+#if ODOMETRY_DEBUG
+    ESP_LOGI(
+        "Odometry",
+        "time_ms,mode,state,valid,x_m,y_m,theta_rad,left_m,right_m,"
+        "wheel_heading_valid,wheel_theta_rad,target_m,progress_m,error_m,position_error_m,fault");
+#endif
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(200));
         const auto status = GetL298nMotorStatus();
+#if ODOMETRY_DEBUG
+        const auto& pose = status.odometry;
+        const auto& drive = status.command.distance_drive;
+        ESP_LOGI(
+            "Odometry", "%lld,%s,%s,%d,%.4f,%.4f,%.5f,%.4f,%.4f,%d,%.5f,%.3f,%.4f,%.4f,%.4f,%s",
+            static_cast<long long>(esp_timer_get_time() / 1000), status.command.mode, drive.state,
+            pose.valid, pose.x_m, pose.y_m, pose.theta_rad, pose.left_m, pose.right_m,
+            pose.wheel_heading_valid, pose.wheel_theta_rad, drive.target_m, drive.progress_m,
+            drive.error_m, drive.position_error_m, pose.valid ? drive.fault : pose.fault);
+#endif
+#if HEADING_PD_DEBUG
         if (!status.heading_hold_active) {
             if (!fault_reported && (std::strcmp(status.heading_fault, "none") != 0 ||
                                     std::strcmp(status.speed_pi_fault, "none") != 0)) {
@@ -39,6 +59,7 @@ void HeadingMonitorTask(void*) {
                  status.speed_pi_left_target_rpm, status.encoder.left.rpm, status.left_pwm_percent,
                  status.speed_pi_right_target_rpm, status.encoder.right.rpm,
                  status.right_pwm_percent);
+#endif
     }
 }
 
@@ -77,6 +98,11 @@ esp_err_t L298nController::StartCommand(const CommandRequest& request) {
         return fault_;
     if (requirements.speed_pi && !SpeedPiReadyLocked())
         return ESP_ERR_INVALID_STATE;
+    const int64_t feedback_us = esp_timer_get_time();
+    UpdateOdometryLocked(feedback_us);
+    if (requirements.odometry &&
+        (!odometry_.Snapshot().valid || !OdometryStationaryLocked(feedback_us)))
+        return ESP_ERR_INVALID_STATE;
     Mpu6050Status imu;
     if (requirements.heading) {
         imu = GetMpu6050Status();
@@ -91,11 +117,10 @@ esp_err_t L298nController::StartCommand(const CommandRequest& request) {
     speed_pi_fault_ = "none";
     heading_fault_ = "none";
     const int64_t now = esp_timer_get_time();
-    if (!command_interface_.Start(resolved_request, now))
+    if (!command_interface_.Start(resolved_request, now, odometry_.Snapshot(), DistanceLimits()))
         return ESP_ERR_INVALID_STATE;
     if (!PrepareMotionLocked(command_interface_.direction())) {
-        StopLocked();
-        command_interface_.Fail(esp_timer_get_time());
+        FinishCommandLocked(esp_timer_get_time(), false, "motor_error");
         return fault_ != ESP_OK ? fault_ : ESP_FAIL;
     }
     if (requirements.heading) {
@@ -118,7 +143,8 @@ L298nMotorStatus L298nController::Snapshot() {
     L298nMotorStatus status{};
     const int64_t now = esp_timer_get_time();
     status.command = command_interface_.Snapshot(now);
-    if (command_interface_.mode() != CommandMode::kManual) {
+    if (command_interface_.mode() != CommandMode::kManual &&
+        command_interface_.last_mode() == CommandMode::kTimeDrive) {
         status.turn_target_degrees = status.command.time_drive.angle_degrees;
         status.turn_progress_degrees = turn_progress_degrees_;
         status.turn_uses_imu = status.turn_target_degrees != 0;
@@ -140,6 +166,11 @@ L298nMotorStatus L298nController::Snapshot() {
     status.distance_valid = distance_fresh;
     status.hardware_error = fault_;
     status.encoder = encoder_.Snapshot();
+    status.odometry = odometry_.Snapshot();
+    if (status.odometry.valid && now - status.odometry.sampled_at_us > Odometry::kMaximumGapUs) {
+        status.odometry.valid = status.odometry.wheel_heading_valid = false;
+        status.odometry.fault = "sample_gap";
+    }
     status.speed_pi_calibrated = SpeedPiReadyLocked();
     status.speed_pi_active = moving_ && status.speed_pi_calibrated &&
                              (requested_left_percent_ != 0 || requested_right_percent_ != 0);
@@ -154,7 +185,12 @@ L298nMotorStatus L298nController::Snapshot() {
     status.speed_pi_target_rpm =
         (status.speed_pi_left_target_rpm + status.speed_pi_right_target_rpm) / 2.0;
     status.speed_pi_fault = speed_pi_fault_;
-    status.distance_move_state = "disabled";
+    const auto& distance = status.command.distance_drive;
+    status.distance_move_state = distance.state;
+    status.distance_move_target_cm =
+        static_cast<int>(std::lround(std::abs(distance.target_m) * 100));
+    status.distance_move_progress_cm =
+        distance.progress_m * (distance.target_m < 0 ? -100.0 : 100.0);
     status.imu_ready = imu.ready;
     status.imu_error = imu.error;
     status.heading_valid = imu.heading_valid;
@@ -213,9 +249,9 @@ using ruby_robot::L298nController;
 void InitializeL298nController() {
     // Singleton and sensor callbacks live for the entire firmware lifetime.
     L298nController::Instance();
-#if HEADING_PD_DEBUG
-    if (xTaskCreate(HeadingMonitorTask, "heading_monitor", 3072, nullptr, 2, nullptr) != pdPASS)
-        ESP_LOGW("HeadingPD", "Could not start heading monitor");
+#if HEADING_PD_DEBUG || ODOMETRY_DEBUG
+    if (xTaskCreate(ControlMonitorTask, "control_monitor", 4096, nullptr, 2, nullptr) != pdPASS)
+        ESP_LOGW("MotorControl", "Could not start control monitor");
 #endif
     StartFc03Monitor([]() { return L298nController::Instance().Snapshot().encoder; });
     InitializeHcsr04Sensor([](int distance_cm, bool valid) {
@@ -254,7 +290,34 @@ L298nMotorStatus GetL298nMotorStatus() { return L298nController::Instance().Snap
 
 esp_err_t SetL298nMotorSpeed(int) { return ESP_ERR_NOT_SUPPORTED; }
 
-esp_err_t MoveL298nDistance(bool, int, const char*) { return ESP_ERR_NOT_SUPPORTED; }
+esp_err_t MoveL298nDistance(bool forward, int distance_cm, const char* owner) {
+    if (distance_cm < ruby_robot::DistanceDriveCommand::kMinDistanceCm ||
+        distance_cm > ruby_robot::DistanceDriveCommand::kMaxDistanceCm || owner == nullptr)
+        return ESP_ERR_INVALID_ARG;
+    ruby_robot::DistanceDriveRequest request;
+    request.distance_cm = forward ? distance_cm : -distance_cm;
+    request.speed_percent = DISTANCE_DRIVE_MAX_SPEED_PERCENT;
+    if (std::strcmp(owner, "web") == 0)
+        request.owner = ruby_robot::DistanceDriveOwner::kWeb;
+    else if (std::strcmp(owner, "voice") == 0)
+        request.owner = ruby_robot::DistanceDriveOwner::kVoice;
+    else if (std::strcmp(owner, "telegram") == 0)
+        request.owner = ruby_robot::DistanceDriveOwner::kTelegram;
+    else
+        return ESP_ERR_INVALID_ARG;
+    return StartL298nCommand(request);
+}
+
+esp_err_t RotateL298nAngle(int angle_degrees, ruby_robot::TimeDriveOwner owner) {
+    if (!((angle_degrees >= 5 && angle_degrees <= 180) ||
+          (angle_degrees <= -5 && angle_degrees >= -180)))
+        return ESP_ERR_INVALID_ARG;
+    return StartL298nCommand(ruby_robot::TimeDriveRequest{
+        angle_degrees > 0 ? ruby_robot::Motion::kLeft : ruby_robot::Motion::kRight, 0,
+        ruby_robot::TimeDriveCommand::kMaxSeconds, owner, std::abs(angle_degrees)});
+}
+
+esp_err_t ResetL298nOdometry() { return L298nController::Instance().ResetOdometry(); }
 
 esp_err_t SetL298nFollowMode(bool) { return ESP_ERR_NOT_SUPPORTED; }
 

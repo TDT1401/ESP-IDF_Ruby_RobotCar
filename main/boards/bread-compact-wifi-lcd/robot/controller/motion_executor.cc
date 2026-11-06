@@ -11,15 +11,25 @@ void L298nController::StopLocked() {
     StopOutputsLocked();
 }
 
-void L298nController::StopFailedMotionLocked(int64_t now_us) {
+void L298nController::FinishCommandLocked(int64_t now_us, bool completed, const char* fault) {
+    web_joystick_active_ = false;
+    StopOutputsLocked();
+    // Keep the mode until its result is recorded; StopMotion would turn it idle.
+    if (completed && fault_ == ESP_OK)
+        command_interface_.Complete(now_us);
+    else
+        command_interface_.Fail(now_us, fault_ == ESP_OK ? fault : "motor_error");
+}
+
+void L298nController::StopFailedMotionLocked(int64_t now_us, const char* fault) {
     if (web_control_.active()) {
         EndWebControlLocked();
         return;
     }
-    const bool active_command = command_interface_.Active();
-    StopLocked();
-    if (active_command)
-        command_interface_.Fail(now_us);
+    if (command_interface_.Active())
+        FinishCommandLocked(now_us, false, fault);
+    else
+        StopLocked();
 }
 
 int L298nController::ActiveSpeedLocked() const {
@@ -46,7 +56,7 @@ bool L298nController::MotionAllowed() {
 void L298nController::Tick() {
     std::lock_guard lock(mutex_);
     const int64_t now = esp_timer_get_time();
-    encoder_.Update(now);
+    UpdateOdometryLocked(now);
     if (web_control_.active() && (web_control_.Expired(now) || !MotionAllowed())) {
         EndWebControlLocked();
         return;
@@ -58,30 +68,37 @@ void L298nController::Tick() {
     }
     if (command_interface_.Expired(now)) {
         const bool angle_turn = command_interface_.IsAngleTurn();
-        const bool completion_ready = !angle_turn && command_interface_.CompletionReady();
+        const bool completion_ready = command_interface_.mode() == CommandMode::kTimeDrive &&
+                                      !angle_turn && command_interface_.CompletionReady();
         if (angle_turn)
             heading_fault_ = "turn_timeout";
-        StopLocked();
-        if (fault_ == ESP_OK && completion_ready)
-            command_interface_.Complete(now);
-        else
-            command_interface_.Fail(now);
+        FinishCommandLocked(now, completion_ready, angle_turn ? "turn_timeout" : "timeout");
         return;
     }
     if (motion_ == Motion::kStop)
         return;
+    const auto encoder = encoder_.Snapshot();
+    if (!command_interface_.UpdateMotion(odometry_.Snapshot(), encoder.left.rpm, encoder.right.rpm,
+                                         now)) {
+        StopFailedMotionLocked(now, command_interface_.fault());
+        return;
+    }
+    if (command_interface_.mode() == CommandMode::kDistanceDrive &&
+        command_interface_.CompletionReady()) {
+        FinishCommandLocked(now, true);
+        return;
+    }
     if (moving_) {
         if (!UpdateHeadingPdLocked(now)) {
-            StopFailedMotionLocked(now);
+            StopFailedMotionLocked(now, heading_fault_);
             return;
         }
         if (heading_turn_complete_) {
-            StopLocked();
-            command_interface_.Complete(now);
+            FinishCommandLocked(now, true);
             return;
         }
         if (!UpdateSpeedPiLocked(now)) {
-            StopFailedMotionLocked(now);
+            StopFailedMotionLocked(now, speed_pi_fault_);
             return;
         }
     }

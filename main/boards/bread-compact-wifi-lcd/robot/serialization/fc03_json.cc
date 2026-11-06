@@ -17,7 +17,8 @@ bool AddWheel(cJSON* parent, const char* name, const Fc03WheelStatus& wheel, boo
            cJSON_AddNumberToObject(json, "command", wheel.command) &&
            cJSON_AddBoolToObject(json, "no_pulses", wheel.no_pulses) &&
            AddMetric(json, "rpm", wheel.rpm, valid) &&
-           AddMetric(json, "distance_m", wheel.distance_m, valid);
+           AddMetric(json, "distance_m", wheel.distance_m, valid) &&
+           AddMetric(json, "signed_distance_m", wheel.signed_distance_m, valid);
 }
 
 }  // namespace

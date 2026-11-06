@@ -30,9 +30,14 @@ esp_err_t StartL298nCommand(const ruby_robot::CommandRequest& request);
 // Always returns ESP_ERR_NOT_SUPPORTED.
 esp_err_t SetL298nMotorSpeed(int speed_percent);
 
-// Compatibility entry point: measured-distance moves are disabled.
-// Always returns ESP_ERR_NOT_SUPPORTED and never starts a motor.
+// Measured forward/backward move, 5-1000 cm, with the default speed/timeout.
+// Owner must be "web", "voice" or "telegram". Requires a valid pose and stationary wheels.
 esp_err_t MoveL298nDistance(bool forward, int distance_cm, const char* owner = "telegram");
+// Relative turn: positive left, negative right; uses the established heading PD/PI path.
+esp_err_t RotateL298nAngle(int angle_degrees,
+                           ruby_robot::TimeDriveOwner owner = ruby_robot::TimeDriveOwner::kVoice);
+// Establish (0,0,0) while idle and stationary, without resetting sensor calibration.
+esp_err_t ResetL298nOdometry();
 
 // Compatibility entry points: autonomous modes and their settings are disabled.
 // Always return ESP_ERR_NOT_SUPPORTED.
@@ -62,6 +67,7 @@ struct L298nMotorStatus {
     bool autonomy_blocked;
     esp_err_t hardware_error;
     Fc03EncoderStatus encoder;
+    ruby_robot::OdometrySnapshot odometry;
     const char* distance_move_state;
     int distance_move_target_cm;
     double distance_move_progress_cm;

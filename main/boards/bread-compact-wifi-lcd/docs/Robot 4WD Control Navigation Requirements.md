@@ -125,30 +125,30 @@ Không coi các tần số này là thông số cố định trước khi đo xu
 **Công việc:**
 **1. Wheel Odometry**
 
-- [ ] Tính quãng đường di chuyển của bánh trái/phải từ Encoder.
-- [ ] Tính quãng đường trung bình `Δs` và góc quay `Δθ_wheel`.
-- [ ] Hiệu chuẩn `CPR_eff`, đường kính bánh xe và `B_eff`.
+- [x] Tính quãng đường di chuyển của bánh trái/phải từ Encoder.
+- [x] Tính quãng đường trung bình `Δs` và góc quay `Δθ_wheel`.
+- [x] Hiệu chuẩn `CPR_eff`, đường kính bánh xe và `B_eff`.
 
 **2. Dead Reckoning**
 
-- [ ] Kết hợp Wheel Odometry + Gyroscope (MPU6050).
-- [ ] Xây dựng State Estimation để cập nhật vị trí `(x, y, θ)`.
-- [ ] Sử dụng vị trí ban đầu `(0, 0, 0°)` làm hệ tọa độ tham chiếu.
-- [ ] Cập nhật vị trí liên tục theo chuyển động của robot.
+- [x] Kết hợp Wheel Odometry + Gyroscope (MPU6050).
+- [x] Xây dựng State Estimation để cập nhật vị trí `(x, y, θ)`.
+- [x] Sử dụng vị trí ban đầu `(0, 0, 0°)` làm hệ tọa độ tham chiếu.
+- [x] Cập nhật vị trí liên tục theo chuyển động của robot.
 
 **3. Distance / Pose Control**
 
-- [ ] Cài đặt `move_distance(d)` để di chuyển quãng đường chỉ định.
-- [ ] Cài đặt `rotate_angle(a)` để quay theo góc chỉ định.
-- [ ] Sử dụng Motion Profile để giảm tốc trước khi đạt mục tiêu.
-- [ ] Sử dụng feedback từ State Estimation để kiểm soát chuyển động.
+- [x] Cài đặt `move_distance(d)` để di chuyển quãng đường chỉ định.
+- [x] Cài đặt `rotate_angle(a)` để quay theo góc chỉ định.
+- [x] Sử dụng Motion Profile để giảm tốc trước khi đạt mục tiêu.
+- [x] Sử dụng feedback từ State Estimation để kiểm soát chuyển động.
 
 **4. Positional Uncertainty**
 
-- [ ] Đánh giá sai số giữa vị trí ước lượng và vị trí thực tế.
-- [ ] Đánh giá sai số tích lũy của Dead Reckoning khi quãng đường tăng.
-- [ ] Ghi nhận ảnh hưởng của Encoder, IMU và hiện tượng trượt bánh.
-- [ ] Thực hiện nhiều lần thử để đánh giá độ phân tán của sai số.
+- [x] Đánh giá sai số giữa vị trí ước lượng và vị trí thực tế.
+- [x] Đánh giá sai số tích lũy của Dead Reckoning khi quãng đường tăng.
+- [x] Ghi nhận ảnh hưởng của Encoder, IMU và hiện tượng trượt bánh.
+- [x] Thực hiện nhiều lần thử để đánh giá độ phân tán của sai số.
 
 **5. Testing & Validation**
 
