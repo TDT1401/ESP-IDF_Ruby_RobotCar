@@ -29,7 +29,7 @@ struct AngleTurnSnapshot {
 
 struct DistanceDriveRequest {
     int distance_cm = 0;  // Positive forward, negative backward.
-    int speed_percent = 90;
+    int speed_percent = 100;
     int timeout_seconds = 60;
     DistanceDriveOwner owner = DistanceDriveOwner::kWeb;
 };

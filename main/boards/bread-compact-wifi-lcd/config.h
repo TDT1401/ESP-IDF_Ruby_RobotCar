@@ -106,10 +106,14 @@
 #define HEADING_PD_DEBUG 0
 
 // Phase 3: provisional distance profile; tune against independent floor measurements.
-#define DISTANCE_DRIVE_MAX_SPEED_PERCENT 90
+#define DISTANCE_DRIVE_MAX_SPEED_PERCENT 100
 #define DISTANCE_DRIVE_ACCELERATION_MPS2 0.30
 #define DISTANCE_DRIVE_DECELERATION_MPS2 0.30
-#define DISTANCE_DRIVE_MIN_SPEED_PERCENT 25
+#define DISTANCE_DRIVE_MIN_SPEED_PERCENT 18
+// Initial PWM estimate for slow distance moves. Tune each wheel on the floor;
+// Speed PI may still reduce PWM when the measured RPM exceeds its target.
+#define DISTANCE_DRIVE_LEFT_FRICTION_PWM_PERCENT 62.0
+#define DISTANCE_DRIVE_RIGHT_FRICTION_PWM_PERCENT 62.0
 #define DISTANCE_DRIVE_TOLERANCE_MM 20.0
 #define DISTANCE_DRIVE_SETTLE_RPM 3.0
 #define DISTANCE_DRIVE_SETTLE_MS 300

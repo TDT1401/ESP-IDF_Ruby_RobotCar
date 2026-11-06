@@ -24,6 +24,10 @@ static_assert(HEADING_TURN_LEFT_FRICTION_PWM_PERCENT >= 0 &&
               HEADING_TURN_LEFT_FRICTION_PWM_PERCENT < 100);
 static_assert(HEADING_TURN_RIGHT_FRICTION_PWM_PERCENT >= 0 &&
               HEADING_TURN_RIGHT_FRICTION_PWM_PERCENT < 100);
+static_assert(DISTANCE_DRIVE_LEFT_FRICTION_PWM_PERCENT >= 0 &&
+              DISTANCE_DRIVE_LEFT_FRICTION_PWM_PERCENT < 100);
+static_assert(DISTANCE_DRIVE_RIGHT_FRICTION_PWM_PERCENT >= 0 &&
+              DISTANCE_DRIVE_RIGHT_FRICTION_PWM_PERCENT < 100);
 
 double TargetRpm(int requested_percent, double reference_rpm) {
     return std::abs(requested_percent) * reference_rpm / SPEED_PI_REFERENCE_PWM_PERCENT;
@@ -42,6 +46,16 @@ double FeedforwardPercent(int requested_percent, double friction_pwm_percent) {
     return std::clamp(
         std::max(static_cast<double>(std::abs(requested_percent)), friction_pwm_percent), 0.0,
         100.0);
+}
+
+double FrictionPwmPercent(CommandMode mode, bool heading_turn, bool left) {
+    if (heading_turn)
+        return left ? HEADING_TURN_LEFT_FRICTION_PWM_PERCENT
+                    : HEADING_TURN_RIGHT_FRICTION_PWM_PERCENT;
+    if (mode == CommandMode::kDistanceDrive)
+        return left ? DISTANCE_DRIVE_LEFT_FRICTION_PWM_PERCENT
+                    : DISTANCE_DRIVE_RIGHT_FRICTION_PWM_PERCENT;
+    return 0;
 }
 
 }  // namespace
@@ -73,9 +87,10 @@ bool L298nController::SetRequestedWheelsLocked(int left_percent, int right_perce
     if ((right_percent > 0) != (requested_right_percent_ > 0) ||
         (right_percent < 0) != (requested_right_percent_ < 0))
         right_speed_pi_.Reset();
-    const double left_friction = heading_turn_active_ ? HEADING_TURN_LEFT_FRICTION_PWM_PERCENT : 0;
+    const double left_friction =
+        FrictionPwmPercent(command_interface_.mode(), heading_turn_active_, true);
     const double right_friction =
-        heading_turn_active_ ? HEADING_TURN_RIGHT_FRICTION_PWM_PERCENT : 0;
+        FrictionPwmPercent(command_interface_.mode(), heading_turn_active_, false);
     int left_output =
         static_cast<int>(std::lround(FeedforwardPercent(left_percent, left_friction)));
     int right_output =
@@ -190,10 +205,11 @@ bool L298nController::UpdateSpeedPiLocked(int64_t now_us) {
     const double right_target_rpm =
         TargetRpm(requested_right_percent_, SPEED_PI_RIGHT_REFERENCE_RPM);
     const double left_feedforward = FeedforwardPercent(
-        requested_left_percent_, heading_turn_active_ ? HEADING_TURN_LEFT_FRICTION_PWM_PERCENT : 0);
-    const double right_feedforward =
-        FeedforwardPercent(requested_right_percent_,
-                           heading_turn_active_ ? HEADING_TURN_RIGHT_FRICTION_PWM_PERCENT : 0);
+        requested_left_percent_,
+        FrictionPwmPercent(command_interface_.mode(), heading_turn_active_, true));
+    const double right_feedforward = FeedforwardPercent(
+        requested_right_percent_,
+        FrictionPwmPercent(command_interface_.mode(), heading_turn_active_, false));
     const int left =
         requested_left_percent_ == 0
             ? 0
