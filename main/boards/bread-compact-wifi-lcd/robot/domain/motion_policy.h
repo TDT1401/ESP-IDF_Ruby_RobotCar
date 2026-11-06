@@ -11,20 +11,6 @@ constexpr int kReferenceSpeedPercent = 50;
 
 enum class Motion { kStop, kForward, kBackward, kLeft, kRight };
 
-inline Motion ParseTimeDriveDirection(const char* name) {
-    if (name == nullptr)
-        return Motion::kStop;
-    if (strcmp(name, "forward") == 0)
-        return Motion::kForward;
-    if (strcmp(name, "backward") == 0)
-        return Motion::kBackward;
-    if (strcmp(name, "turn_left") == 0)
-        return Motion::kLeft;
-    if (strcmp(name, "turn_right") == 0)
-        return Motion::kRight;
-    return Motion::kStop;
-}
-
 struct WheelSpeeds {
     int left;
     int right;

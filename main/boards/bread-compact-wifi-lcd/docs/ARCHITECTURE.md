@@ -86,11 +86,6 @@ logic riêng trong `manual_command.*` hoặc `time_drive_command.*`. Controller 
 `CommandRequest` chung, rồi lấy mục tiêu hai bánh và điều kiện kết thúc từ
 `CommandInterface`; controller không cần biết cách `TimeDrive` tính thời hạn.
 
-`TimeDrive` nhận hướng, tốc độ và số giây; hướng có thể là tiến, lùi, xoay trái
-hoặc xoay phải. Tiến/lùi dừng khi hết giờ và giữ heading lúc bắt đầu. Xoay
-trái/phải nhận thêm góc đích, dừng theo heading gyro và dùng số giây làm timeout
-an toàn. Nó chưa đo quãng đường để quyết định điểm dừng.
-
 Web bỏ qua `speed_percent` khi xoay theo góc. Adapter chuyển thành giá trị `0`
 trong request; controller đổi thành `HEADING_TURN_AUTO_SPEED_PERCENT` trước khi
 validate và khởi chạy CommandInterface. Giá trị này là trần tốc độ, còn Heading

@@ -15,38 +15,14 @@ ToolResult GetState() {
     CJsonUniquePtr json(cJSON_CreateObject());
     if (!json || !cJSON_AddStringToObject(json.get(), "motion", status.motion) ||
         !cJSON_AddStringToObject(json.get(), "command_mode", status.command.mode) ||
-        !cJSON_AddStringToObject(json.get(), "time_drive_state", status.command.time_drive.state) ||
-        !cJSON_AddStringToObject(json.get(), "time_drive_direction",
-                                 status.command.time_drive.direction) ||
-        !cJSON_AddStringToObject(json.get(), "time_drive_owner", status.command.time_drive.owner) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_speed_percent",
-                                 status.command.time_drive.speed_percent) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_duration_seconds",
-                                 status.command.time_drive.duration_seconds) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_angle_degrees",
-                                 status.command.time_drive.angle_degrees) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_elapsed_ms",
-                                 status.command.time_drive.elapsed_ms) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_remaining_ms",
-                                 status.command.time_drive.remaining_ms) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_samples",
-                                 status.command.time_drive.metrics.samples) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_average_left_rpm",
-                                 status.command.time_drive.metrics.average_left_rpm) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_average_right_rpm",
-                                 status.command.time_drive.metrics.average_right_rpm) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_average_left_error_rpm",
-                                 status.command.time_drive.metrics.average_left_error_rpm) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_average_right_error_rpm",
-                                 status.command.time_drive.metrics.average_right_error_rpm) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_average_left_pwm_percent",
-                                 status.command.time_drive.metrics.average_left_pwm_percent) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_average_right_pwm_percent",
-                                 status.command.time_drive.metrics.average_right_pwm_percent) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_stddev_left_rpm",
-                                 status.command.time_drive.metrics.stddev_left_rpm) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_stddev_right_rpm",
-                                 status.command.time_drive.metrics.stddev_right_rpm) ||
+        !cJSON_AddStringToObject(json.get(), "angle_turn_state", status.command.angle_turn.state) ||
+        !cJSON_AddStringToObject(json.get(), "angle_turn_direction",
+                                 status.command.angle_turn.direction) ||
+        !cJSON_AddStringToObject(json.get(), "angle_turn_owner", status.command.angle_turn.owner) ||
+        !cJSON_AddNumberToObject(json.get(), "angle_turn_degrees",
+                                 status.command.angle_turn.angle_degrees) ||
+        !cJSON_AddNumberToObject(json.get(), "angle_turn_speed_percent",
+                                 status.command.angle_turn.speed_percent) ||
         !cJSON_AddNumberToObject(json.get(), "speed_percent", status.speed_percent) ||
         !cJSON_AddNumberToObject(json.get(), "active_speed_percent", status.active_speed_percent) ||
         !cJSON_AddBoolToObject(json.get(), "moving", status.moving) ||
@@ -144,33 +120,4 @@ void RegisterL298nMcpTools() {
                                        esp_err_to_name(error));
             return GetState();
         });
-    server.AddTool("self.motor.run_time_drive",
-                   "Drive forward or backward for a set number of seconds, or turn left/right by "
-                   "angle_degrees. duration_seconds is the maximum turn time. Requires calibrated "
-                   "FC-03 encoders and a valid gyro heading.",
-                   PropertyList({Property("direction", kPropertyTypeString).SetMaxLength(10),
-                                 Property("speed_percent", kPropertyTypeInteger, 10, 100),
-                                 Property("duration_seconds", kPropertyTypeInteger, 1, 30),
-                                 Property("angle_degrees", kPropertyTypeInteger, 0, 0, 180)}),
-                   [](const PropertyList& properties) -> ToolResult {
-                       const auto direction = ruby_robot::ParseTimeDriveDirection(
-                           properties["direction"].value<std::string>().c_str());
-                       if (direction == ruby_robot::Motion::kStop)
-                           return std::unexpected(std::string("Invalid TimeDrive direction"));
-                       const int angle = properties["angle_degrees"].value<int>();
-                       const bool turn = direction == ruby_robot::Motion::kLeft ||
-                                         direction == ruby_robot::Motion::kRight;
-                       if ((turn && angle < 5) || (!turn && angle != 0))
-                           return std::unexpected(
-                               std::string("angle_degrees must be 5-180 for turns, "
-                                           "or 0 for forward/backward"));
-                       const esp_err_t error = StartL298nCommand(ruby_robot::TimeDriveRequest{
-                           direction, properties["speed_percent"].value<int>(),
-                           properties["duration_seconds"].value<int>(),
-                           ruby_robot::TimeDriveOwner::kVoice, angle});
-                       if (error != ESP_OK)
-                           return std::unexpected(std::string("TimeDrive unavailable: ") +
-                                                  esp_err_to_name(error));
-                       return GetState();
-                   });
 }

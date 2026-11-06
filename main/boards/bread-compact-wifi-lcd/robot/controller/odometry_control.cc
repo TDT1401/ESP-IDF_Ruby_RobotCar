@@ -22,7 +22,7 @@ static_assert(DISTANCE_DRIVE_MAX_SPEED_PERCENT >= DISTANCE_DRIVE_MIN_SPEED_PERCE
               DISTANCE_DRIVE_MAX_SPEED_PERCENT <= 100);
 static_assert(DISTANCE_DRIVE_MIN_SPEED_PERCENT > 0 && DISTANCE_DRIVE_MIN_SPEED_PERCENT <= 100);
 static_assert(DISTANCE_DRIVE_TOLERANCE_MM > 0 &&
-              DISTANCE_DRIVE_TOLERANCE_MM < DistanceDriveCommand::kMinDistanceCm * 10);
+              DISTANCE_DRIVE_TOLERANCE_MM < MotionGoalCommand::kMinDistanceCm * 10);
 static_assert(DISTANCE_DRIVE_SETTLE_RPM >= 0 && DISTANCE_DRIVE_SETTLE_MS > 0);
 }  // namespace
 

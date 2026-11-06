@@ -1,4 +1,4 @@
-#include "distance_drive_command.h"
+#include "motion_goal_command.h"
 
 #include <algorithm>
 #include <cmath>
@@ -11,7 +11,7 @@ bool ValidPose(const OdometrySnapshot& pose) {
 }
 }  // namespace
 
-bool DistanceDriveCommand::Valid(const DistanceDriveRequest& request) {
+bool MotionGoalCommand::Valid(const DistanceDriveRequest& request) {
     return ((request.distance_cm >= kMinDistanceCm && request.distance_cm <= kMaxDistanceCm) ||
             (request.distance_cm <= -kMinDistanceCm && request.distance_cm >= -kMaxDistanceCm)) &&
            request.speed_percent >= 10 && request.speed_percent <= 100 &&
@@ -21,9 +21,26 @@ bool DistanceDriveCommand::Valid(const DistanceDriveRequest& request) {
             request.owner == DistanceDriveOwner::kTelegram);
 }
 
-bool DistanceDriveCommand::Start(const DistanceDriveRequest& request,
-                                 const DistanceDriveLimits& limits, const OdometrySnapshot& pose,
-                                 int64_t now_us) {
+bool MotionGoalCommand::Valid(const AngleTurnRequest& request) {
+    return ((request.angle_degrees >= kMinAngleDegrees &&
+             request.angle_degrees <= kMaxAngleDegrees) ||
+            (request.angle_degrees <= -kMinAngleDegrees &&
+             request.angle_degrees >= -kMaxAngleDegrees)) &&
+           request.speed_percent >= kMinTurnSpeedPercent && request.speed_percent <= 100;
+}
+
+bool MotionGoalCommand::Start(const AngleTurnRequest& request, int64_t now_us) {
+    if (!Valid(request))
+        return false;
+    turn_request_ = request;
+    turn_state_ = AngleTurnState::kRunning;
+    turn_deadline_us_ = now_us + kTurnTimeoutUs;
+    return true;
+}
+
+bool MotionGoalCommand::Start(const DistanceDriveRequest& request,
+                              const DistanceDriveLimits& limits, const OdometrySnapshot& pose,
+                              int64_t now_us) {
     if (!Valid(request) || !ValidPose(pose) ||
         !std::isfinite(limits.metres_per_second_per_percent) ||
         limits.metres_per_second_per_percent <= 0 || !std::isfinite(limits.acceleration_mps2) ||
@@ -51,8 +68,8 @@ bool DistanceDriveCommand::Start(const DistanceDriveRequest& request,
     return true;
 }
 
-bool DistanceDriveCommand::Update(const OdometrySnapshot& pose, double left_rpm, double right_rpm,
-                                  int64_t now_us) {
+bool MotionGoalCommand::Update(const OdometrySnapshot& pose, double left_rpm, double right_rpm,
+                               int64_t now_us) {
     if (state_ != DistanceDriveState::kRunning)
         return true;
     if (!ValidPose(pose)) {
@@ -100,19 +117,59 @@ bool DistanceDriveCommand::Update(const OdometrySnapshot& pose, double left_rpm,
     return true;
 }
 
-bool DistanceDriveCommand::Expired(int64_t now_us) const {
+bool MotionGoalCommand::Expired(int64_t now_us) const {
+    if (turn_state_ == AngleTurnState::kRunning)
+        return now_us >= turn_deadline_us_;
     return state_ == DistanceDriveState::kRunning &&
            now_us - started_us_ >= request_.timeout_seconds * 1000000LL;
 }
 
-void DistanceDriveCommand::Finish(DistanceDriveState state, int64_t now_us, const char* fault) {
+void MotionGoalCommand::Finish(DistanceDriveState state, int64_t now_us, const char* fault) {
     state_ = state;
     ended_us_ = now_us;
     speed_mps_ = 0;
     fault_ = fault;
 }
 
-int DistanceDriveCommand::speed_percent() const {
+void MotionGoalCommand::Finish(AngleTurnState state) { turn_state_ = state; }
+
+Motion MotionGoalCommand::turn_direction() const {
+    return turn_request_.angle_degrees > 0   ? Motion::kLeft
+           : turn_request_.angle_degrees < 0 ? Motion::kRight
+                                             : Motion::kStop;
+}
+
+WheelCommand MotionGoalCommand::turn_wheels() const {
+    if (turn_state_ != AngleTurnState::kRunning)
+        return {};
+    const int speed = turn_request_.speed_percent;
+    return turn_request_.angle_degrees > 0 ? WheelCommand{-speed, speed}
+                                           : WheelCommand{speed, -speed};
+}
+
+AngleTurnSnapshot MotionGoalCommand::TurnSnapshot() const {
+    const char* state = "idle";
+    switch (turn_state_) {
+        case AngleTurnState::kRunning:
+            state = "running";
+            break;
+        case AngleTurnState::kCompleted:
+            state = "completed";
+            break;
+        case AngleTurnState::kInterrupted:
+            state = "interrupted";
+            break;
+        case AngleTurnState::kFault:
+            state = "fault";
+            break;
+        default:
+            break;
+    }
+    return {state, turn_request_.owner == AngleTurnOwner::kVoice ? "voice" : "web",
+            MotionName(turn_direction()), turn_request_.angle_degrees, turn_request_.speed_percent};
+}
+
+int MotionGoalCommand::speed_percent() const {
     if (state_ != DistanceDriveState::kRunning || braking_)
         return 0;
     return std::clamp(
@@ -120,12 +177,12 @@ int DistanceDriveCommand::speed_percent() const {
         request_.speed_percent);
 }
 
-WheelCommand DistanceDriveCommand::wheels() const {
+WheelCommand MotionGoalCommand::wheels() const {
     const int speed = speed_percent() * (request_.distance_cm < 0 ? -1 : 1);
     return {speed, speed};
 }
 
-DistanceDriveSnapshot DistanceDriveCommand::Snapshot(int64_t now_us) const {
+DistanceDriveSnapshot MotionGoalCommand::Snapshot(int64_t now_us) const {
     const char* state = "idle";
     switch (state_) {
         case DistanceDriveState::kRunning:
@@ -163,7 +220,7 @@ DistanceDriveSnapshot DistanceDriveCommand::Snapshot(int64_t now_us) const {
         position_error_m_};
 }
 
-const char* DistanceDriveCommand::OwnerName(DistanceDriveOwner owner) {
+const char* MotionGoalCommand::OwnerName(DistanceDriveOwner owner) {
     switch (owner) {
         case DistanceDriveOwner::kVoice:
             return "voice";

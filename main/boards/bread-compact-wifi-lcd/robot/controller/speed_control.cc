@@ -207,8 +207,6 @@ bool L298nController::UpdateSpeedPiLocked(int64_t now_us) {
     last_speed_pi_us_ = now_us;
     if (!ApplyMotorPwmLocked(left, right))
         return false;
-    command_interface_.RecordSpeedSample(left_target_rpm, right_target_rpm, encoder.left.rpm,
-                                         encoder.right.rpm, left, right);
     return true;
 }
 

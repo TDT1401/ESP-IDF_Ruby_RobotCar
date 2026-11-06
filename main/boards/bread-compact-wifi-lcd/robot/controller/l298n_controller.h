@@ -35,7 +35,7 @@ esp_err_t SetL298nMotorSpeed(int speed_percent);
 esp_err_t MoveL298nDistance(bool forward, int distance_cm, const char* owner = "telegram");
 // Relative turn: positive left, negative right; uses the established heading PD/PI path.
 esp_err_t RotateL298nAngle(int angle_degrees,
-                           ruby_robot::TimeDriveOwner owner = ruby_robot::TimeDriveOwner::kVoice);
+                           ruby_robot::AngleTurnOwner owner = ruby_robot::AngleTurnOwner::kVoice);
 // Establish (0,0,0) while idle and stationary, without resetting sensor calibration.
 esp_err_t ResetL298nOdometry();
 

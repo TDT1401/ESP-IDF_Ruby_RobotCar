@@ -455,8 +455,8 @@ private:
         const auto result =
             std::from_chars(argument.data(), argument.data() + argument.size(), distance_cm);
         if (result.ec != std::errc{} || result.ptr != argument.data() + argument.size() ||
-            distance_cm < ruby_robot::DistanceDriveCommand::kMinDistanceCm ||
-            distance_cm > ruby_robot::DistanceDriveCommand::kMaxDistanceCm) {
+            distance_cm < ruby_robot::MotionGoalCommand::kMinDistanceCm ||
+            distance_cm > ruby_robot::MotionGoalCommand::kMaxDistanceCm) {
             Send(L298nTelegramText::kDistanceMoveUsage, true);
             return;
         }

@@ -68,11 +68,9 @@ void L298nController::Tick() {
     }
     if (command_interface_.Expired(now)) {
         const bool angle_turn = command_interface_.IsAngleTurn();
-        const bool completion_ready = command_interface_.mode() == CommandMode::kTimeDrive &&
-                                      !angle_turn && command_interface_.CompletionReady();
         if (angle_turn)
             heading_fault_ = "turn_timeout";
-        FinishCommandLocked(now, completion_ready, angle_turn ? "turn_timeout" : "timeout");
+        FinishCommandLocked(now, false, angle_turn ? "turn_timeout" : "timeout");
         return;
     }
     if (motion_ == Motion::kStop)

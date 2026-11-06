@@ -198,7 +198,7 @@ esp_err_t Action(httpd_req_t* req) {
             !ReadInteger(json.get(), "angle_degrees", 5, 180, &angle_degrees))
             return Reply(req, "400 Bad Request", "{\"error\":\"Invalid angle\"}");
         const int angle = static_cast<int>(angle_degrees) * (turn_left ? 1 : -1);
-        if (RotateL298nAngle(angle, ruby_robot::TimeDriveOwner::kWeb) != ESP_OK)
+        if (RotateL298nAngle(angle, ruby_robot::AngleTurnOwner::kWeb) != ESP_OK)
             return Reply(req, "409 Conflict", "{\"error\":\"Controller unavailable\"}");
         return Reply(req, "200 OK", "{\"ok\":true}");
     }
@@ -230,38 +230,14 @@ esp_err_t Status(httpd_req_t* req) {
     Json json(cJSON_CreateObject(), cJSON_Delete);
     if (!json || !cJSON_AddBoolToObject(json.get(), "distance_valid", motor.distance_valid) ||
         !cJSON_AddStringToObject(json.get(), "command_mode", motor.command.mode) ||
-        !cJSON_AddStringToObject(json.get(), "time_drive_state", motor.command.time_drive.state) ||
-        !cJSON_AddStringToObject(json.get(), "time_drive_owner", motor.command.time_drive.owner) ||
-        !cJSON_AddStringToObject(json.get(), "time_drive_direction",
-                                 motor.command.time_drive.direction) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_speed_percent",
-                                 motor.command.time_drive.speed_percent) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_duration_seconds",
-                                 motor.command.time_drive.duration_seconds) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_angle_degrees",
-                                 motor.command.time_drive.angle_degrees) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_elapsed_ms",
-                                 motor.command.time_drive.elapsed_ms) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_remaining_ms",
-                                 motor.command.time_drive.remaining_ms) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_samples",
-                                 motor.command.time_drive.metrics.samples) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_average_left_rpm",
-                                 motor.command.time_drive.metrics.average_left_rpm) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_average_right_rpm",
-                                 motor.command.time_drive.metrics.average_right_rpm) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_average_left_error_rpm",
-                                 motor.command.time_drive.metrics.average_left_error_rpm) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_average_right_error_rpm",
-                                 motor.command.time_drive.metrics.average_right_error_rpm) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_average_left_pwm_percent",
-                                 motor.command.time_drive.metrics.average_left_pwm_percent) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_average_right_pwm_percent",
-                                 motor.command.time_drive.metrics.average_right_pwm_percent) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_stddev_left_rpm",
-                                 motor.command.time_drive.metrics.stddev_left_rpm) ||
-        !cJSON_AddNumberToObject(json.get(), "time_drive_stddev_right_rpm",
-                                 motor.command.time_drive.metrics.stddev_right_rpm) ||
+        !cJSON_AddStringToObject(json.get(), "angle_turn_state", motor.command.angle_turn.state) ||
+        !cJSON_AddStringToObject(json.get(), "angle_turn_owner", motor.command.angle_turn.owner) ||
+        !cJSON_AddStringToObject(json.get(), "angle_turn_direction",
+                                 motor.command.angle_turn.direction) ||
+        !cJSON_AddNumberToObject(json.get(), "angle_turn_degrees",
+                                 motor.command.angle_turn.angle_degrees) ||
+        !cJSON_AddNumberToObject(json.get(), "angle_turn_speed_percent",
+                                 motor.command.angle_turn.speed_percent) ||
         !cJSON_AddStringToObject(json.get(), "control_mode",
                                  motor.speed_pi_active ? "speed_pi" : "manual_pwm") ||
         !cJSON_AddNumberToObject(json.get(), "distance_cm", motor.measured_distance_cm) ||

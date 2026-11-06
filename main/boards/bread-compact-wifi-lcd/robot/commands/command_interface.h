@@ -3,14 +3,13 @@
 #include <cstdint>
 #include <variant>
 
-#include "distance_drive_command.h"
 #include "manual_command.h"
-#include "time_drive_command.h"
+#include "motion_goal_command.h"
 
 namespace ruby_robot {
 
-enum class CommandMode { kIdle, kManual, kTimeDrive, kDistanceDrive };
-using CommandRequest = std::variant<TimeDriveRequest, DistanceDriveRequest>;
+enum class CommandMode { kIdle, kManual, kAngleTurn, kDistanceDrive };
+using CommandRequest = std::variant<AngleTurnRequest, DistanceDriveRequest>;
 
 struct CommandRequirements {
     bool wifi;
@@ -22,12 +21,11 @@ struct CommandRequirements {
 struct CommandSnapshot {
     const char* mode;
     const char* owner;
-    TimeDriveSnapshot time_drive;
+    AngleTurnSnapshot angle_turn;
     DistanceDriveSnapshot distance_drive;
 };
 
-// Serialized by L298nController's mutex. Chooses one mode at a time;
-// each mode owns its targets and state in its own command class.
+// Serialized by L298nController's mutex. Chooses manual control or one motion goal.
 class CommandInterface {
 public:
     bool BeginManual();
@@ -50,9 +48,6 @@ public:
     void Complete(int64_t now_us);
     void Fail(int64_t now_us, const char* fault = "control_error");
     const char* fault() const;
-    void RecordSpeedSample(double left_target_rpm, double right_target_rpm,
-                           double left_measured_rpm, double right_measured_rpm,
-                           int left_pwm_percent, int right_pwm_percent);
     void StopMotion(int64_t now_us);
 
     CommandMode mode() const { return mode_; }
@@ -66,8 +61,7 @@ private:
     CommandMode mode_ = CommandMode::kIdle;
     CommandMode last_mode_ = CommandMode::kIdle;
     ManualCommand manual_;
-    TimeDriveCommand time_drive_;
-    DistanceDriveCommand distance_drive_;
+    MotionGoalCommand goal_;
 };
 
 }  // namespace ruby_robot

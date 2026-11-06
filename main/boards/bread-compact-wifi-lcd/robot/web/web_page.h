@@ -171,10 +171,10 @@ inline constexpr char kL298nWebPage[] = R"html(
     }
 
     function operationFromStatus(data) {
-      if (data.command_mode === 'time_drive' && data.time_drive_angle_degrees > 0) {
-        const direction = data.time_drive_direction === 'turn_left' ? 'Xoay trái' : 'Xoay phải';
-        return ['turn',direction + ' ' + Math.round(data.turn_progress_degrees || 0) +
-          '/' + data.time_drive_angle_degrees + '°'];
+      if (data.command_mode === 'angle_turn' && data.angle_turn_degrees !== 0) {
+        const direction = data.angle_turn_degrees > 0 ? 'Xoay trái' : 'Xoay phải';
+        return ['turn',direction + ' ' + Math.round(Math.abs(data.turn_progress_degrees || 0)) +
+          '/' + Math.abs(data.angle_turn_degrees) + '°'];
       }
       if (data.autonomy_mode === 'follow') return ['autonomy','Follow đang bật'];
       if (data.autonomy_mode === 'obstacle_avoidance')
@@ -200,8 +200,8 @@ inline constexpr char kL298nWebPage[] = R"html(
 
     function finishedOperation(data) {
       if (operationKind === 'turn') {
-        if (data.time_drive_state === 'completed') return ['Đã xoay đến góc đặt.',true];
-        if (data.time_drive_state === 'fault')
+        if (data.angle_turn_state === 'completed') return ['Đã xoay đến góc đặt.',true];
+        if (data.angle_turn_state === 'fault')
           return ['Xe dừng vì lỗi cảm biến, motor hoặc quá thời gian.',false];
         return ['Lệnh xoay đã bị ngắt.',false];
       }
@@ -302,7 +302,7 @@ inline constexpr char kL298nWebPage[] = R"html(
         if (!response.ok) throw new Error(String(response.status));
         const data = await response.json();
         distanceDriveOwner = data.command_mode === 'distance_drive' ? data.distance_drive?.owner : '';
-        turnOwner = data.command_mode === 'time_drive' ? data.time_drive_owner : '';
+        turnOwner = data.command_mode === 'angle_turn' ? data.angle_turn_owner : '';
         lastStatusTime = new Date().toLocaleTimeString('vi-VN');
         $('homeUpdated').textContent = 'Cập nhật lúc ' + lastStatusTime;
         const operation = operationFromStatus(data);
@@ -356,7 +356,7 @@ inline constexpr char kL298nWebPage[] = R"html(
           completed:'Đã hoàn thành',interrupted:'Đã ngắt',timeout:'Hết thời gian',
           no_pulses:'Không có xung FC-03',encoder_error:'Lỗi FC-03',
           obstacle:'Đã dừng vì vật cản',fault:'Lỗi: ' + (data.distance_drive?.fault || 'control_error')})[data.distance_move_state] || '';
-        if (data.command_mode === 'time_drive' && data.time_drive_angle_degrees > 0) {
+        if (data.command_mode === 'angle_turn' && data.angle_turn_degrees !== 0) {
           $('moveProgress').textContent = operationFromStatus(data)?.[1] || '';
         } else {
           $('moveProgress').textContent = moveState && data.distance_move_target_cm > 0

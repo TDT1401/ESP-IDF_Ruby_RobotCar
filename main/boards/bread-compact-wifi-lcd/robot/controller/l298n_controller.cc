@@ -79,14 +79,12 @@ void L298nController::Stop() {
 }
 
 esp_err_t L298nController::StartCommand(const CommandRequest& request) {
-    static_assert(HEADING_TURN_AUTO_SPEED_PERCENT >= TimeDriveCommand::kMinSpeedPercent &&
+    static_assert(HEADING_TURN_AUTO_SPEED_PERCENT >= MotionGoalCommand::kMinTurnSpeedPercent &&
                   HEADING_TURN_AUTO_SPEED_PERCENT <= 100);
     auto resolved_request = request;
-    if (auto* drive = std::get_if<TimeDriveRequest>(&resolved_request);
-        drive && drive->speed_percent == 0 &&
-        (drive->direction == Motion::kLeft || drive->direction == Motion::kRight)) {
-        drive->speed_percent = HEADING_TURN_AUTO_SPEED_PERCENT;
-    }
+    if (auto* turn = std::get_if<AngleTurnRequest>(&resolved_request);
+        turn && turn->speed_percent == 0)
+        turn->speed_percent = HEADING_TURN_AUTO_SPEED_PERCENT;
     if (!CommandInterface::Valid(resolved_request))
         return ESP_ERR_INVALID_ARG;
     const auto requirements = CommandInterface::Requirements(resolved_request);
@@ -144,8 +142,8 @@ L298nMotorStatus L298nController::Snapshot() {
     const int64_t now = esp_timer_get_time();
     status.command = command_interface_.Snapshot(now);
     if (command_interface_.mode() != CommandMode::kManual &&
-        command_interface_.last_mode() == CommandMode::kTimeDrive) {
-        status.turn_target_degrees = status.command.time_drive.angle_degrees;
+        command_interface_.last_mode() == CommandMode::kAngleTurn) {
+        status.turn_target_degrees = std::abs(status.command.angle_turn.angle_degrees);
         status.turn_progress_degrees = turn_progress_degrees_;
         status.turn_uses_imu = status.turn_target_degrees != 0;
     }
@@ -291,8 +289,8 @@ L298nMotorStatus GetL298nMotorStatus() { return L298nController::Instance().Snap
 esp_err_t SetL298nMotorSpeed(int) { return ESP_ERR_NOT_SUPPORTED; }
 
 esp_err_t MoveL298nDistance(bool forward, int distance_cm, const char* owner) {
-    if (distance_cm < ruby_robot::DistanceDriveCommand::kMinDistanceCm ||
-        distance_cm > ruby_robot::DistanceDriveCommand::kMaxDistanceCm || owner == nullptr)
+    if (distance_cm < ruby_robot::MotionGoalCommand::kMinDistanceCm ||
+        distance_cm > ruby_robot::MotionGoalCommand::kMaxDistanceCm || owner == nullptr)
         return ESP_ERR_INVALID_ARG;
     ruby_robot::DistanceDriveRequest request;
     request.distance_cm = forward ? distance_cm : -distance_cm;
@@ -308,13 +306,11 @@ esp_err_t MoveL298nDistance(bool forward, int distance_cm, const char* owner) {
     return StartL298nCommand(request);
 }
 
-esp_err_t RotateL298nAngle(int angle_degrees, ruby_robot::TimeDriveOwner owner) {
+esp_err_t RotateL298nAngle(int angle_degrees, ruby_robot::AngleTurnOwner owner) {
     if (!((angle_degrees >= 5 && angle_degrees <= 180) ||
           (angle_degrees <= -5 && angle_degrees >= -180)))
         return ESP_ERR_INVALID_ARG;
-    return StartL298nCommand(ruby_robot::TimeDriveRequest{
-        angle_degrees > 0 ? ruby_robot::Motion::kLeft : ruby_robot::Motion::kRight, 0,
-        ruby_robot::TimeDriveCommand::kMaxSeconds, owner, std::abs(angle_degrees)});
+    return StartL298nCommand(ruby_robot::AngleTurnRequest{angle_degrees, 0, owner});
 }
 
 esp_err_t ResetL298nOdometry() { return L298nController::Instance().ResetOdometry(); }
