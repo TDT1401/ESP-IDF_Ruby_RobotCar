@@ -5,6 +5,19 @@
 
 ## 1. Mục tiêu và phạm vi
 
+### Phần cứng
+
+- Board ESP32-S3-N16R8.
+- Khung xe 4WD và 4 động cơ DC.
+- Driver motor L298N. kênh trái điều khiển 2 motor trái, kênh phải điều khiển 2 motor phải
+- 2 cảm biến encoder FC-03.
+- IMU MPU6050.
+- Cảm biến siêu âm HC-SR04.
+- Màn hình TFT ST7789 240×240.
+- Microphone I2S.
+- Mạch khuếch đại MAX98357A và loa.
+- Nguồn cấp cho board và nguồn motor riêng.
+
 ### Giai đoạn A — Motion Control (ưu tiên cao)
 
 Xe cần đạt được:
@@ -13,12 +26,12 @@ Xe cần đạt được:
 2. **Đi thẳng giữ hướng** bằng Encoder + IMU.
 3. **Di chuyển quãng đường chỉ định** (ví dụ: đi thẳng 1 m, 2 m, 5 m khi không có vật cản).
 4. **Quay một góc chỉ định** (ví dụ: ±90°).
-5. Ước lượng chuyển động tương đối: `x`, `y`, `θ` qua **Wheel Odometry + Gyroscope**.
+5. Kết hợp Encoder + IMU để ước lượng `(x, y, θ)` và đi đến tọa độ tương đối `(x, y)` khi không có vật cản.
 6. Dừng an toàn khi lỗi cảm biến / mất lệnh / điều khiển bất thường.
 
 ### Giai đoạn B — Autonomous Navigation (sau giai đoạn A)
 
-Xe nhận lệnh **đi đến một vị trí đích**, ví dụ `goal = (5.0 m, 0.0 m)` trong hệ tọa độ bắt đầu. Nếu phát hiện vật cản, xe dừng → đánh giá đường tránh → đi vòng → tiếp tục đến **đích ban đầu**, không nhầm với tổng chiều dài đường đã đi.
+Từ khả năng đi đến tọa độ tương đối ở Phase 5, xe xử lý vật cản bằng cách dừng → đánh giá đường tránh → đi vòng → tiếp tục đến **đích ban đầu**, không nhầm với tổng chiều dài đường đã đi.
 
 **Ngoài phạm vi hiện tại:** SLAM, bản đồ toàn cục, LiDAR, ROS2 Navigation Stack. Có thể bổ sung trong các phiên bản sau.
 
@@ -31,7 +44,7 @@ Xe nhận lệnh **đi đến một vị trí đích**, ví dụ `goal = (5.0 m,
 - Chiều dương Encoder, chiều quay motor, giới hạn tốc độ / PWM, điện áp nguồn.
 - Tổng dòng khi 2 motor cùng chạy trên một kênh L298N; tránh quá dòng và quá nhiệt.
 
-## 4. Thuật toán điều khiển — ưu tiên triển khai
+## 2. Thuật toán điều khiển — ưu tiên triển khai
 
 | Thành phần              | Lựa chọn                                | Ưu tiên                                  |
 | ----------------------- | --------------------------------------- | ---------------------------------------- |
@@ -41,11 +54,11 @@ Xe nhận lệnh **đi đến một vị trí đích**, ví dụ `goal = (5.0 m,
 | Quãng đường / góc       | **Motion Profile + feedback**           | Bắt buộc                                 |
 | Vị trí tương đối        | **Wheel Odometry + Gyro Heading**       | Bắt buộc                                 |
 | Encoder speed filtering | Pulse-period hoặc cửa sổ đếm xung + lọc | Bắt buộc                                 |
-| Sensor fusion nâng cao  | **EKF**                                 | Để sau khi hệ cơ bản ổn định             |
+| Sensor fusion nâng cao  | **EKF từ Encoder + IMU**                | Phase 5; dùng sau khi kiểm chứng         |
 | Behavior                | **FSM**                                 | Giai đoạn B                              |
 | Avoidance               | **Bug2 (phương án nghiên cứu)**         | Giai đoạn B; phụ thuộc cấu hình cảm biến |
 
-### 4.1. Nguyên tắc Dual-Loop
+### 2.1. Nguyên tắc Dual-Loop
 
 1. Motion Controller đặt `v_ref` và `heading_ref`.
 2. Heading PD tính `delta_v` từ sai lệch góc và vận tốc quay.
@@ -55,7 +68,7 @@ Xe nhận lệnh **đi đến một vị trí đích**, ví dụ `goal = (5.0 m,
 
 **Yêu cầu triển khai:** Giới hạn PWM, `anti-windup`, giới hạn gia tốc/giảm tốc, xử lý motor dead-zone, giới hạn `delta_v`, dừng có kiểm soát. Trường hợp quay tại chỗ cần cho phép `v_L_ref` và `v_R_ref` khác dấu.
 
-### 4.2. Odometry — mô hình ban đầu
+### 2.2. Odometry — mô hình ban đầu
 
 Với bán kính bánh `R = 0.03 m`, số counts/vòng thực tế `CPR_eff`:
 
@@ -68,25 +81,12 @@ Distance per count = 0.1885 / CPR_eff (m)
 Δθ_wheel ≈ (Δs_R - Δs_L) / B_eff
 ```
 
-Lúc đầu dùng **gyro Z đã hiệu chuẩn bias** để cập nhật heading ngắn hạn, kết hợp Encoder tính quãng đường; sau đó tích phân vị trí `x, y` bằng góc hướng ước lượng. EKF chỉ bổ sung sau, nếu kết quả kiểm thử chứng minh cần thiết.
+Lúc đầu dùng **gyro Z đã hiệu chuẩn bias** để cập nhật heading ngắn hạn, kết hợp Encoder tính quãng đường; sau đó tích phân vị trí `x, y` bằng góc hướng ước lượng. Phase 5 kiểm chứng EKF trước khi dùng pose hợp nhất cho điều hướng tọa độ.
 
 > [!warning] Độ chính xác
 > Nếu `CPR_eff = 20`, độ phân giải lý thuyết là **9.42 mm/count**. Đây **không phải** độ chính xác vị trí thực tế. Bánh trượt, lệch đường kính, độ phân giải thấp và sai số gyro gây sai lệch tích lũy. HC-SR04/IMU/Encoder **không cung cấp định vị tuyệt đối**.
 
-### 4.3. Chu kỳ tác vụ tham khảo (cần đo và tinh chỉnh)
-
-| Task                    |             Tần số khởi điểm | Ghi chú                                                      |
-| ----------------------- | ---------------------------: | ------------------------------------------------------------ |
-| Encoder pulse counting  | Interrupt / hardware counter | Không bỏ xung khi CPU bận                                    |
-| IMU read                |                      ~100 Hz | Timestamp từng mẫu                                           |
-| Heading / Motion update |                    ~20–50 Hz | Bám theo tốc độ IMU và phản hồi                              |
-| Speed PI                |                    ~10–20 Hz | Encoder 20 xung/vòng: tránh cửa sổ quá ngắn, tốc độ giật bậc |
-| Odometry update         |                    ~20–50 Hz | Dùng `dt` thực, không mặc định cố định                       |
-| Telemetry               |                     ~5–10 Hz | Không để Serial làm chậm vòng điều khiển                     |
-
-Không coi các tần số này là thông số cố định trước khi đo xung thực và độ ổn định loop.
-
-## 5. Kế hoạch thực hiện theo Phase
+## 3. Kế hoạch thực hiện theo Phase
 
 ### **Phase 0 — Sensor & Hardware Validation** 🔴
 
@@ -165,29 +165,23 @@ Không coi các tần số này là thông số cố định trước khi đo xu
 - Đã đo và báo cáo sai số vị trí qua nhiều lần thử nghiệm.
 - Xác định được mức độ sai số tích lũy của Dead Reckoning.
 
-> **Lưu ý:** Odometry và Dead Reckoning không cung cấp vị trí tuyệt đối. Positional Uncertainty được đánh giá bằng thực nghiệm trong Phase 3; mô hình hóa uncertainty bằng covariance và sử dụng EKF sẽ được xem xét ở Phase 4.
+### Phase 4 — Bám quỹ đạo thẳng khi tiến/lùi 🔴
 
-### Phase 3.5 — Sửa lệch hướng lúc bắt đầu tiến/lùi 🔴
+**Trạng thái:** Chưa tìm được giải pháp cho vấn đề xe đi lệch quỹ đạo khi tiến/lùi.
 
-**Lỗi:** Xe xoay nhẹ khi vừa lăn bánh, rồi đi thẳng theo hướng đã lệch; độ lệch ngang tăng theo quãng đường. Một bánh khởi động trước hoặc mạnh hơn là giả thuyết cần kiểm chứng.
+### Phase 5 — EKF và điều hướng đến tọa độ (x, y) 🔴
 
-**Cách test:**
+**Mục tiêu:** Kết hợp Encoder + IMU để giảm sai số ước lượng `(x, y, θ)` và đưa xe đến tọa độ tương đối `(x_goal, y_goal)` trong hệ tọa độ lúc bắt đầu, khi không có vật cản.
 
-- [ ] Đánh dấu đường đi thẳng trên sàn; lặp lại lệnh tiến và lùi ở cùng tốc độ, mặt sàn và nguồn motor, với quãng đường 2 m và 4,5 m. Đo độc lập góc hướng và độ lệch ngang sau mỗi lượt theo bài T4.
-- [ ] Quay chậm 0,5 giây đầu để xác định bánh nào lăn trước; ghi góc mục tiêu/thực tế, tốc độ gyro, RPM mục tiêu/đo và PWM từng bên trong 2 giây đầu.
+- [ ] Chạy EKF song song với odometry hiện tại; ghi pose, độ bất định và trạng thái hợp lệ.
+- [ ] So sánh sai số vị trí/góc của EKF và odometry bằng phép đo thực tế độc lập trên cùng bài chạy tiến, lùi và quay. Chỉ dùng pose EKF để điều khiển nếu kết quả tốt hơn và ổn định.
+- [ ] Thêm `Navigator` điều hướng đến `(x_goal, y_goal)` theo sai lệch tọa độ hiện tại, dùng bộ điều khiển tốc độ, hướng và quãng đường đã có. Dừng an toàn khi pose không hợp lệ, quá thời gian hoặc phát hiện vật cản.
 
-**Hướng fix:**
+**Done khi:** Phép đo độc lập cho thấy EKF giảm sai số so với odometry trên cùng bài thử; xe đến nhiều tọa độ đích, gồm đích có cả `x` và `y` khác 0, trong ngưỡng đã đặt và báo rõ khi không thể hoàn thành. Encoder + IMU không đo vị trí tuyệt đối hoặc trực tiếp phát hiện mọi lần trượt bánh.
 
-- [ ] Nếu hai bánh khởi động không đều, hiệu chuẩn mức PWM thắng ma sát, tốc độ tham chiếu và Speed PI từng bên; cân nhắc tăng tốc mềm nếu cần.
-- [ ] Nếu bánh đã đồng bộ mà góc vẫn không về hướng mục tiêu, kiểm tra Heading PD. Nếu góc đã về đúng nhưng xe vẫn lệch ngang, bổ sung điều khiển bám đường dựa trên vị trí `(x, y)`.
+### Phase 6 — Phần cứng servo quét HC-SR04 🔴
 
-**Test sau fix:** Lặp lại đúng điều kiện và số lượt của bài test ban đầu; so sánh sai số góc lúc xuất phát, độ lệch ngang ở 2 m/4,5 m và sai số quãng đường. Kiểm tra cả tiến lẫn lùi và không phát sinh lỗi encoder/IMU.
-
-**Done khi:** Đã xác định nguyên nhân bằng video và log; các sai số đo độc lập đạt ngưỡng chấp nhận đặt từ baseline T1–T4, ổn định qua các lần lặp và không làm giảm độ chính xác quãng đường.
-
-### Phase 3.6 — Phần cứng servo quét HC-SR04 🔴
-
-**Mục tiêu:** Gắn HC-SR04 lên servo để đo khoảng cách theo ba hướng trái, giữa và phải; mỗi mẫu đo có hướng, thời điểm và trạng thái hợp lệ. Việc quyết định dừng/né vật cản thuộc Phase 5–6.
+**Mục tiêu:** Gắn HC-SR04 lên servo để đo khoảng cách theo ba hướng trái, giữa và phải; mỗi mẫu đo có hướng, thời điểm và trạng thái hợp lệ. Quyết định dừng và né vật cản thuộc Phase 7–8.
 
 - [ ] Chọn vị trí gắn và góc quét để cảm biến không bị thân xe che; ghi nhận vùng mù. Cấp nguồn servo phù hợp, nối GND chung; giữ mạch hạ mức tín hiệu ECHO của HC-SR04 xuống 3,3 V.
 - [ ] Chọn chân điều khiển servo không xung đột phần cứng hiện có và thêm biến thể board riêng; giữ nguyên chân và định danh của bản build hiện tại. Nếu dùng góc quét cho quyết định an toàn, cần phản hồi vị trí servo để phát hiện kẹt; lệnh PWM không xác nhận góc thực.
@@ -195,26 +189,18 @@ Không coi các tần số này là thông số cố định trước khi đo xu
 
 **Test:** Đặt vật ở từng hướng tại khoảng cách đo độc lập, lặp lại toàn bộ chu kỳ quét và thử trường hợp không có echo. Kiểm tra nguồn, IMU, encoder, âm thanh và motor khi servo hoạt động.
 
-**Done khi:** Ba hướng cho kết quả lặp lại trong ngưỡng sai số đã đo, mẫu lỗi không được dùng làm khoảng cách an toàn, và đã ghi rõ độ phủ/vùng mù để Phase 5–6 sử dụng.
+**Done khi:** Ba hướng cho kết quả lặp lại trong ngưỡng sai số đã đo, mẫu lỗi không được dùng làm khoảng cách an toàn, và đã ghi rõ độ phủ/vùng mù để Phase 7–8 sử dụng.
 
-### Phase 4 — Sensor Fusion Enhancement 🟡 (tùy kết quả kiểm thử)
+### Phase 7 — Obstacle Detection & Safety 🟢
 
-- [ ] So sánh Odometry thuần Encoder với Encoder + gyro.
-- [ ] Nếu cần, triển khai **EKF** cho state estimation (`x, y, θ` hoặc state mở rộng).
-- [ ] Đánh giá drift và độ ổn định trên tập bài thử giống Phase 3.
-
-_EKF không tự tạo tham chiếu vị trí tuyệt đối và không bảo đảm hết drift._
-
-### Phase 5 — Obstacle Detection & Safety 🟢
-
-- [ ] Dùng các mẫu đo trái/giữa/phải từ Phase 3.6; xác định vùng phát hiện an toàn, độ mới bắt buộc của mẫu giữa và khoảng cách dừng theo tốc độ.
+- [ ] Dùng các mẫu đo trái/giữa/phải từ Phase 6; xác định vùng phát hiện an toàn, độ mới bắt buộc của mẫu giữa và khoảng cách dừng theo tốc độ.
 - [ ] Khi gặp vật cản: giảm tốc → dừng → chờ đánh giá, không tự lao về phía trước.
 - [ ] Servo kẹt, dữ liệu quá cũ/không hợp lệ hoặc không đo được khoảng cách → phản ứng bảo thủ.
 
-### Phase 6 — Autonomous Navigation 🟢
+### Phase 8 — Autonomous Navigation 🟢
 
 - [ ] Thêm `BehaviorFSM`: `IDLE`, `NAVIGATING`, `STOPPED_FOR_OBSTACLE`, `SCANNING`, `AVOIDING`, `RETURNING_TO_PATH`, `GOAL_REACHED`, `BLOCKED`, `FAULT`.
-- [ ] Thêm `Navigator` và goal tương đối `(x_goal, y_goal)`.
+- [ ] Mở rộng điều hướng tọa độ của Phase 5 để xử lý vật cản mà vẫn giữ nguyên goal `(x_goal, y_goal)`.
 - [ ] Chọn / kiểm chứng thuật toán tránh vật cản trước khi triển khai. **Bug2 là ứng viên**; ba hướng quét chưa bảo đảm đủ dữ liệu để bám theo biên vật cản.
 - [ ] Khảo sát độ phủ và điểm mù của phép quét trái/giữa/phải; bổ sung cảm biến nếu chưa quan sát được hai bên hoặc biên vật cản đủ tin cậy.
 - [ ] Sau khi tránh, tái lập hướng / lộ trình đến **tọa độ mục tiêu gốc**.
@@ -222,42 +208,34 @@ _EKF không tự tạo tham chiếu vị trí tuyệt đối và không bảo đ
 
 **Done khi:** Trong môi trường thử đơn giản, xe nhận goal, phát hiện một vật cản, chọn đường vòng khả thi và tiếp tục đến vùng đích; có khả năng dừng an toàn khi không tìm được đường.
 
-### Phase 7 — Tự kiểm tra trước khi chạy 🟢 (tùy chọn)
+### Phase 9 — Tự kiểm tra trước khi chạy 🟢 (tùy chọn)
 
 - [ ] Trước khi nhận lệnh di chuyển, kiểm tra trạng thái encoder, IMU, bộ điều khiển motor và hiệu chuẩn cần thiết; từ chối lệnh và báo nguyên nhân khi dữ liệu không hợp lệ.
-- [ ] Trong bài chạy thử có giám sát, đo thời điểm hai bánh bắt đầu lăn và so với baseline Phase 3.5 để phát hiện khởi động lệch.
 
 **Done khi:** Xe phân biệt được trạng thái sẵn sàng và lỗi cảm biến/motor qua các bài thử, không tự di chuyển để kiểm tra khi chưa có lệnh, và mọi lỗi đều dẫn đến dừng an toàn.
 
-### Phase 8 — Dạy đường rồi chạy lại 🟢 (tùy chọn, phụ thuộc Phase 6)
+### Phase 10 — Dạy đường rồi chạy lại 🟢 (tùy chọn, phụ thuộc Phase 8)
 
 - [ ] Ghi một tuyến ngắn khi người dùng lái qua web dưới dạng các điểm hoặc đoạn đường tương đối; lưu và cho phép chạy lại bằng giọng nói hoặc Telegram.
 - [ ] Khi phát lại, dùng Navigator và cơ chế tránh vật cản; dừng nếu vị trí không hợp lệ, tuyến bị chặn hoặc người dùng hủy.
 
 **Done khi:** Xe chạy lại tuyến từ cùng vị trí xuất phát với sai số đã đo qua nhiều lần thử, báo được điểm thất bại và luôn chấp nhận lệnh dừng.
 
-### Phase 9 — Đi tuần theo lịch 🟢 (tùy chọn, phụ thuộc Phase 8)
+### Phase 11 — Đi tuần theo lịch 🟢 (tùy chọn, phụ thuộc Phase 10)
 
 - [ ] Đặt lịch chạy tuyến đã lưu, đồng bộ thời gian, dừng ở các điểm kiểm tra để báo trạng thái rồi quay về điểm xuất phát.
 - [ ] Khi gặp vật cản không thể tránh, định vị không đáng tin cậy hoặc mất quyền điều khiển, dừng và thông báo qua kênh đã cấu hình.
 
 **Done khi:** Xe hoàn thành và quay về trên tuyến thử ở các thời điểm đã đặt qua nhiều lượt; không khởi hành khi điều kiện an toàn hoặc thời gian chưa hợp lệ.
 
-### Phase 10 — Tự về trạm sạc 🟡 (tùy chọn, cần phần cứng)
+### Phase 12 — Tự về trạm sạc 🟡 (tùy chọn, cần phần cứng)
 
 - [ ] Bổ sung đo mức pin, mốc nhận biết trạm, tiếp điểm và mạch sạc phù hợp; xác định vị trí trạm và đường tiếp cận an toàn.
 - [ ] Khi pin thấp, xe tiếp cận chậm, xác nhận đã kết nối và đang sạc; dừng và báo lỗi nếu không nhận ra trạm hoặc không sạc được.
 
 **Done khi:** Xe tìm và ghép trạm lặp lại trong vùng thử, xác nhận trạng thái sạc bằng phép đo độc lập, không tiếp tục đẩy motor khi ghép trạm thất bại.
 
-### Phase 11 — Lập bản đồ và định vị trên bản đồ 🟡 (tùy chọn, cần phần cứng)
-
-- [ ] Bổ sung cảm biến quan sát môi trường đủ độ phủ để lập bản đồ và định vị; đánh giá bộ nhớ, CPU và phương án xử lý ngoài ESP32-S3 nếu cần. Một HC-SR04 quét ba hướng chưa được kiểm chứng đủ cho bản đồ 2D tin cậy.
-- [ ] Lưu/tải bản đồ, hiệu chỉnh vị trí theo đặc trưng môi trường và dùng vị trí trên bản đồ cho các mục tiêu đã lưu; dừng khi mất định vị.
-
-**Done khi:** Xe nhận lại vị trí trên bản đồ sau nhiều lần khởi động và đi đến các điểm thử với sai số đo độc lập đạt ngưỡng đã đặt; mất định vị được phát hiện và xử lý an toàn.
-
-## 6. Quy trình thử nghiệm và dữ liệu bắt buộc
+## 4. Quy trình thử nghiệm và dữ liệu bắt buộc
 
 **Bài thử Control (không vật cản):**
 
@@ -270,28 +248,3 @@ _EKF không tự tạo tham chiếu vị trí tuyệt đối và không bảo đ
 | T5: Lỗi IMU / Encoder | Đánh giá an toàn            | Trạng thái lỗi, thời gian dừng                     |
 
 **Acceptance criteria:** Đặt ngưỡng (cm, độ, %, thời gian đáp ứng) **sau khi có baseline T1–T4**, sau đó đóng băng ngưỡng trước vòng cải tiến tiếp theo. Không tự đặt cam kết ±1 cm hay ±1° khi chưa đo thực tế.
-
-**Log gợi ý (CSV):**
-
-```csv
-time_ms,command,state,x_m,y_m,theta_rad,vL_ref_mps,vL_mps,vR_ref_mps,vR_mps,gyro_z_radps,pwmL,pwmR,error_flags
-```
-
-## 7. Quyết định kỹ thuật đã chốt
-
-| Hạng mục                   | Lựa chọn                                     |
-| -------------------------- | -------------------------------------------- |
-| Kiến trúc                  | **Hierarchical Layered Control**             |
-| Control                    | **Cascaded Dual-Loop Closed-Loop**           |
-| Speed                      | **PI (trái, phải)**                          |
-| Heading                    | **PD**                                       |
-| Estimation ban đầu         | **Encoder Odometry + Gyro**                  |
-| Estimation nâng cao        | **EKF, sau khi đo baseline**                 |
-| Behavior giai đoạn tự hành | **FSM**                                      |
-| Goal                       | **Relative Waypoint Navigation**             |
-| Obstacle Detection         | **HC-SR04; servo quét ba hướng ở Phase 3.6** |
-| Obstacle Avoidance         | **Chưa chốt; đánh giá Bug2 khi đủ cảm biến** |
-| Ưu tiên hiện tại           | **Phase 0 → 1 → 2 → 3**                      |
-
-> [!success] Kết quả cần đạt trước tiên
-> **Robot chạy thẳng ổn định, điều khiển được tốc độ, đi đúng quãng đường theo sai số đã kiểm chứng và quay đúng góc yêu cầu.** Sau milestone này mới triển khai servo quét HC-SR04 và tự hành né vật cản.
