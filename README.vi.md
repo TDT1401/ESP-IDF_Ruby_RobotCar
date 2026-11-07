@@ -6,22 +6,32 @@ Dự án học tập về robot di động và firmware ESP32. Ruby RobotCar k�
 
 ![Robot Ruby RobotCar bốn bánh dùng ESP32-S3](docs/ruby_car.png)
 
-Source hiện được cấu hình cho một bộ phần cứng cụ thể: ESP32-S3-N16R8, driver motor L298N, cảm biến siêu âm HC-SR04, hai encoder bánh xe FC-03 và màn hình TFT. Xem [hướng dẫn board bread-compact-wifi-lcd bằng tiếng Việt](main/boards/bread-compact-wifi-lcd/docs/README.vi.md) để lắp ráp và thiết lập.
+Source hiện được cấu hình cho một bộ phần cứng cụ thể: ESP32-S3-N16R8, driver motor L298N, cảm biến siêu âm HC-SR04, hai encoder bánh xe FC-03 và màn hình TFT. Xem [hướng dẫn nối dây của board](docs/bread-compact-wifi-lcd.vi.md) để biết các chân kết nối.
 
 ## Bắt đầu từ đâu?
 
 | Bạn muốn… | Tài liệu |
 | --- | --- |
-| Lắp robot, nối dây, build và nạp firmware | [Hướng dẫn board bread-compact-wifi-lcd](main/boards/bread-compact-wifi-lcd/docs/README.vi.md) |
+| Nối dây giữa board và các module | [Hướng dẫn nối dây](docs/bread-compact-wifi-lcd.vi.md) |
+| Build và nạp firmware | [Build và nạp](#build-và-nạp) |
 | Tìm hiểu cách firmware chọn và cấu hình board | [Hướng dẫn tạo board tùy chỉnh](docs/custom-board.md) |
 | Tìm hiểu giao tiếp MCP giữa trợ lý và thiết bị | [Tài liệu giao thức MCP](docs/mcp-protocol.md) |
 | Tìm hiểu các giao thức kết nối với máy chủ | [WebSocket](docs/websocket.md) · [MQTT + UDP](docs/mqtt-udp.md) |
 
+## Build và nạp
+
+Nên dùng ESP-IDF v6.1 (tối thiểu v6.0.1). Chạy từ thư mục gốc của dự án:
+
+```sh
+python scripts/build.py bread-compact-wifi-lcd --language vi-VN --wake-word wn9_hiesp
+idf.py -p <SERIAL_PORT> flash monitor
+```
+
 ## Lộ trình thực hành
 
-1. Xem danh sách linh kiện và sơ đồ dây trong hướng dẫn board.
+1. Xem bảng chân trong hướng dẫn nối dây.
 2. Lắp phần cứng và kiểm tra nguồn, GND chung cùng mức điện áp tín hiệu trước khi cấp điện.
-3. Cài phiên bản ESP-IDF theo yêu cầu trong hướng dẫn board, sau đó build và nạp firmware.
+3. Cài ESP-IDF, sau đó build và nạp firmware bằng các lệnh trên.
 4. Kết nối robot với Wi-Fi và thử trang điều khiển.
 5. Khám phá `main/boards/bread-compact-wifi-lcd/robot/` để tìm hiểu cách các tính năng điều khiển xe được nối vào firmware.
 
@@ -37,6 +47,6 @@ Source hiện được cấu hình cho một bộ phần cứng cụ thể: ESP3
 
 ## Nguồn gốc và giấy phép
 
-Firmware trợ lý giọng nói dựa trên dự án mã nguồn mở [XiaoZhi ESP32](https://github.com/78/xiaozhi-esp32). Repository này được phát hành theo [giấy phép MIT](LICENSE). Hãy giữ thông báo bản quyền và giấy phép khi sử dụng hoặc phân phối lại mã nguồn.
+Firmware trợ lý giọng nói dựa trên dự án mã nguồn mở [XiaoZhi ESP32](https://github.com/78/xiaozhi-esp32). Phần hiển thị có [thông báo ghi công RobotEye](docs/ROBOT_EYE_NOTICE.md) riêng. Repository này được phát hành theo [giấy phép MIT](LICENSE). Hãy giữ thông báo bản quyền và giấy phép khi sử dụng hoặc phân phối lại mã nguồn.
 
 Khi báo lỗi, hãy cung cấp board đang dùng, phiên bản ESP-IDF và log liên quan. Không đăng mật khẩu Wi-Fi, token Telegram hoặc thông tin tài khoản cá nhân lên repository.

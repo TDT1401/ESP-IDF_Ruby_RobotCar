@@ -15,7 +15,7 @@ A board directory typically contains:
 - `xxx_board.cc` - board-level initialization and glue code.
 - `config.h` - pin assignments and board-level settings.
 - `config.json` - reported board type and release configuration consumed by CMake and `scripts/build.py`.
-- `README.md` - board-specific notes.
+- `BOARD_GUIDE.md` - board-specific wiring instructions.
 
 Boards can live directly under `main/boards/` or be grouped by manufacturer under `main/boards/<manufacturer>/<board>/` (see [Manufacturer Sub-directories](#manufacturer-sub-directories) below).
 
@@ -412,9 +412,9 @@ The script:
 - Builds `build/merged-binary.bin` without creating a ZIP by default. Pass
   `--zip` to recreate `releases/v<version>_<name>.zip`.
 
-### 6. Write the README
+### 6. Write the Board Guide
 
-In `README.md`, describe the board, hardware requirements, build instructions, and any special notes.
+In `BOARD_GUIDE.md`, list module pin connections, supply voltages, common ground, and signal-level precautions. Put build instructions in a separate document or the project README.
 
 ## Manufacturer Sub-directories
 

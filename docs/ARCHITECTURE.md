@@ -54,9 +54,10 @@ main/boards/bread-compact-wifi-lcd/
 │   ├── drivers/                Infrastructure Layer: L298N GPIO/LEDC
 │   ├── sensors/                Infrastructure Layer: FC-03, HC-SR04, MPU6050
 │   └── tests/                  Kiểm tra web page và các kiểm tra board-local
-├── robot_eye/                  Presentation Layer: LVGL display và animation
-└── docs/                       Tài liệu của board, gồm file này
+└── robot_eye/                  Presentation Layer: LVGL display và animation
 ```
+
+Tài liệu riêng của board nằm tại `docs/` ở gốc dự án.
 
 `main/CMakeLists.txt` chọn source có điều kiện. Khi thêm board hoặc variant mới,
 phải cập nhật đủ `config.json → scripts/build.py → main/Kconfig.projbuild →
@@ -147,4 +148,5 @@ Khi thêm mode hoặc đầu vào mới:
    trên phần cứng; build không thay thế kiểm tra trên xe.
 
 Không đổi chân của board hiện có để hỗ trợ phần cứng khác. Tạo board hoặc release
-variant có danh tính riêng theo `docs/custom-board.md` ở gốc dự án.
+variant có danh tính riêng theo [hướng dẫn board](custom-board.md)
+ở gốc dự án.
