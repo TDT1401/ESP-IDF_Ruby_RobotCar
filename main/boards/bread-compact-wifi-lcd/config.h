@@ -119,7 +119,7 @@
 
 // Provisional distance profile; tune against independent floor measurements.
 // Dùng cho các lệnh di chuyển khoảng cách, không dùng cho các lệnh quay góc.
-#define DISTANCE_DRIVE_MAX_SPEED_PERCENT 100
+#define DISTANCE_DRIVE_MAX_SPEED_PERCENT 70
 #define DISTANCE_DRIVE_ACCELERATION_MPS2 0.30
 #define DISTANCE_DRIVE_DECELERATION_MPS2 0.30
 #define DISTANCE_DRIVE_MIN_SPEED_PERCENT 18
