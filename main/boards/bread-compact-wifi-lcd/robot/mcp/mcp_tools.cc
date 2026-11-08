@@ -60,7 +60,8 @@ ToolResult GetState() {
                                  status.turn_progress_degrees) ||
         !cJSON_AddBoolToObject(json.get(), "turn_uses_imu", status.turn_uses_imu) ||
         !AddFc03EncoderJson(json.get(), status.encoder) ||
-        !AddOdometryJson(json.get(), status.odometry, status.command.distance_drive))
+        !AddOdometryJson(json.get(), status.odometry, status.ekf,
+                         status.command.distance_drive, status.command.navigate))
         return std::unexpected("Could not allocate motor status.");
     return json.release();
 }
@@ -76,7 +77,8 @@ void RegisterL298nMcpTools() {
                    });
     server.AddTool("self.motor.get_state",
                    "Read motor PWM, speed PI targets, FC-03 encoder and relative MPU6050 heading. "
-                   "Includes relative odometry x/y/theta and distance goal/error. "
+                   "Includes odometry, EKF pose/uncertainty, navigation goal/state, and "
+                   "distance goal/error. "
                    "Timed forward/backward commands hold heading; angle turns use gyro feedback.",
                    PropertyList(), [](const PropertyList&) -> ToolResult { return GetState(); });
     server.AddTool("self.motor.reset_odometry",
@@ -117,6 +119,26 @@ void RegisterL298nMcpTools() {
             const esp_err_t error = RotateL298nAngle(properties["angle_degrees"].value<int>());
             if (error != ESP_OK)
                 return std::unexpected(std::string("Angle turn unavailable: ") +
+                                       esp_err_to_name(error));
+            return GetState();
+        });
+    server.AddTool(
+        "self.motor.navigate_to",
+        "Drive to a relative x/y goal in centimetres from the last odometry reset. No obstacle "
+        "avoidance: stops for a detected front obstacle, invalid pose, or timeout. Uses "
+        "the configured pose source for control.",
+        PropertyList({Property("x_cm", kPropertyTypeInteger, -1000, 1000),
+                      Property("y_cm", kPropertyTypeInteger, -1000, 1000),
+                      Property("speed_percent", kPropertyTypeInteger, 40, 18, 70),
+                      Property("timeout_seconds", kPropertyTypeInteger, 60, 1, 120)}),
+        [](const PropertyList& properties) -> ToolResult {
+            const esp_err_t error = StartL298nCommand(ruby_robot::NavigateRequest{
+                properties["x_cm"].value<int>() / 100.0,
+                properties["y_cm"].value<int>() / 100.0,
+                properties["speed_percent"].value<int>(),
+                properties["timeout_seconds"].value<int>(), ruby_robot::NavigateOwner::kVoice});
+            if (error != ESP_OK)
+                return std::unexpected(std::string("Navigation unavailable: ") +
                                        esp_err_to_name(error));
             return GetState();
         });

@@ -26,6 +26,8 @@ bool CommandInterface::Valid(const CommandRequest& request) {
         return MotionGoalCommand::Valid(*turn);
     if (const auto* drive = std::get_if<DistanceDriveRequest>(&request))
         return MotionGoalCommand::Valid(*drive);
+    if (const auto* navigation = std::get_if<NavigateRequest>(&request))
+        return Navigator::Valid(*navigation);
     return false;
 }
 
@@ -51,16 +53,26 @@ bool CommandInterface::Start(const CommandRequest& request, int64_t now_us,
         last_mode_ = mode_ = CommandMode::kDistanceDrive;
         return true;
     }
+    if (const auto* navigation = std::get_if<NavigateRequest>(&request)) {
+        if (!navigator_.Start(*navigation, pose, limits.metres_per_second_per_percent, now_us))
+            return false;
+        last_mode_ = mode_ = CommandMode::kNavigate;
+        return true;
+    }
     return false;
 }
 
 Motion CommandInterface::direction() const {
+    if (mode_ == CommandMode::kNavigate)
+        return navigator_.direction();
     if (mode_ == CommandMode::kDistanceDrive)
         return goal_.direction();
     return mode_ == CommandMode::kAngleTurn ? goal_.turn_direction() : Motion::kStop;
 }
 
 int CommandInterface::speed_percent() const {
+    if (mode_ == CommandMode::kNavigate)
+        return navigator_.speed_percent();
     if (mode_ == CommandMode::kDistanceDrive)
         return goal_.speed_percent();
     return mode_ == CommandMode::kAngleTurn ? goal_.turn_speed_percent() : 0;
@@ -75,12 +87,16 @@ int CommandInterface::angle_degrees() const {
 }
 
 bool CommandInterface::Expired(int64_t now_us) const {
+    if (mode_ == CommandMode::kNavigate)
+        return navigator_.Expired(now_us);
     if (mode_ == CommandMode::kDistanceDrive)
         return goal_.Expired(now_us);
     return mode_ == CommandMode::kAngleTurn && goal_.Expired(now_us);
 }
 
 bool CommandInterface::CompletionReady() const {
+    if (mode_ == CommandMode::kNavigate)
+        return navigator_.Completed();
     if (mode_ == CommandMode::kDistanceDrive)
         return goal_.CompletionReady();
     return false;
@@ -91,6 +107,8 @@ void CommandInterface::Complete(int64_t now_us) {
         goal_.Finish(AngleTurnState::kCompleted);
     else if (mode_ == CommandMode::kDistanceDrive)
         goal_.Finish(DistanceDriveState::kCompleted, now_us);
+    else if (mode_ == CommandMode::kNavigate)
+        navigator_.Finish(NavigateState::kCompleted);
     mode_ = CommandMode::kIdle;
 }
 
@@ -99,15 +117,21 @@ void CommandInterface::Fail(int64_t now_us, const char* fault) {
         goal_.Finish(AngleTurnState::kFault);
     else if (mode_ == CommandMode::kDistanceDrive)
         goal_.Finish(DistanceDriveState::kFault, now_us, fault);
+    else if (mode_ == CommandMode::kNavigate)
+        navigator_.Finish(NavigateState::kFault, fault);
     mode_ = CommandMode::kIdle;
 }
 
 bool CommandInterface::UpdateMotion(const OdometrySnapshot& pose, double left_rpm, double right_rpm,
                                     int64_t now_us) {
+    if (mode_ == CommandMode::kNavigate)
+        return navigator_.Update(pose, left_rpm, right_rpm, now_us);
     return mode_ != CommandMode::kDistanceDrive || goal_.Update(pose, left_rpm, right_rpm, now_us);
 }
 
 const char* CommandInterface::fault() const {
+    if (mode_ == CommandMode::kNavigate)
+        return navigator_.fault();
     return mode_ == CommandMode::kDistanceDrive ? goal_.fault() : "none";
 }
 
@@ -118,12 +142,17 @@ void CommandInterface::StopMotion(int64_t now_us) {
     } else if (mode_ == CommandMode::kDistanceDrive) {
         goal_.Finish(DistanceDriveState::kInterrupted, now_us);
         mode_ = CommandMode::kIdle;
+    } else if (mode_ == CommandMode::kNavigate) {
+        navigator_.Finish(NavigateState::kInterrupted);
+        mode_ = CommandMode::kIdle;
     } else if (mode_ == CommandMode::kManual) {
         manual_.Clear();
     }
 }
 
 WheelCommand CommandInterface::wheels() const {
+    if (mode_ == CommandMode::kNavigate)
+        return {};
     if (mode_ == CommandMode::kManual)
         return manual_.wheels();
     if (mode_ == CommandMode::kAngleTurn)
@@ -136,11 +165,13 @@ WheelCommand CommandInterface::wheels() const {
 CommandSnapshot CommandInterface::Snapshot(int64_t now_us) const {
     const auto distance = goal_.Snapshot(now_us);
     const auto turn = goal_.TurnSnapshot();
+    const auto navigate = navigator_.Snapshot(now_us);
     const char* owner = mode_ == CommandMode::kDistanceDrive ? distance.owner
                         : mode_ == CommandMode::kAngleTurn   ? turn.owner
+                        : mode_ == CommandMode::kNavigate    ? navigate.owner
                         : mode_ == CommandMode::kManual      ? "web"
                                                              : "none";
-    return {ModeName(mode_), owner, turn, distance};
+    return {ModeName(mode_), owner, turn, distance, navigate};
 }
 
 const char* CommandInterface::ModeName(CommandMode mode) {
@@ -151,6 +182,8 @@ const char* CommandInterface::ModeName(CommandMode mode) {
             return "angle_turn";
         case CommandMode::kDistanceDrive:
             return "distance_drive";
+        case CommandMode::kNavigate:
+            return "navigate";
         default:
             return "idle";
     }

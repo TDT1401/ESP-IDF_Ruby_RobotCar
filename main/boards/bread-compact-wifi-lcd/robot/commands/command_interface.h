@@ -5,11 +5,12 @@
 
 #include "manual_command.h"
 #include "motion_goal_command.h"
+#include "../domain/navigator.h"
 
 namespace ruby_robot {
 
-enum class CommandMode { kIdle, kManual, kAngleTurn, kDistanceDrive };
-using CommandRequest = std::variant<AngleTurnRequest, DistanceDriveRequest>;
+enum class CommandMode { kIdle, kManual, kAngleTurn, kDistanceDrive, kNavigate };
+using CommandRequest = std::variant<AngleTurnRequest, DistanceDriveRequest, NavigateRequest>;
 
 struct CommandRequirements {
     bool wifi;
@@ -23,6 +24,7 @@ struct CommandSnapshot {
     const char* owner;
     AngleTurnSnapshot angle_turn;
     DistanceDriveSnapshot distance_drive;
+    NavigateSnapshot navigate;
 };
 
 // Serialized by L298nController's mutex. Chooses manual control or one motion goal.
@@ -42,6 +44,10 @@ public:
     Motion direction() const;
     int speed_percent() const;
     bool IsAngleTurn() const;
+    bool IsNavigationTurn() const { return mode_ == CommandMode::kNavigate && navigator_.Turning(); }
+    bool IsNavigation() const { return mode_ == CommandMode::kNavigate; }
+    double NavigationHeadingErrorRad() const { return navigator_.heading_error_rad(); }
+    void BeginNavigationDrive(int64_t now_us) { navigator_.BeginDrive(now_us); }
     int angle_degrees() const;
     bool Expired(int64_t now_us) const;
     bool CompletionReady() const;
@@ -62,6 +68,7 @@ private:
     CommandMode last_mode_ = CommandMode::kIdle;
     ManualCommand manual_;
     MotionGoalCommand goal_;
+    Navigator navigator_;
 };
 
 }  // namespace ruby_robot

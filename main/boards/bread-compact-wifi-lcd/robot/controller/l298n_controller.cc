@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <numbers>
 
 #include "../../config.h"
 #include "../sensors/hcsr04_sensor.h"
@@ -31,6 +32,7 @@ void ControlMonitorTask(void*) {
         const auto status = GetL298nMotorStatus();
 #if ODOMETRY_DEBUG
         const auto& pose = status.odometry;
+        const auto& ekf = status.ekf;
         const auto& drive = status.command.distance_drive;
         ESP_LOGI(
             "Odometry", "%lld,%s,%s,%d,%.4f,%.4f,%.5f,%.4f,%.4f,%d,%.5f,%.3f,%.4f,%.4f,%.4f,%s",
@@ -38,6 +40,10 @@ void ControlMonitorTask(void*) {
             pose.valid, pose.x_m, pose.y_m, pose.theta_rad, pose.left_m, pose.right_m,
             pose.wheel_heading_valid, pose.wheel_theta_rad, drive.target_m, drive.progress_m,
             drive.error_m, drive.position_error_m, pose.valid ? drive.fault : pose.fault);
+        ESP_LOGI("PoseEKF", "%lld,%d,%.4f,%.4f,%.5f,%.4f,%.4f,%.5f,%s",
+                 static_cast<long long>(esp_timer_get_time() / 1000), ekf.valid, ekf.x_m,
+                 ekf.y_m, ekf.theta_rad, std::sqrt(ekf.variance_x_m2),
+                 std::sqrt(ekf.variance_y_m2), std::sqrt(ekf.variance_theta_rad2), ekf.fault);
 #endif
 #if HEADING_PD_DEBUG
         if (!status.heading_hold_active) {
@@ -115,7 +121,10 @@ esp_err_t L298nController::StartCommand(const CommandRequest& request) {
     speed_pi_fault_ = "none";
     heading_fault_ = "none";
     const int64_t now = esp_timer_get_time();
-    if (!command_interface_.Start(resolved_request, now, odometry_.Snapshot(), DistanceLimits()))
+    const auto goal_pose = std::holds_alternative<NavigateRequest>(resolved_request)
+                               ? NavigationPoseLocked()
+                               : odometry_.Snapshot();
+    if (!command_interface_.Start(resolved_request, now, goal_pose, DistanceLimits()))
         return ESP_ERR_INVALID_STATE;
     if (!PrepareMotionLocked(command_interface_.direction())) {
         FinishCommandLocked(esp_timer_get_time(), false, "motor_error");
@@ -123,12 +132,17 @@ esp_err_t L298nController::StartCommand(const CommandRequest& request) {
     }
     if (requirements.heading) {
         heading_hold_active_ = true;
-        heading_turn_active_ = command_interface_.IsAngleTurn();
+        heading_turn_active_ = command_interface_.IsAngleTurn() ||
+                               command_interface_.IsNavigationTurn();
         heading_turn_start_degrees_ = imu.heading_degrees;
         turn_progress_degrees_ = 0;
         const int angle = command_interface_.angle_degrees();
         const int sign = command_interface_.direction() == Motion::kLeft ? 1 : -1;
-        heading_target_degrees_ = imu.heading_degrees + sign * angle;
+        heading_target_degrees_ = imu.heading_degrees +
+                                  (command_interface_.IsNavigation()
+                                       ? command_interface_.NavigationHeadingErrorRad() * 180.0 /
+                                             std::numbers::pi
+                                       : sign * angle);
     }
     return ESP_OK;
 }
@@ -165,9 +179,14 @@ L298nMotorStatus L298nController::Snapshot() {
     status.hardware_error = fault_;
     status.encoder = encoder_.Snapshot();
     status.odometry = odometry_.Snapshot();
+    status.ekf = ekf_.Snapshot();
     if (status.odometry.valid && now - status.odometry.sampled_at_us > Odometry::kMaximumGapUs) {
         status.odometry.valid = status.odometry.wheel_heading_valid = false;
         status.odometry.fault = "sample_gap";
+    }
+    if (status.ekf.valid && now - status.ekf.sampled_at_us > Odometry::kMaximumGapUs) {
+        status.ekf.valid = false;
+        status.ekf.fault = "sample_gap";
     }
     status.speed_pi_calibrated = SpeedPiReadyLocked();
     status.speed_pi_active = moving_ && status.speed_pi_calibrated &&

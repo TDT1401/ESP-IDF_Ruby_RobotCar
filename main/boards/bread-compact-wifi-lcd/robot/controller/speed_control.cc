@@ -52,7 +52,7 @@ double FrictionPwmPercent(CommandMode mode, bool heading_turn, bool left) {
     if (heading_turn)
         return left ? HEADING_TURN_LEFT_FRICTION_PWM_PERCENT
                     : HEADING_TURN_RIGHT_FRICTION_PWM_PERCENT;
-    if (mode == CommandMode::kDistanceDrive)
+    if (mode == CommandMode::kDistanceDrive || mode == CommandMode::kNavigate)
         return left ? DISTANCE_DRIVE_LEFT_FRICTION_PWM_PERCENT
                     : DISTANCE_DRIVE_RIGHT_FRICTION_PWM_PERCENT;
     return 0;

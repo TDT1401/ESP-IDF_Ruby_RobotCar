@@ -2,6 +2,10 @@
 
 #include "../sensors/mpu6050_imu.h"
 #include "application.h"
+#include "../../config.h"
+
+#include <cmath>
+#include <numbers>
 
 namespace ruby_robot {
 
@@ -76,23 +80,57 @@ void L298nController::Tick() {
     if (motion_ == Motion::kStop)
         return;
     const auto encoder = encoder_.Snapshot();
-    if (!command_interface_.UpdateMotion(odometry_.Snapshot(), encoder.left.rpm, encoder.right.rpm,
-                                         now)) {
+    const auto goal_pose = command_interface_.IsNavigation() ? NavigationPoseLocked()
+                                                              : odometry_.Snapshot();
+    if (!command_interface_.UpdateMotion(goal_pose, encoder.left.rpm, encoder.right.rpm, now)) {
         StopFailedMotionLocked(now, command_interface_.fault());
         return;
     }
-    if (command_interface_.mode() == CommandMode::kDistanceDrive &&
-        command_interface_.CompletionReady()) {
+    if (command_interface_.CompletionReady()) {
         FinishCommandLocked(now, true);
         return;
     }
+    if (command_interface_.IsNavigation() && sensor_valid_ &&
+        now - last_sensor_update_us_ <= kSensorStaleMs * 1000LL &&
+        measured_distance_cm_ <=
+            ScaleDistanceForSpeed(kDefaultObstacleDistanceCm, ActiveSpeedLocked())) {
+        FinishCommandLocked(now, false, "obstacle");
+        return;
+    }
     if (moving_) {
+        if (command_interface_.IsNavigation() && !command_interface_.IsNavigationTurn()) {
+            const auto imu = GetMpu6050Status();
+            heading_target_degrees_ = imu.heading_degrees +
+                                      command_interface_.NavigationHeadingErrorRad() * 180.0 /
+                                          std::numbers::pi;
+        }
         if (!UpdateHeadingPdLocked(now)) {
             StopFailedMotionLocked(now, heading_fault_);
             return;
         }
         if (heading_turn_complete_) {
-            FinishCommandLocked(now, true);
+            if (command_interface_.IsNavigationTurn()) {
+                StopOutputsLocked();
+                if (fault_ != ESP_OK) {
+                    FinishCommandLocked(now, false, "motor_error");
+                    return;
+                }
+                command_interface_.BeginNavigationDrive(now);
+                if (!PrepareMotionLocked(Motion::kForward)) {
+                    FinishCommandLocked(now, false, "motor_error");
+                    return;
+                }
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03
+                start_at_us_ = now + FC03_COAST_MS * 1000LL;
+#endif
+                heading_hold_active_ = true;
+                const auto imu = GetMpu6050Status();
+                heading_target_degrees_ = imu.heading_degrees +
+                                          command_interface_.NavigationHeadingErrorRad() * 180.0 /
+                                              std::numbers::pi;
+            } else {
+                FinishCommandLocked(now, true);
+            }
             return;
         }
         if (!UpdateSpeedPiLocked(now)) {

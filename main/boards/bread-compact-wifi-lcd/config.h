@@ -114,6 +114,9 @@
 // Calibrate in mm: 1000 * (right_m - left_m) / independent turn angle (radians).
 // Zero keeps encoder-only heading unavailable; gyro-based pose/distance still work.
 #define ODOMETRY_TRACK_WIDTH_MM 0.0
+// Enable only after a measured B_eff and independent EKF/odometry trials show
+// lower, stable pose error. Zero keeps navigation on the established odometry.
+#define NAVIGATION_USE_EKF 0
 // CSV pose/distance telemetry at 5 Hz, outside the motor timer task.
 #define ODOMETRY_DEBUG 0
 

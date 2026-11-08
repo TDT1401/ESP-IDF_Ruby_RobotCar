@@ -17,6 +17,7 @@ constexpr int64_t kStationaryResetUs = std::max<int64_t>(500000, FC03_COAST_MS *
 constexpr int64_t kStationaryResetUs = 500000;
 #endif
 static_assert(ODOMETRY_TRACK_WIDTH_MM >= 0);
+static_assert(NAVIGATION_USE_EKF == 0 || NAVIGATION_USE_EKF == 1);
 static_assert(DISTANCE_DRIVE_ACCELERATION_MPS2 > 0 && DISTANCE_DRIVE_DECELERATION_MPS2 > 0);
 static_assert(DISTANCE_DRIVE_MAX_SPEED_PERCENT >= DISTANCE_DRIVE_MIN_SPEED_PERCENT &&
               DISTANCE_DRIVE_MAX_SPEED_PERCENT <= 100);
@@ -67,10 +68,30 @@ bool L298nController::OdometryStationaryLocked(int64_t now_us) const {
 
 void L298nController::UpdateOdometryLocked(int64_t now_us) {
     const auto sample = ReadOdometrySampleLocked(now_us);
-    if (!odometry_.Snapshot().initialized && OdometryStationaryLocked(now_us))
+    if (!odometry_.Snapshot().initialized && OdometryStationaryLocked(now_us)) {
         odometry_.Reset(sample, ODOMETRY_TRACK_WIDTH_MM / 1000.0);
-    else
+        ekf_.Reset(sample, ODOMETRY_TRACK_WIDTH_MM / 1000.0);
+    } else {
         odometry_.Update(sample);
+        ekf_.Update(sample);
+    }
+}
+
+OdometrySnapshot L298nController::NavigationPoseLocked() const {
+    auto pose = odometry_.Snapshot();
+#if NAVIGATION_USE_EKF
+    const auto& ekf = ekf_.Snapshot();
+    if (!ekf.valid || ekf.variance_x_m2 + ekf.variance_y_m2 > 0.09 ||
+        ekf.variance_theta_rad2 > 0.12) {
+        pose.valid = false;
+        pose.fault = ekf.valid ? "ekf_uncertain" : ekf.fault;
+    } else {
+        pose.x_m = ekf.x_m;
+        pose.y_m = ekf.y_m;
+        pose.theta_rad = ekf.theta_rad;
+    }
+#endif
+    return pose;
 }
 
 esp_err_t L298nController::ResetOdometry() {
@@ -80,8 +101,10 @@ esp_err_t L298nController::ResetOdometry() {
     if (command_interface_.mode() != CommandMode::kIdle || web_control_.active() ||
         !OdometryStationaryLocked(now_us))
         return ESP_ERR_INVALID_STATE;
-    return odometry_.Reset(sample, ODOMETRY_TRACK_WIDTH_MM / 1000.0) ? ESP_OK
-                                                                     : ESP_ERR_INVALID_STATE;
+    if (!odometry_.Reset(sample, ODOMETRY_TRACK_WIDTH_MM / 1000.0))
+        return ESP_ERR_INVALID_STATE;
+    ekf_.Reset(sample, ODOMETRY_TRACK_WIDTH_MM / 1000.0);
+    return ESP_OK;
 }
 
 }  // namespace ruby_robot

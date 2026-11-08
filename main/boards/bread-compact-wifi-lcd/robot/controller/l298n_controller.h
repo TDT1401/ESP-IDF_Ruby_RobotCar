@@ -6,6 +6,7 @@
 
 #include "../commands/command_interface.h"
 #include "../sensors/fc03_encoder.h"
+#include "../domain/pose_ekf.h"
 
 // Board-lifetime controller; call once after the LCD backlight is initialized.
 void InitializeL298nController();
@@ -68,6 +69,7 @@ struct L298nMotorStatus {
     esp_err_t hardware_error;
     Fc03EncoderStatus encoder;
     ruby_robot::OdometrySnapshot odometry;
+    ruby_robot::EkfSnapshot ekf;
     const char* distance_move_state;
     int distance_move_target_cm;
     double distance_move_progress_cm;

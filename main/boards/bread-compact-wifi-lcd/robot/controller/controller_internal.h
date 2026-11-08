@@ -2,6 +2,7 @@
 
 #include "../commands/command_interface.h"
 #include "../domain/motion_policy.h"
+#include "../domain/pose_ekf.h"
 #include "../domain/web_control_session.h"
 #include "../drivers/l298n_motor_driver.h"
 #include "heading_pd.h"
@@ -52,6 +53,7 @@ private:
     WebControlSession web_control_;
     Fc03Encoder encoder_;
     Odometry odometry_;
+    PoseEkf ekf_;
     int64_t last_motor_stop_us_ = 0;
     SpeedPi left_speed_pi_;
     SpeedPi right_speed_pi_;
@@ -105,6 +107,7 @@ private:
     void FinishCommandLocked(int64_t now_us, bool completed, const char* fault = "control_error");
     OdometrySample ReadOdometrySampleLocked(int64_t now_us);
     void UpdateOdometryLocked(int64_t now_us);
+    OdometrySnapshot NavigationPoseLocked() const;
     bool OdometryStationaryLocked(int64_t now_us) const;
     static DistanceDriveLimits DistanceLimits();
     int ActiveSpeedLocked() const;
