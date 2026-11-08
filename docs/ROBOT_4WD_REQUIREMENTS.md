@@ -88,6 +88,8 @@ Lúc đầu dùng **gyro Z đã hiệu chuẩn bias** để cập nhật heading
 
 ## 3. Kế hoạch thực hiện theo Phase
 
+Phase 6 được hoãn đến cuối lộ trình vì chưa có linh kiện servo. Phase 7–8 dùng HC-SR04 cố định phía trước và cho xe dừng, xoay tại chỗ để quét; không phụ thuộc vào servo.
+
 ### **Phase 0 — Sensor & Hardware Validation** 🔴
 
 **Công việc:**
@@ -179,30 +181,19 @@ Lúc đầu dùng **gyro Z đã hiệu chuẩn bias** để cập nhật heading
 
 **Done khi:** Phép đo độc lập cho thấy EKF giảm sai số so với odometry trên cùng bài thử; xe đến nhiều tọa độ đích, gồm đích có cả `x` và `y` khác 0, trong ngưỡng đã đặt và báo rõ khi không thể hoàn thành. Encoder + IMU không đo vị trí tuyệt đối hoặc trực tiếp phát hiện mọi lần trượt bánh.
 
-### Phase 6 — Phần cứng servo quét HC-SR04 🔴
-
-**Mục tiêu:** Gắn HC-SR04 lên servo để đo khoảng cách theo ba hướng trái, giữa và phải; mỗi mẫu đo có hướng, thời điểm và trạng thái hợp lệ. Quyết định dừng và né vật cản thuộc Phase 7–8.
-
-- [ ] Chọn vị trí gắn và góc quét để cảm biến không bị thân xe che; ghi nhận vùng mù. Cấp nguồn servo phù hợp, nối GND chung; giữ mạch hạ mức tín hiệu ECHO của HC-SR04 xuống 3,3 V.
-- [ ] Chọn chân điều khiển servo không xung đột phần cứng hiện có và thêm biến thể board riêng; giữ nguyên chân và định danh của bản build hiện tại. Nếu dùng góc quét cho quyết định an toàn, cần phản hồi vị trí servo để phát hiện kẹt; lệnh PWM không xác nhận góc thực.
-- [ ] Điều khiển servo đến từng hướng, chờ ổn định rồi mới kích hoạt phép đo siêu âm; không chặn tác vụ motor hoặc âm thanh. Đánh dấu mẫu quá cũ, mất echo hoặc servo không đạt vị trí là không hợp lệ.
-
-**Test:** Đặt vật ở từng hướng tại khoảng cách đo độc lập, lặp lại toàn bộ chu kỳ quét và thử trường hợp không có echo. Kiểm tra nguồn, IMU, encoder, âm thanh và motor khi servo hoạt động.
-
-**Done khi:** Ba hướng cho kết quả lặp lại trong ngưỡng sai số đã đo, mẫu lỗi không được dùng làm khoảng cách an toàn, và đã ghi rõ độ phủ/vùng mù để Phase 7–8 sử dụng.
-
 ### Phase 7 — Obstacle Detection & Safety 🟢
 
-- [ ] Dùng các mẫu đo trái/giữa/phải từ Phase 6; xác định vùng phát hiện an toàn, độ mới bắt buộc của mẫu giữa và khoảng cách dừng theo tốc độ.
-- [ ] Khi gặp vật cản: giảm tốc → dừng → chờ đánh giá, không tự lao về phía trước.
-- [ ] Servo kẹt, dữ liệu quá cũ/không hợp lệ hoặc không đo được khoảng cách → phản ứng bảo thủ.
+- [ ] Dùng HC-SR04 cố định phía trước để phát hiện vật cản khi xe tiến; xác định vùng phát hiện an toàn, độ mới bắt buộc của mẫu trước và khoảng cách dừng theo tốc độ.
+- [ ] Khi gặp vật cản: giảm tốc → dừng hẳn → chờ đánh giá. Chỉ xoay tại chỗ để quét sau khi đã dừng; chờ ổn định rồi mới đo, ghi góc hướng và thời điểm của từng mẫu.
+- [ ] Dữ liệu quá cũ/không hợp lệ, mất echo hoặc không xác nhận được góc quay → dừng bảo thủ; không coi khoảng chưa quan sát là đường an toàn.
 
 ### Phase 8 — Autonomous Navigation 🟢
 
 - [ ] Thêm `BehaviorFSM`: `IDLE`, `NAVIGATING`, `STOPPED_FOR_OBSTACLE`, `SCANNING`, `AVOIDING`, `RETURNING_TO_PATH`, `GOAL_REACHED`, `BLOCKED`, `FAULT`.
 - [ ] Mở rộng điều hướng tọa độ của Phase 5 để xử lý vật cản mà vẫn giữ nguyên goal `(x_goal, y_goal)`.
-- [ ] Chọn / kiểm chứng thuật toán tránh vật cản trước khi triển khai. **Bug2 là ứng viên**; ba hướng quét chưa bảo đảm đủ dữ liệu để bám theo biên vật cản.
-- [ ] Khảo sát độ phủ và điểm mù của phép quét trái/giữa/phải; bổ sung cảm biến nếu chưa quan sát được hai bên hoặc biên vật cản đủ tin cậy.
+- [ ] Quét bằng cách xoay xe khi đứng yên, đánh giá khoảng trống cho toàn bộ thân xe trước khi chọn hướng; chỉ đi tiếp khi có mẫu phía trước mới và hợp lệ.
+- [ ] Chọn / kiểm chứng thuật toán tránh vật cản trước khi triển khai. **Bug2 là ứng viên**; phép quét bằng cách xoay xe chưa bảo đảm đủ dữ liệu để bám theo biên vật cản.
+- [ ] Khảo sát độ phủ và điểm mù của phép quét khi xoay xe; bổ sung cảm biến nếu chưa quan sát được hai bên hoặc biên vật cản đủ tin cậy.
 - [ ] Sau khi tránh, tái lập hướng / lộ trình đến **tọa độ mục tiêu gốc**.
 - [ ] Nếu không có đường tránh an toàn → `BLOCKED` và dừng.
 
@@ -234,6 +225,18 @@ Lúc đầu dùng **gyro Z đã hiệu chuẩn bias** để cập nhật heading
 - [ ] Khi pin thấp, xe tiếp cận chậm, xác nhận đã kết nối và đang sạc; dừng và báo lỗi nếu không nhận ra trạm hoặc không sạc được.
 
 **Done khi:** Xe tìm và ghép trạm lặp lại trong vùng thử, xác nhận trạng thái sạc bằng phép đo độc lập, không tiếp tục đẩy motor khi ghép trạm thất bại.
+
+### Phase 6 — Phần cứng servo quét HC-SR04 🔴 (hoãn đến khi có linh kiện)
+
+**Mục tiêu:** Gắn HC-SR04 lên servo để đo khoảng cách theo ba hướng trái, giữa và phải mà không cần xoay cả xe; mỗi mẫu đo có hướng, thời điểm và trạng thái hợp lệ. Đây là nâng cấp phần cứng cho cơ chế quét của Phase 7–8.
+
+- [ ] Chọn vị trí gắn và góc quét để cảm biến không bị thân xe che; ghi nhận vùng mù. Cấp nguồn servo phù hợp, nối GND chung; giữ mạch hạ mức tín hiệu ECHO của HC-SR04 xuống 3,3 V.
+- [ ] Chọn chân điều khiển servo không xung đột phần cứng hiện có và thêm biến thể board riêng; giữ nguyên chân và định danh của bản build hiện tại. Nếu dùng góc quét cho quyết định an toàn, cần phản hồi vị trí servo để phát hiện kẹt; lệnh PWM không xác nhận góc thực.
+- [ ] Điều khiển servo đến từng hướng, chờ ổn định rồi mới kích hoạt phép đo siêu âm; không chặn tác vụ motor hoặc âm thanh. Đánh dấu mẫu quá cũ, mất echo hoặc servo không đạt vị trí là không hợp lệ.
+
+**Test:** Đặt vật ở từng hướng tại khoảng cách đo độc lập, lặp lại toàn bộ chu kỳ quét và thử trường hợp không có echo. Kiểm tra nguồn, IMU, encoder, âm thanh và motor khi servo hoạt động.
+
+**Done khi:** Ba hướng cho kết quả lặp lại trong ngưỡng sai số đã đo, mẫu lỗi không được dùng làm khoảng cách an toàn, và đã ghi rõ độ phủ/vùng mù để Phase 7–8 sử dụng.
 
 ## 4. Quy trình thử nghiệm và dữ liệu bắt buộc
 
