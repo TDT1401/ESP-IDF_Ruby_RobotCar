@@ -197,10 +197,11 @@ Lúc đầu dùng **gyro Z đã hiệu chuẩn bias** để cập nhật heading
 
 **Công việc:**
 
+- [ ] Mở lại chế độ né vật cản có sẵn và nâng cấp nó lên.
 - [ ] Sử dụng HC-SR04 phát hiện vật cản phía trước.
 - [ ] Khi gặp vật cản ở 35cm: giảm tốc → dừng hoàn toàn ở 25cm.
-- [ ] Xây dựng `Environment Scanner`: xoay servo để quét trái, giữa, phải.
-- [ ] Sử dụng `rotate_angle()` với Motion Profile, giới hạn sai số góc và timeout.
+- [ ] xoay servo để quét trái, giữa, phải.
+- [ ] Sử dụng `rotate_angle()` với Motion Profile.
 - [ ] Lưu khoảng cách, góc thực tế từ IMU và thời điểm đo.
 - [ ] Kiểm tra dữ liệu cảm biến và xác định các hướng có khả năng di chuyển an toàn.
 - [ ] Nếu cảm biến gặp lỗi → `FAULT` và dừng.
@@ -209,80 +210,8 @@ Lúc đầu dùng **gyro Z đã hiệu chuẩn bias** để cập nhật heading
 
 - Robot phát hiện và dừng trước vật cản.
 - Quét được các hướng và có thể rẽ theo hướng trống để đi.
-- Có dữ liệu khoảng cách và góc đáng tin cậy để phục vụ Phase 8.
 
 ---
-
-### Phase 8 — Autonomous Navigation 🟢
-
-**Mục tiêu:** Robot tự tránh vật cản và tiếp tục di chuyển đến tọa độ đích ban đầu `(x_goal, y_goal)`.
-
-**Kiến trúc và kỹ thuật:**
-
-- **FSM:** Quản lý trạng thái và hành vi.
-- **Local Waypoint Navigation:** Chọn điểm trung gian để tránh vật cản.
-- **Navigator + EKF:** Điều hướng và ước lượng vị trí.
-- **Heading PD + Speed PI:** Điều khiển chuyển động.
-
-**Công việc:**
-
-- [ ] Xây dựng `BehaviorFSM` với các trạng thái:
-  - `IDLE`: Chờ lệnh.
-  - `NAVIGATING`: Di chuyển đến đích.
-  - `STOPPED_FOR_OBSTACLE`: Dừng khi gặp vật cản.
-  - `SCANNING`: Quét môi trường.
-  - `AVOIDING`: Di chuyển tránh vật cản.
-  - `RETURNING_TO_PATH`: Điều hướng lại đến đích ban đầu.
-  - `GOAL_REACHED`: Hoàn thành hành trình.
-  - `BLOCKED`: Không tìm được đường tránh an toàn.
-  - `FAULT`: Lỗi hệ thống.
-
-- [ ] Xây dựng `Local Waypoint Planner`:
-  - Nhận dữ liệu từ Environment Scanner.
-  - Đánh giá hướng di chuyển dựa trên khoảng cách và kích thước robot.
-  - Chọn Waypoint `(x_w, y_w)` khả thi.
-  - Không chọn đường đi qua vùng chưa được cảm biến xác nhận an toàn.
-
-- [ ] Sử dụng Navigator để di chuyển đến Waypoint.
-- [ ] Liên tục kiểm tra vật cản trong quá trình di chuyển.
-- [ ] Nếu tiếp tục gặp vật cản → dừng và lập kế hoạch lại.
-- [ ] Sau khi tránh vật cản → điều hướng đến `(x_goal, y_goal)` ban đầu.
-- [ ] Giới hạn thời gian, số lần thử và xử lý trạng thái `BLOCKED` / `FAULT`.
-
-**Done khi:**
-
-- Robot di chuyển đến mục tiêu, ví dụ `(10,0)`.
-- Phát hiện vật cản và tự tìm đường vòng trong môi trường thử đơn giản.
-- Không bị kẹt trong quá trình quay hoặc chuyển trạng thái.
-- Sau khi tránh vật cản, robot tiếp tục đến đích ban đầu.
-- Nếu không tìm được đường an toàn, robot dừng và báo `BLOCKED`.
-
-### Phase 9 — Tự kiểm tra trước khi chạy 🟢 (tùy chọn)
-
-- [ ] Trước khi nhận lệnh di chuyển, kiểm tra trạng thái encoder, IMU, bộ điều khiển motor và hiệu chuẩn cần thiết; từ chối lệnh và báo nguyên nhân khi dữ liệu không hợp lệ.
-
-**Done khi:** Xe phân biệt được trạng thái sẵn sàng và lỗi cảm biến/motor qua các bài thử, không tự di chuyển để kiểm tra khi chưa có lệnh, và mọi lỗi đều dẫn đến dừng an toàn.
-
-### Phase 10 — Dạy đường rồi chạy lại 🟢 (tùy chọn, phụ thuộc Phase 8)
-
-- [ ] Ghi một tuyến ngắn khi người dùng lái qua web dưới dạng các điểm hoặc đoạn đường tương đối; lưu và cho phép chạy lại bằng giọng nói hoặc Telegram.
-- [ ] Khi phát lại, dùng Navigator và cơ chế tránh vật cản; dừng nếu vị trí không hợp lệ, tuyến bị chặn hoặc người dùng hủy.
-
-**Done khi:** Xe chạy lại tuyến từ cùng vị trí xuất phát với sai số đã đo qua nhiều lần thử, báo được điểm thất bại và luôn chấp nhận lệnh dừng.
-
-### Phase 11 — Đi tuần theo lịch 🟢 (tùy chọn, phụ thuộc Phase 10)
-
-- [ ] Đặt lịch chạy tuyến đã lưu, đồng bộ thời gian, dừng ở các điểm kiểm tra để báo trạng thái rồi quay về điểm xuất phát.
-- [ ] Khi gặp vật cản không thể tránh, định vị không đáng tin cậy hoặc mất quyền điều khiển, dừng và thông báo qua kênh đã cấu hình.
-
-**Done khi:** Xe hoàn thành và quay về trên tuyến thử ở các thời điểm đã đặt qua nhiều lượt; không khởi hành khi điều kiện an toàn hoặc thời gian chưa hợp lệ.
-
-### Phase 12 — Tự về trạm sạc 🟡 (tùy chọn, cần phần cứng)
-
-- [ ] Bổ sung đo mức pin, mốc nhận biết trạm, tiếp điểm và mạch sạc phù hợp; xác định vị trí trạm và đường tiếp cận an toàn.
-- [ ] Khi pin thấp, xe tiếp cận chậm, xác nhận đã kết nối và đang sạc; dừng và báo lỗi nếu không nhận ra trạm hoặc không sạc được.
-
-**Done khi:** Xe tìm và ghép trạm lặp lại trong vùng thử, xác nhận trạng thái sạc bằng phép đo độc lập, không tiếp tục đẩy motor khi ghép trạm thất bại.
 
 ## 4. Quy trình thử nghiệm và dữ liệu bắt buộc
 
