@@ -4,6 +4,17 @@
 
 namespace ruby_robot {
 
+namespace {
+
+bool ValidWebDriveRequest(const L298nWebDriveRequest& request) {
+    return request.speed_percent >= 0 && request.speed_percent <= 100 &&
+           request.joystick_x >= -1000 && request.joystick_x <= 1000 &&
+           request.joystick_y >= -1000 && request.joystick_y <= 1000 &&
+           (request.joystick || (request.joystick_x == 0 && request.joystick_y == 0));
+}
+
+}  // namespace
+
 void L298nController::SetWebConnected(bool connected) {
     std::lock_guard lock(mutex_);
     web_control_.SetConnected(connected);
@@ -50,59 +61,37 @@ esp_err_t L298nController::BeginWebControl(uint32_t* session) {
     return ESP_OK;
 }
 
-esp_err_t L298nController::WebCommand(uint32_t session, uint32_t sequence, L298nWebCommand command,
-                                      int speed, bool proximity_warning_enabled, int joystick_x,
-                                      int joystick_y) {
-    if (speed < 0 || speed > 100 || joystick_x < -1000 || joystick_x > 1000 || joystick_y < -1000 ||
-        joystick_y > 1000)
+esp_err_t L298nController::ReleaseWebControl(const L298nWebDriveRequest& request) {
+    if (!ValidWebDriveRequest(request))
         return ESP_ERR_INVALID_ARG;
-    Motion motion;
-    switch (command) {
-        case L298nWebCommand::kForward:
-            motion = Motion::kForward;
-            break;
-        case L298nWebCommand::kBackward:
-            motion = Motion::kBackward;
-            break;
-        case L298nWebCommand::kLeft:
-            motion = Motion::kLeft;
-            break;
-        case L298nWebCommand::kRight:
-            motion = Motion::kRight;
-            break;
-        case L298nWebCommand::kJoystick:
-            motion = joystick_y > 0   ? Motion::kForward
-                     : joystick_y < 0 ? Motion::kBackward
-                     : joystick_x < 0 ? Motion::kLeft
-                     : joystick_x > 0 ? Motion::kRight
-                                      : Motion::kStop;
-            break;
-        case L298nWebCommand::kStop:
-        case L298nWebCommand::kRelease:
-            motion = Motion::kStop;
-            break;
-        default:
-            return ESP_ERR_INVALID_ARG;
-    }
     std::lock_guard lock(mutex_);
     const int64_t now = esp_timer_get_time();
-    if (!web_control_.Accept(session, sequence, now))
+    if (!web_control_.Accept(request.session, request.sequence, now))
         return ESP_ERR_INVALID_STATE;
-    proximity_warning_enabled_ = proximity_warning_enabled;
-    if (command == L298nWebCommand::kRelease) {
-        EndWebControlLocked();
-        return ESP_OK;
-    }
+    EndWebControlLocked();
+    return ESP_OK;
+}
+
+esp_err_t L298nController::WebCommand(const L298nWebDriveRequest& request, Motion motion) {
+    if (!ValidWebDriveRequest(request) ||
+        (request.joystick && JoystickMotion(request.joystick_x, request.joystick_y) != motion))
+        return ESP_ERR_INVALID_ARG;
+    std::lock_guard lock(mutex_);
+    const int64_t now = esp_timer_get_time();
+    if (!web_control_.Accept(request.session, request.sequence, now))
+        return ESP_ERR_INVALID_STATE;
+    proximity_warning_enabled_ = request.proximity_warning_enabled;
     if (!MotionAllowed() || fault_ != ESP_OK) {
         EndWebControlLocked();
         return ESP_ERR_INVALID_STATE;
     }
     web_control_.Refresh(now);
-    web_speed_percent_ = speed;
-    if (motion == Motion::kStop || speed == 0) {
+    web_speed_percent_ = request.speed_percent;
+    if (motion == Motion::kStop || request.speed_percent == 0) {
         StopLocked();
-    } else if (command == L298nWebCommand::kJoystick) {
-        const auto wheels = MixJoystick(joystick_x, joystick_y, speed);
+    } else if (request.joystick) {
+        const auto wheels =
+            MixJoystick(request.joystick_x, request.joystick_y, request.speed_percent);
         if (wheels.left == 0 && wheels.right == 0) {
             StopLocked();
         } else {

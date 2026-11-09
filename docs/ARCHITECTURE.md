@@ -40,7 +40,7 @@ main/boards/bread-compact-wifi-lcd/
 │   ├── commands/               Application Layer: chế độ và mục tiêu hai bánh
 │   │   ├── command_interface.* Chọn chế độ, request và trạng thái chung
 │   │   ├── manual_command.*    Mục tiêu hai bánh khi lái thủ công
-│   │   ├── time_drive_command.* Hướng, thời hạn và số liệu PI của TimeDrive
+│   │   ├── motion_goal_command.* Đích quãng đường và góc xoay
 │   │   └── wheel_command.h     Kiểu dữ liệu mục tiêu hai bánh
 │   ├── controller/             Application Layer: thực thi và an toàn
 │   │   ├── l298n_controller.*  Public API, khởi tạo và Read-only Snapshot
@@ -50,7 +50,8 @@ main/boards/bread-compact-wifi-lcd/
 │   │   ├── speed_control.cc    Heading PD và phản hồi Speed PI từ encoder
 │   │   ├── heading_pd.h        Thuật toán PD thuần, tạo mục tiêu RPM hai bên
 │   │   └── speed_pi.h          Thuật toán PI thuần, hiện đặt cạnh controller
-│   ├── domain/                 Domain Layer: motion_policy, WebControlSession
+│   ├── domain/                 Domain Layer: motion_policy, WebControlSession,
+│   │                           Navigator, Odometry và PoseEKF
 │   ├── drivers/                Infrastructure Layer: L298N GPIO/LEDC
 │   ├── sensors/                Infrastructure Layer: FC-03, HC-SR04, MPU6050
 │   └── tests/                  Kiểm tra web page và các kiểm tra board-local
@@ -81,34 +82,66 @@ dùng API controller và cùng tuân theo một đường dừng motor.
 
 ## 4. Command Interface
 
-`CommandInterface` chọn một chế độ tại một thời điểm: `kIdle` (không chạy),
-`kManual` (lái thủ công) hoặc `kTimeDrive` (chạy theo thời gian). Mỗi chế độ giữ
-logic riêng trong `manual_command.*` hoặc `time_drive_command.*`. Controller nhận
-`CommandRequest` chung, rồi lấy mục tiêu hai bánh và điều kiện kết thúc từ
-`CommandInterface`; controller không cần biết cách `TimeDrive` tính thời hạn.
+`CommandInterface` chọn một chế độ tại một thời điểm: `kIdle`, `kManual` (HUD),
+`kDistanceDrive` (tiến/lùi theo quãng đường), `kAngleTurn` (xoay theo góc) hoặc
+`kNavigate` (đi đến tọa độ tương đối). `manual_command.*` giữ mục tiêu hai bánh;
+`motion_goal_command.*` giữ đích quãng đường/góc; `domain/navigator.h` tính mục
+tiêu điều hướng. Controller nhận `CommandRequest`, kiểm tra quyền và cảm biến,
+rồi lấy mục tiêu hai bánh và điều kiện kết thúc từ `CommandInterface`.
 
-Web bỏ qua `speed_percent` khi xoay theo góc. Adapter chuyển thành giá trị `0`
-trong request; controller đổi thành `HEADING_TURN_AUTO_SPEED_PERCENT` trước khi
-validate và khởi chạy CommandInterface. Giá trị này là trần tốc độ, còn Heading
-PD và Speed PI tính tốc độ/PWM trong lúc xoay. Request có tốc độ cụ thể vẫn giữ
-nguyên hành vi, bao gồm lệnh Voice. Tiến/lùi vẫn yêu cầu tốc độ 10–100%.
+### Bốn API chuyển động dùng chung
 
-Luồng chung: **Command Interface → Controller → Heading PD (khi giữ hướng) → Speed PI/PWM → Motor Driver**.
-`kManual` dùng Speed PI khi đã cấu hình; `kTimeDrive` yêu cầu Speed PI sẵn sàng.
-TimeDrive yêu cầu heading IMU hợp lệ; Heading PD tạo RPM mục tiêu hai bên trước
-Speed PI. Với lệnh xoay, controller dừng khi góc và tốc độ quay ổn định trong
-ngưỡng cấu hình; nếu quá thời gian, lệnh báo lỗi.
-Khi thêm chế độ dùng cùng đường chạy motor, đặt trạng thái và luật riêng trong
-file mới, rồi thêm request và phần chọn chế độ vào `CommandInterface`. Chỉ sửa
-Controller nếu chế độ cần năng lực phần cứng hoặc quy tắc an toàn mới. Đường chạy
-hiện tại giữ một hướng trong suốt lệnh; chế độ cần đổi hướng khi đang chạy sẽ cần
-thêm cơ chế đổi hướng an toàn dùng chung trước khi nối vào.
+`controller/l298n_controller.h` là điểm gọi chuyển động của Web, Telegram, MCP
+và tính năng mới. Có đúng năm API hướng/dừng:
+
+| Chức năng | API |
+| --- | --- |
+| Tiến | `MoveL298nForward(L298nLinearRequest)` |
+| Lùi | `MoveL298nBackward(L298nLinearRequest)` |
+| Xoay trái | `TurnL298nLeft(L298nTurnRequest)` |
+| Xoay phải | `TurnL298nRight(L298nTurnRequest)` |
+| Dừng | `StopL298nMotor(&web_request)` hoặc `StopL298nMotor()` |
+
+`L298nLinearRequest` nhận `DistanceDriveRequest` hoặc `L298nWebDriveRequest`;
+`L298nTurnRequest` nhận `AngleTurnRequest` hoặc `L298nWebDriveRequest`. Với
+request theo mục tiêu, bốn hàm hướng nhận **độ lớn dương**: quãng đường 5–1000 cm,
+góc 5–180°. Controller tự đặt dấu theo hướng. Tốc độ `0` chọn mức mặc định của board
+(tiến/lùi) hoặc tốc độ xoay tự động. Lệnh bắt đầu bất đồng bộ; xem
+`GetL298nMotorStatus().command` để biết hoàn thành hay lỗi trước khi gửi bước tiếp.
+
+HUD dùng `L298nWebDriveRequest` sau `BeginL298nWebControl()`; mỗi lệnh mang
+session, sequence và tốc độ để gia hạn phiên 600 ms. Web chọn một trong bốn hướng
+từ nút hoặc trục joystick; controller dùng `JoystickMotion()` và `MixJoystick()`
+để trộn mục tiêu hai bánh. `StopL298nMotor(&web_request)` chỉ dừng bánh và giữ
+phiên; `StopL298nMotor()` dừng khẩn và hủy phiên;
+`ReleaseL298nWebControl()` trả phiên. Không dùng request theo mục tiêu để thay
+lệnh giữ nút HUD.
+
+Bốn API hướng đi qua một controller và đường `ApplyCommandLocked()` → Speed PI/PWM
+→ motor driver; API dừng dùng `StopLocked()` để ngắt motor. Speed PI cân tốc độ
+hai bánh khi FC-03 được cấu hình. Các lệnh theo
+quãng đường/góc còn dùng Heading PD và IMU để giữ hướng hoặc đạt góc; HUD không
+tự giữ một góc cố định khi người dùng đang điều khiển joystick. Controller giữ
+kiểm tra phiên, pose, cảm biến, thời hạn và lỗi motor theo từng loại request.
+
+Tính năng mới dùng năm API này cho chuyển động đã có và đặt logic phối hợp ở
+`commands/` hoặc adapter thích hợp; không tạo thêm hàm GPIO/PWM hay đường điều
+khiển motor riêng. Nếu cần mode mới hoặc đổi hướng trong lúc chạy, thêm luật
+chuyển mode và cơ chế đổi hướng an toàn dùng chung trong `CommandInterface` và
+controller trước khi sử dụng, thay vì gọi chồng hai lệnh đang hoạt động. Chế độ
+điều hướng nhiều bước vẫn dùng `StartL298nCommand(NavigateRequest)` để giữ một
+mode xuyên suốt; nó dùng cùng đường hiệu chỉnh và xuất motor của controller.
+
+Luồng chung: **Adapter → Controller → Command Interface → Heading PD (khi giữ hướng) → Speed PI/PWM → Motor Driver**.
+`kManual` dùng Speed PI khi đã cấu hình; các lệnh theo mục tiêu yêu cầu Speed PI
+và heading hợp lệ. Với lệnh xoay theo góc, controller dừng khi góc và tốc độ quay
+ổn định trong ngưỡng cấu hình; nếu quá thời gian, lệnh báo lỗi.
 
 ## 5. Control Flow and Safety
 
 Ví dụ khi người dùng kéo joystick trên Web:
 
-1. Web gửi hướng và tốc độ đến Controller.
+1. Web chọn một trong bốn API hướng và gửi session, sequence, tốc độ đến Controller.
 2. Controller kiểm tra phiên điều khiển còn hợp lệ; `CommandInterface` giữ tốc độ
    yêu cầu cho hai bánh.
 3. Speed PI điều chỉnh tốc độ theo FC-03 nếu đã cấu hình. Motor Driver xuất
@@ -121,10 +154,10 @@ Các quy tắc dừng phải luôn được giữ:
   phiên điều khiển Web.
 - Lệnh dừng khẩn dừng motor và hủy phiên. Nút Stop trong phiên Web chỉ dừng bánh;
   phiên vẫn còn để người dùng tiếp tục lái.
-- **TimeDrive** chạy tối đa **30 giây**. Dù bắt đầu từ Web hay Voice,
-  nó cần Wi-Fi và phải dừng khi mất Wi-Fi.
-- `TimeDrive` dùng dữ liệu FC-03 để kiểm tra Speed PI. HC-SR04 không tham gia
-  điều kiện bắt đầu hoặc dừng của chế độ này.
+- `kDistanceDrive` và `kNavigate` nhận thời hạn 1–120 giây trong request;
+  `kAngleTurn` có hạn 5 giây. Các lệnh theo mục tiêu cần Wi-Fi và dừng khi mất Wi-Fi.
+- `kDistanceDrive` cần FC-03, IMU và pose hợp lệ. HC-SR04 chỉ cảnh báo trong HUD
+  và dừng `kNavigate` khi phát hiện vật cản; nó không dừng lệnh đi theo quãng đường.
 - Lỗi xuất motor được ghi lại và xe không tự chạy lại.
 
 Controller tự kiểm tra thời hạn, không phụ thuộc việc trình duyệt còn mở. Callback
@@ -138,10 +171,12 @@ Khi thêm mode hoặc đầu vào mới:
 
 1. Ghi rõ nguồn yêu cầu, điều kiện vào/thoát, timeout, mất mạng, thiếu sensor,
    lỗi và stop.
-2. Thêm transition vào `CommandInterface` nếu có mode mới. Logic thuần đặt trong
-   `Domain Layer`; quyền cho phép chạy vẫn thuộc controller.
-3. Dùng public API và đường `ApplyCommandLocked` → Speed PI/PWM → driver. Không
-   gọi driver từ Web, Telegram, MCP, `robot_eye` hay sensor task.
+2. Dùng năm API hướng/dừng trong `l298n_controller.h` cho chuyển động sẵn có.
+   Chọn request theo mục tiêu hoặc HUD đúng với thời hạn và cách dừng cần thiết.
+3. Thêm transition vào `CommandInterface` nếu có mode mới. Logic thuần đặt trong
+   `Domain Layer`; quyền cho phép chạy vẫn thuộc controller. Giữ đường
+   `ApplyCommandLocked` → Speed PI/PWM → driver; không gọi driver từ Web,
+   Telegram, MCP, `robot_eye` hay sensor task.
 4. Cập nhật snapshot, adapter, cấu hình source và tài liệu nếu contract đổi.
 5. Kiểm tra chuyển mode, hết hạn, dừng, mất mạng, lỗi sensor/PI và mọi giao diện
    bị ảnh hưởng. Trước khi phát hành, build variant liên quan và thử dừng motor

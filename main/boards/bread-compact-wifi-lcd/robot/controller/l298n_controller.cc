@@ -287,12 +287,8 @@ esp_err_t BeginL298nWebControl(uint32_t* session) {
     return L298nController::Instance().BeginWebControl(session);
 }
 
-esp_err_t CommandL298nWebControl(uint32_t session, uint32_t sequence, L298nWebCommand command,
-                                 int speed_percent, bool proximity_warning_enabled, int joystick_x,
-                                 int joystick_y) {
-    return L298nController::Instance().WebCommand(session, sequence, command, speed_percent,
-                                                  proximity_warning_enabled, joystick_x,
-                                                  joystick_y);
+esp_err_t ReleaseL298nWebControl(const L298nWebDriveRequest& request) {
+    return L298nController::Instance().ReleaseWebControl(request);
 }
 
 void SetL298nWebConnected(bool connected) {
@@ -305,31 +301,50 @@ esp_err_t StartL298nCommand(const ruby_robot::CommandRequest& request) {
 
 L298nMotorStatus GetL298nMotorStatus() { return L298nController::Instance().Snapshot(); }
 
-esp_err_t SetL298nMotorSpeed(int) { return ESP_ERR_NOT_SUPPORTED; }
+namespace {
 
-esp_err_t MoveL298nDistance(bool forward, int distance_cm, const char* owner) {
-    if (distance_cm < ruby_robot::MotionGoalCommand::kMinDistanceCm ||
-        distance_cm > ruby_robot::MotionGoalCommand::kMaxDistanceCm || owner == nullptr)
+esp_err_t StartLinearMotion(const L298nLinearRequest& request, ruby_robot::Motion motion) {
+    if (const auto* web = std::get_if<L298nWebDriveRequest>(&request))
+        return L298nController::Instance().WebCommand(*web, motion);
+    auto goal = std::get<ruby_robot::DistanceDriveRequest>(request);
+    if (goal.distance_cm < ruby_robot::MotionGoalCommand::kMinDistanceCm ||
+        goal.distance_cm > ruby_robot::MotionGoalCommand::kMaxDistanceCm)
         return ESP_ERR_INVALID_ARG;
-    ruby_robot::DistanceDriveRequest request;
-    request.distance_cm = forward ? distance_cm : -distance_cm;
-    request.speed_percent = DISTANCE_DRIVE_MAX_SPEED_PERCENT;
-    if (std::strcmp(owner, "web") == 0)
-        request.owner = ruby_robot::DistanceDriveOwner::kWeb;
-    else if (std::strcmp(owner, "voice") == 0)
-        request.owner = ruby_robot::DistanceDriveOwner::kVoice;
-    else if (std::strcmp(owner, "telegram") == 0)
-        request.owner = ruby_robot::DistanceDriveOwner::kTelegram;
-    else
-        return ESP_ERR_INVALID_ARG;
-    return StartL298nCommand(request);
+    if (motion == ruby_robot::Motion::kBackward)
+        goal.distance_cm = -goal.distance_cm;
+    if (goal.speed_percent == 0)
+        goal.speed_percent = DISTANCE_DRIVE_MAX_SPEED_PERCENT;
+    return StartL298nCommand(goal);
 }
 
-esp_err_t RotateL298nAngle(int angle_degrees, ruby_robot::AngleTurnOwner owner) {
-    if (!((angle_degrees >= 5 && angle_degrees <= 180) ||
-          (angle_degrees <= -5 && angle_degrees >= -180)))
+esp_err_t StartTurnMotion(const L298nTurnRequest& request, ruby_robot::Motion motion) {
+    if (const auto* web = std::get_if<L298nWebDriveRequest>(&request))
+        return L298nController::Instance().WebCommand(*web, motion);
+    auto goal = std::get<ruby_robot::AngleTurnRequest>(request);
+    if (goal.angle_degrees < ruby_robot::MotionGoalCommand::kMinAngleDegrees ||
+        goal.angle_degrees > ruby_robot::MotionGoalCommand::kMaxAngleDegrees)
         return ESP_ERR_INVALID_ARG;
-    return StartL298nCommand(ruby_robot::AngleTurnRequest{angle_degrees, 0, owner});
+    if (motion == ruby_robot::Motion::kRight)
+        goal.angle_degrees = -goal.angle_degrees;
+    return StartL298nCommand(goal);
+}
+
+}  // namespace
+
+esp_err_t MoveL298nForward(const L298nLinearRequest& request) {
+    return StartLinearMotion(request, ruby_robot::Motion::kForward);
+}
+
+esp_err_t MoveL298nBackward(const L298nLinearRequest& request) {
+    return StartLinearMotion(request, ruby_robot::Motion::kBackward);
+}
+
+esp_err_t TurnL298nLeft(const L298nTurnRequest& request) {
+    return StartTurnMotion(request, ruby_robot::Motion::kLeft);
+}
+
+esp_err_t TurnL298nRight(const L298nTurnRequest& request) {
+    return StartTurnMotion(request, ruby_robot::Motion::kRight);
 }
 
 esp_err_t ResetL298nOdometry() { return L298nController::Instance().ResetOdometry(); }
@@ -342,4 +357,9 @@ esp_err_t SetL298nFollowDistance(int) { return ESP_ERR_NOT_SUPPORTED; }
 
 esp_err_t SetL298nObstacleDistance(int) { return ESP_ERR_NOT_SUPPORTED; }
 
-void StopL298nMotor() { L298nController::Instance().Stop(); }
+esp_err_t StopL298nMotor(const L298nWebDriveRequest* request) {
+    if (request != nullptr)
+        return L298nController::Instance().WebCommand(*request, ruby_robot::Motion::kStop);
+    L298nController::Instance().Stop();
+    return ESP_OK;
+}

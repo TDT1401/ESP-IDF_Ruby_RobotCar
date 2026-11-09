@@ -11,6 +11,18 @@ constexpr int kReferenceSpeedPercent = 50;
 
 enum class Motion { kStop, kForward, kBackward, kLeft, kRight };
 
+inline Motion JoystickMotion(int x, int y) {
+    if (y > 0)
+        return Motion::kForward;
+    if (y < 0)
+        return Motion::kBackward;
+    if (x < 0)
+        return Motion::kLeft;
+    if (x > 0)
+        return Motion::kRight;
+    return Motion::kStop;
+}
+
 struct WheelSpeeds {
     int left;
     int right;

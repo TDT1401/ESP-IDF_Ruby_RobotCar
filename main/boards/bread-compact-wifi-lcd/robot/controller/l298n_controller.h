@@ -3,6 +3,7 @@
 #include <esp_err.h>
 
 #include <cstdint>
+#include <variant>
 
 #include "../commands/command_interface.h"
 #include "../sensors/fc03_encoder.h"
@@ -14,29 +15,41 @@ void InitializeL298nController();
 // Legacy board callback; an active browser drive keeps its own safety deadline.
 void UpdateL298nEmotion(const char* emotion, bool speaking);
 
-enum class L298nWebCommand { kStop, kForward, kBackward, kLeft, kRight, kJoystick, kRelease };
+struct L298nWebDriveRequest {
+    uint32_t session;
+    uint32_t sequence;
+    int speed_percent;
+    bool proximity_warning_enabled;
+    bool joystick = false;
+    int joystick_x = 0;
+    int joystick_y = 0;
+};
+
+using L298nLinearRequest =
+    std::variant<ruby_robot::DistanceDriveRequest, L298nWebDriveRequest>;
+using L298nTurnRequest = std::variant<ruby_robot::AngleTurnRequest, L298nWebDriveRequest>;
 
 // Thread-safe board-local API. A single browser owns a renewable 600 ms session.
 // Expiry or network loss stops motors and invalidates the session.
 esp_err_t BeginL298nWebControl(uint32_t* session);
-esp_err_t CommandL298nWebControl(uint32_t session, uint32_t sequence, L298nWebCommand command,
-                                 int speed_percent, bool proximity_warning_enabled,
-                                 int joystick_x = 0, int joystick_y = 0);
+esp_err_t ReleaseL298nWebControl(const L298nWebDriveRequest& request);
 void SetL298nWebConnected(bool connected);
 
 // Start a command through the shared controller safety and motor path.
 esp_err_t StartL298nCommand(const ruby_robot::CommandRequest& request);
 
-// Compatibility entry point: only the web control command can set manual PWM.
-// Always returns ESP_ERR_NOT_SUPPORTED.
-esp_err_t SetL298nMotorSpeed(int speed_percent);
+// Five movement operations. A goal request is asynchronous; observe its result
+// through GetL298nMotorStatus(). A web request keeps the manual session alive.
+// Positive magnitudes: distance 5-1000 cm, angle 5-180 degrees. Goal speed 0
+// selects the board default for distance or automatic speed for turns.
+esp_err_t MoveL298nForward(const L298nLinearRequest& request);
+esp_err_t MoveL298nBackward(const L298nLinearRequest& request);
+esp_err_t TurnL298nLeft(const L298nTurnRequest& request);
+esp_err_t TurnL298nRight(const L298nTurnRequest& request);
+// With a web request, stop the wheels and retain its session. Without one,
+// stop immediately and revoke web control.
+esp_err_t StopL298nMotor(const L298nWebDriveRequest* request = nullptr);
 
-// Measured forward/backward move, 5-1000 cm, with the default speed/timeout.
-// Owner must be "web", "voice" or "telegram". Requires a valid pose and stationary wheels.
-esp_err_t MoveL298nDistance(bool forward, int distance_cm, const char* owner = "telegram");
-// Relative turn: positive left, negative right; uses the established heading PD/PI path.
-esp_err_t RotateL298nAngle(int angle_degrees,
-                           ruby_robot::AngleTurnOwner owner = ruby_robot::AngleTurnOwner::kVoice);
 // Establish (0,0,0) while idle and stationary, without resetting sensor calibration.
 esp_err_t ResetL298nOdometry();
 
@@ -46,7 +59,6 @@ esp_err_t SetL298nFollowMode(bool enabled);
 esp_err_t SetL298nObstacleAvoidance(bool enabled);
 esp_err_t SetL298nFollowDistance(int distance_cm);
 esp_err_t SetL298nObstacleDistance(int distance_cm);
-void StopL298nMotor();
 
 // Read-only snapshot. Speed PI is available after wheel RPM references are configured.
 struct L298nMotorStatus {

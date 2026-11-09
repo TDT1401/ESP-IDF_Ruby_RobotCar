@@ -41,8 +41,8 @@ public:
     void ScheduleProximityWarning();
     void SetWebConnected(bool connected);
     esp_err_t BeginWebControl(uint32_t* session);
-    esp_err_t WebCommand(uint32_t session, uint32_t sequence, L298nWebCommand command, int speed,
-                         bool proximity_warning_enabled, int joystick_x, int joystick_y);
+    esp_err_t WebCommand(const L298nWebDriveRequest& request, Motion motion);
+    esp_err_t ReleaseWebControl(const L298nWebDriveRequest& request);
     void UpdateEmotion(const char* emotion, bool speaking);
 
 private:

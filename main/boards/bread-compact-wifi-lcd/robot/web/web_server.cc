@@ -123,27 +123,38 @@ esp_err_t Command(httpd_req_t* req) {
                           !ReadSignedInteger(json.get(), "y", -1000, 1000, &joystick_y))))
         return Reply(req, "400 Bad Request", "{\"error\":\"Invalid command\"}");
 
-    L298nWebCommand command;
-    if (strcmp(direction->valuestring, "f") == 0)
-        command = L298nWebCommand::kForward;
-    else if (strcmp(direction->valuestring, "b") == 0)
-        command = L298nWebCommand::kBackward;
-    else if (strcmp(direction->valuestring, "l") == 0)
-        command = L298nWebCommand::kLeft;
-    else if (strcmp(direction->valuestring, "r") == 0)
-        command = L298nWebCommand::kRight;
-    else if (strcmp(direction->valuestring, "j") == 0)
-        command = L298nWebCommand::kJoystick;
-    else if (strcmp(direction->valuestring, "s") == 0)
-        command = L298nWebCommand::kStop;
-    else if (strcmp(direction->valuestring, "release") == 0)
-        command = L298nWebCommand::kRelease;
-    else
-        return Reply(req, "400 Bad Request", "{\"error\":\"Invalid direction\"}");
-
-    if (CommandL298nWebControl(session, sequence, command, static_cast<int>(speed),
-                               warning_enabled == nullptr || cJSON_IsTrue(warning_enabled),
-                               joystick_x, joystick_y) != ESP_OK)
+    const L298nWebDriveRequest drive{session,
+                                    sequence,
+                                    static_cast<int>(speed),
+                                    warning_enabled == nullptr || cJSON_IsTrue(warning_enabled),
+                                    is_joystick,
+                                    joystick_x,
+                                    joystick_y};
+    esp_err_t error;
+    if (strcmp(direction->valuestring, "release") == 0) {
+        error = ReleaseL298nWebControl(drive);
+    } else {
+        const char* drive_direction = direction->valuestring;
+        if (is_joystick)
+            drive_direction = joystick_y > 0   ? "f"
+                              : joystick_y < 0 ? "b"
+                              : joystick_x < 0 ? "l"
+                              : joystick_x > 0 ? "r"
+                                               : "s";
+        if (strcmp(drive_direction, "f") == 0)
+            error = MoveL298nForward(L298nLinearRequest{drive});
+        else if (strcmp(drive_direction, "b") == 0)
+            error = MoveL298nBackward(L298nLinearRequest{drive});
+        else if (strcmp(drive_direction, "l") == 0)
+            error = TurnL298nLeft(L298nTurnRequest{drive});
+        else if (strcmp(drive_direction, "r") == 0)
+            error = TurnL298nRight(L298nTurnRequest{drive});
+        else if (strcmp(drive_direction, "s") == 0)
+            error = StopL298nMotor(&drive);
+        else
+            return Reply(req, "400 Bad Request", "{\"error\":\"Invalid direction\"}");
+    }
+    if (error != ESP_OK)
         return Reply(req, "409 Conflict", "{\"error\":\"Session expired or motor unavailable\"}");
     return Reply(req, "200 OK", "{\"ok\":true}");
 }
@@ -214,8 +225,10 @@ esp_err_t Action(httpd_req_t* req) {
         if (cJSON_GetArraySize(json.get()) != 2 ||
             !ReadInteger(json.get(), "angle_degrees", 5, 180, &angle_degrees))
             return Reply(req, "400 Bad Request", "{\"error\":\"Invalid angle\"}");
-        const int angle = static_cast<int>(angle_degrees) * (turn_left ? 1 : -1);
-        if (RotateL298nAngle(angle, ruby_robot::AngleTurnOwner::kWeb) != ESP_OK)
+        const L298nTurnRequest request{ruby_robot::AngleTurnRequest{
+            static_cast<int>(angle_degrees), 0, ruby_robot::AngleTurnOwner::kWeb}};
+        const auto error = turn_left ? TurnL298nLeft(request) : TurnL298nRight(request);
+        if (error != ESP_OK)
             return Reply(req, "409 Conflict", "{\"error\":\"Controller unavailable\"}");
         return Reply(req, "200 OK", "{\"ok\":true}");
     }
@@ -228,8 +241,11 @@ esp_err_t Action(httpd_req_t* req) {
         !ReadInteger(json.get(), set_speed ? "speed" : "distance_cm", set_speed ? 0 : 5,
                      set_speed ? 100 : 1000, &value))
         return Reply(req, "400 Bad Request", "{\"error\":\"Invalid action\"}");
-    const auto error = set_speed ? ESP_ERR_NOT_SUPPORTED
-                                 : MoveL298nDistance(forward, static_cast<int>(value), "web");
+    if (set_speed)
+        return Reply(req, "501 Not Implemented", "{\"error\":\"Action is disabled\"}");
+    const L298nLinearRequest request{ruby_robot::DistanceDriveRequest{
+        static_cast<int>(value), 0, 60, ruby_robot::DistanceDriveOwner::kWeb}};
+    const auto error = forward ? MoveL298nForward(request) : MoveL298nBackward(request);
     if (error == ESP_ERR_NOT_SUPPORTED)
         return Reply(req, "501 Not Implemented", "{\"error\":\"Action is disabled\"}");
     if (error != ESP_OK)

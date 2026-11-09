@@ -460,7 +460,9 @@ private:
             Send(L298nTelegramText::kDistanceMoveUsage, true);
             return;
         }
-        const esp_err_t error = MoveL298nDistance(forward, distance_cm, "telegram");
+        const L298nLinearRequest request{ruby_robot::DistanceDriveRequest{
+            distance_cm, 0, 60, ruby_robot::DistanceDriveOwner::kTelegram}};
+        const esp_err_t error = forward ? MoveL298nForward(request) : MoveL298nBackward(request);
         Send(error == ESP_OK ? L298nTelegramText::kDistanceMoveAccepted
                              : L298nTelegramText::kDistanceMoveUnavailable,
              true);
