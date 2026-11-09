@@ -1,6 +1,7 @@
 #ifndef _BOARD_CONFIG_H_
 #define _BOARD_CONFIG_H_
 
+#include <sdkconfig.h>
 #include <driver/gpio.h>
 
 #define AUDIO_INPUT_SAMPLE_RATE 16000
@@ -28,12 +29,22 @@
 #define VOLUME_UP_BUTTON_GPIO GPIO_NUM_NC
 #define VOLUME_DOWN_BUTTON_GPIO GPIO_NUM_NC
 
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY
 #define DISPLAY_BACKLIGHT_PIN GPIO_NUM_42
 #define DISPLAY_MOSI_PIN GPIO_NUM_47
 #define DISPLAY_CLK_PIN GPIO_NUM_21
 #define DISPLAY_DC_PIN GPIO_NUM_40
 #define DISPLAY_RST_PIN GPIO_NUM_45
 #define DISPLAY_CS_PIN GPIO_NUM_41
+#else
+// No display attached: leave all former TFT pins available for future sensors.
+#define DISPLAY_BACKLIGHT_PIN GPIO_NUM_NC
+#define DISPLAY_MOSI_PIN GPIO_NUM_NC
+#define DISPLAY_CLK_PIN GPIO_NUM_NC
+#define DISPLAY_DC_PIN GPIO_NUM_NC
+#define DISPLAY_RST_PIN GPIO_NUM_NC
+#define DISPLAY_CS_PIN GPIO_NUM_NC
+#endif
 
 #define DISPLAY_WIDTH 240
 #define DISPLAY_HEIGHT 240

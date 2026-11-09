@@ -5,7 +5,7 @@
         {
             "name": "bread-compact-wifi-lcd",
             "sdkconfig_append": [
-                "CONFIG_LCD_ST7789_240X240=y",
+                "CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY=n",
                 "CONFIG_BREAD_COMPACT_WIFI_LCD_L298N=y",
                 "CONFIG_BREAD_COMPACT_WIFI_LCD_FC03=y"
             ]

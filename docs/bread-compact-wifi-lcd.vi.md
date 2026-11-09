@@ -32,16 +32,18 @@ Nối loa vào hai ngõ ra + và - của mạch khuếch đại, không nối v�
 
 ## Màn hình TFT SPI (ST7789 240×240)
 
+Bản build mặc định đang tạm tắt màn hình. Firmware không khởi tạo SPI/TFT hay đèn nền; GPIO21, GPIO40, GPIO41, GPIO42, GPIO45 và GPIO47 không bị phần màn hình cấu hình, để dành cho cảm biến sau này. Giữ lại sơ đồ dây dưới đây để lắp lại màn hình. Chạy `idf.py reconfigure` trước khi build trực tiếp để `sdkconfig` cũ nhận cờ màn hình mới. Muốn bật lại, đặt `CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY=y` trong `config.json` cho bản build chuẩn, hoặc bật tùy chọn này trong `idf.py menuconfig`.
+
 | Chân màn hình | Nối với |
 | ------------- | ------- |
 | GND           | GND     |
 | VCC           | 3V3     |
-| SCL           | GPIO21  |
-| SDA           | GPIO47  |
-| RES           | GPIO45  |
-| DC            | GPIO40  |
-| CS            | GPIO41  |
-| BLK           | GPIO42  |
+| SCL           |         |
+| SDA           |         |
+| RES           |         |
+| DC            |         |
+| CS            |         |
+| BLK           |         |
 
 Chân SCL và SDA trên màn hình mang xung nhịp và dữ liệu SPI.
 

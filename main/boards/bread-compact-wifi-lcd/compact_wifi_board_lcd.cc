@@ -1,12 +1,19 @@
+#include <sdkconfig.h>
+
 #include "application.h"
 #include "assets/lang_config.h"
 #include "button.h"
 #include "codecs/no_audio_codec.h"
 #include "config.h"
+#include "display/display.h"
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY
 #include "display/lcd_display.h"
+#endif
 #include "led/single_led.h"
 #include "mcp_server.h"
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY
 #include "robot_eye/robot_eye_display.h"
+#endif
 #include "system_reset.h"
 #include "wifi_board.h"
 #include "wifi_manager.h"
@@ -16,11 +23,15 @@
 #endif
 
 #include <driver/i2c_master.h>
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY
 #include <driver/spi_common.h>
+#endif
 #include <esp_err.h>
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY
 #include <esp_lcd_panel_io.h>
 #include <esp_lcd_panel_ops.h>
 #include <esp_lcd_panel_vendor.h>
+#endif
 #include <esp_log.h>
 #include <esp_system.h>
 #include <esp_timer.h>
@@ -34,6 +45,7 @@
 
 namespace {
 
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY
 RobotEyeWifiStatus ReadRobotEyeWifiStatus() {
     auto& wifi = WifiManager::GetInstance();
     RobotEyeWifiStatus status;
@@ -48,6 +60,7 @@ RobotEyeWifiStatus ReadRobotEyeWifiStatus() {
 bool ReadRobotEyeTemperature(float& temperature) {
     return Board::GetInstance().GetTemperature(temperature);
 }
+#endif
 
 }  // namespace
 
@@ -150,9 +163,10 @@ private:
 class CompactWifiBoardLCD : public WifiBoard {
 private:
     Button boot_button_;
-    LcdDisplay* display_;
+    Display* display_ = nullptr;
     bool wifi_reset_pending_ = false;
 
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY
     void InitializeSpi() {
         spi_bus_config_t buscfg = {};
         buscfg.mosi_io_num = DISPLAY_MOSI_PIN;
@@ -202,6 +216,7 @@ private:
                                        DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
                                        DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
     }
+#endif
 
     void InitializeButtons() {
         boot_button_.OnLongPress([this]() {
@@ -232,16 +247,24 @@ private:
 
 public:
     CompactWifiBoardLCD() : boot_button_(BOOT_BUTTON_GPIO, false, 3000) {
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY
         InitializeSpi();
         InitializeLcdDisplay();
         static_cast<RobotEyeDisplay*>(display_)->SetSystemStatusProviders(
             ReadRobotEyeWifiStatus, ReadRobotEyeTemperature);
+#endif
         InitializeButtons();
-        if (DISPLAY_BACKLIGHT_PIN != GPIO_NUM_NC) {
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY
+        if (GetBacklight() != nullptr) {
             GetBacklight()->RestoreBrightness();
         }
+#endif
 #ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N
-        InitializeRobotBoard(*static_cast<RobotEyeDisplay*>(display_));
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY
+        InitializeRobotBoard(static_cast<RobotEyeDisplay*>(display_));
+#else
+        InitializeRobotBoard(nullptr);
+#endif
 #endif
     }
 
@@ -266,7 +289,9 @@ public:
         return &audio_codec;
     }
 
-    virtual Display* GetDisplay() override { return display_; }
+    virtual Display* GetDisplay() override {
+        return display_ != nullptr ? display_ : Board::GetDisplay();
+    }
 
 #ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N
     void SetNetworkEventCallback(NetworkEventCallback callback) override {
@@ -286,8 +311,12 @@ public:
 #endif
 
     virtual void StartNetwork() override {
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY
         ESP_LOGI(TAG, "BOOT DIAGNOSTIC: %dx%d RobotEye firmware is running", DISPLAY_WIDTH,
                  DISPLAY_HEIGHT);
+#else
+        ESP_LOGI(TAG, "BOOT DIAGNOSTIC: display disabled");
+#endif
         xTaskCreate(
             [](void*) {
                 // The audio service is initialized shortly before networking.  Waiting here
@@ -295,8 +324,10 @@ public:
                 vTaskDelay(pdMS_TO_TICKS(1500));
                 Application::GetInstance().Schedule([]() {
                     ESP_LOGI(TAG, "Playing localized startup greeting");
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY
                     static_cast<RobotEyeDisplay*>(Board::GetInstance().GetDisplay())
                         ->ShowHappyFor(3500);
+#endif
                     Application::GetInstance().PlaySound(Lang::Sounds::OGG_WELCOME);
                 });
                 vTaskDelete(nullptr);
@@ -306,11 +337,12 @@ public:
     }
 
     virtual Backlight* GetBacklight() override {
-        if (DISPLAY_BACKLIGHT_PIN != GPIO_NUM_NC) {
-            static PwmBacklight backlight(DISPLAY_BACKLIGHT_PIN, DISPLAY_BACKLIGHT_OUTPUT_INVERT);
-            return &backlight;
-        }
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY
+        static PwmBacklight backlight(DISPLAY_BACKLIGHT_PIN, DISPLAY_BACKLIGHT_OUTPUT_INVERT);
+        return &backlight;
+#else
         return nullptr;
+#endif
     }
 };
 

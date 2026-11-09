@@ -173,9 +173,9 @@ Lúc đầu dùng **gyro Z đã hiệu chuẩn bias** để cập nhật heading
 
 **Mục tiêu:** Kết hợp Encoder + IMU để giảm sai số ước lượng `(x, y, θ)` và đưa xe đến tọa độ tương đối `(x_goal, y_goal)` trong hệ tọa độ lúc bắt đầu, khi không có vật cản.
 
-- [ ] Chạy EKF song song với odometry hiện tại; ghi pose, độ bất định và trạng thái hợp lệ.
-- [ ] So sánh sai số vị trí/góc của EKF và odometry bằng phép đo thực tế độc lập trên cùng bài chạy tiến, lùi và quay. Chỉ dùng pose EKF để điều khiển nếu kết quả tốt hơn và ổn định.
-- [ ] Thêm `Navigator` điều hướng đến `(x_goal, y_goal)` theo sai lệch tọa độ hiện tại, dùng bộ điều khiển tốc độ, hướng và quãng đường đã có. Dừng an toàn khi pose không hợp lệ, quá thời gian hoặc phát hiện vật cản.
+- [x] Chạy EKF song song với odometry hiện tại; ghi pose, độ bất định và trạng thái hợp lệ.
+- [x] So sánh sai số vị trí/góc của EKF và odometry bằng phép đo thực tế độc lập trên cùng bài chạy tiến, lùi và quay. Chỉ dùng pose EKF để điều khiển nếu kết quả tốt hơn và ổn định.
+- [x] Thêm `Navigator` điều hướng đến `(x_goal, y_goal)` theo sai lệch tọa độ hiện tại, dùng bộ điều khiển tốc độ, hướng và quãng đường đã có. Dừng an toàn khi pose không hợp lệ, quá thời gian hoặc phát hiện vật cản.
 
 **Done khi:** Phép đo độc lập cho thấy EKF giảm sai số so với odometry trên cùng bài thử; xe đến nhiều tọa độ đích, gồm đích có cả `x` và `y` khác 0, trong ngưỡng đã đặt và báo rõ khi không thể hoàn thành. Encoder + IMU không đo vị trí tuyệt đối hoặc trực tiếp phát hiện mọi lần trượt bánh.
 
@@ -193,22 +193,69 @@ Lúc đầu dùng **gyro Z đã hiệu chuẩn bias** để cập nhật heading
 
 ### Phase 7 — Obstacle Detection & Safety 🟢
 
-- [ ] Tích hợp quét servo với HC-SR04: điều khiển đến từng hướng, chờ ổn định rồi đo; gắn hướng, thời điểm và trạng thái hợp lệ cho từng mẫu mà không chặn tác vụ motor hoặc âm thanh.
-- [ ] Kiểm tra lặp lại ba hướng và trường hợp mất echo; xác định vùng phát hiện an toàn, độ mới bắt buộc của mẫu giữa và khoảng cách dừng theo tốc độ. Không dùng mẫu quá cũ, mất echo hoặc vị trí servo chưa xác nhận làm khoảng cách an toàn.
-- [ ] Khi gặp vật cản: giảm tốc → dừng → chờ đánh giá, không tự lao về phía trước.
-- [ ] Servo kẹt, dữ liệu quá cũ/không hợp lệ hoặc không đo được khoảng cách → phản ứng bảo thủ.
+**Mục tiêu:** Phát hiện vật cản, dừng an toàn và quét môi trường để xác định hướng di chuyển khả thi.
+
+**Công việc:**
+
+- [ ] Sử dụng HC-SR04 phát hiện vật cản phía trước.
+- [ ] Khi gặp vật cản ở 35cm: giảm tốc → dừng hoàn toàn ở 25cm.
+- [ ] Xây dựng `Environment Scanner`: xoay servo để quét trái, giữa, phải.
+- [ ] Sử dụng `rotate_angle()` với Motion Profile, giới hạn sai số góc và timeout.
+- [ ] Lưu khoảng cách, góc thực tế từ IMU và thời điểm đo.
+- [ ] Kiểm tra dữ liệu cảm biến và xác định các hướng có khả năng di chuyển an toàn.
+- [ ] Nếu cảm biến gặp lỗi → `FAULT` và dừng.
+
+**Done khi:**
+
+- Robot phát hiện và dừng trước vật cản.
+- Quét được các hướng và có thể rẽ theo hướng trống để đi.
+- Có dữ liệu khoảng cách và góc đáng tin cậy để phục vụ Phase 8.
+
+---
 
 ### Phase 8 — Autonomous Navigation 🟢
 
-- [ ] Thêm `BehaviorFSM`: `IDLE`, `NAVIGATING`, `STOPPED_FOR_OBSTACLE`, `SCANNING`, `AVOIDING`, `RETURNING_TO_PATH`, `GOAL_REACHED`, `BLOCKED`, `FAULT`.
-- [ ] Mở rộng điều hướng tọa độ của Phase 5 để xử lý vật cản mà vẫn giữ nguyên goal `(x_goal, y_goal)`.
-- [ ] Chọn / kiểm chứng thuật toán tránh vật cản trước khi triển khai. **Bug2 là ứng viên**; ba hướng quét chưa bảo đảm đủ dữ liệu để bám theo biên vật cản.
-- [ ] Khảo sát độ phủ và điểm mù của phép quét trái/giữa/phải; bổ sung cảm biến nếu chưa quan sát được hai bên hoặc biên vật cản đủ tin cậy.
+**Mục tiêu:** Robot tự tránh vật cản và tiếp tục di chuyển đến tọa độ đích ban đầu `(x_goal, y_goal)`.
 
-- [ ] Sau khi tránh, tái lập hướng / lộ trình đến **tọa độ mục tiêu gốc**.
-- [ ] Nếu không có đường tránh an toàn → `BLOCKED` và dừng.
+**Kiến trúc và kỹ thuật:**
 
-**Done khi:** Trong môi trường thử đơn giản, xe nhận goal, phát hiện một vật cản, chọn đường vòng khả thi và tiếp tục đến vùng đích; có khả năng dừng an toàn khi không tìm được đường.
+- **FSM:** Quản lý trạng thái và hành vi.
+- **Local Waypoint Navigation:** Chọn điểm trung gian để tránh vật cản.
+- **Navigator + EKF:** Điều hướng và ước lượng vị trí.
+- **Heading PD + Speed PI:** Điều khiển chuyển động.
+
+**Công việc:**
+
+- [ ] Xây dựng `BehaviorFSM` với các trạng thái:
+  - `IDLE`: Chờ lệnh.
+  - `NAVIGATING`: Di chuyển đến đích.
+  - `STOPPED_FOR_OBSTACLE`: Dừng khi gặp vật cản.
+  - `SCANNING`: Quét môi trường.
+  - `AVOIDING`: Di chuyển tránh vật cản.
+  - `RETURNING_TO_PATH`: Điều hướng lại đến đích ban đầu.
+  - `GOAL_REACHED`: Hoàn thành hành trình.
+  - `BLOCKED`: Không tìm được đường tránh an toàn.
+  - `FAULT`: Lỗi hệ thống.
+
+- [ ] Xây dựng `Local Waypoint Planner`:
+  - Nhận dữ liệu từ Environment Scanner.
+  - Đánh giá hướng di chuyển dựa trên khoảng cách và kích thước robot.
+  - Chọn Waypoint `(x_w, y_w)` khả thi.
+  - Không chọn đường đi qua vùng chưa được cảm biến xác nhận an toàn.
+
+- [ ] Sử dụng Navigator để di chuyển đến Waypoint.
+- [ ] Liên tục kiểm tra vật cản trong quá trình di chuyển.
+- [ ] Nếu tiếp tục gặp vật cản → dừng và lập kế hoạch lại.
+- [ ] Sau khi tránh vật cản → điều hướng đến `(x_goal, y_goal)` ban đầu.
+- [ ] Giới hạn thời gian, số lần thử và xử lý trạng thái `BLOCKED` / `FAULT`.
+
+**Done khi:**
+
+- Robot di chuyển đến mục tiêu, ví dụ `(10,0)`.
+- Phát hiện vật cản và tự tìm đường vòng trong môi trường thử đơn giản.
+- Không bị kẹt trong quá trình quay hoặc chuyển trạng thái.
+- Sau khi tránh vật cản, robot tiếp tục đến đích ban đầu.
+- Nếu không tìm được đường an toàn, robot dừng và báo `BLOCKED`.
 
 ### Phase 9 — Tự kiểm tra trước khi chạy 🟢 (tùy chọn)
 

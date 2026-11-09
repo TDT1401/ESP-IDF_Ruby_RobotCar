@@ -107,7 +107,7 @@ file(GLOB BOARD_SOURCES
 )
 list(APPEND SOURCES ${BOARD_SOURCES})
 
-if(CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI_LCD)
+if(CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI_LCD AND CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY)
     list(APPEND SOURCES
         "boards/bread-compact-wifi-lcd/robot_eye/robot_eye_animation.cc"
         "boards/bread-compact-wifi-lcd/robot_eye/robot_eye_display.cc"

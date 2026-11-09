@@ -1,8 +1,12 @@
 #include "robot_board.h"
 
+#include <sdkconfig.h>
+
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY
 #include <cstring>
 
 #include "../robot_eye/robot_eye_display.h"
+#endif
 #include "controller/l298n_controller.h"
 #include "mcp/mcp_tools.h"
 #include "telegram/telegram.h"
@@ -10,6 +14,7 @@
 
 namespace {
 
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY
 RobotDriveStatus ReadRobotDriveStatus() {
     const auto motor = GetL298nMotorStatus();
     RobotDriveStatus view;
@@ -26,15 +31,22 @@ RobotDriveStatus ReadRobotDriveStatus() {
     view.warning_sound_enabled = motor.warning_sound_enabled;
     return view;
 }
+#endif
 
 }  // namespace
 
-void InitializeRobotBoard(RobotEyeDisplay& display) {
+void InitializeRobotBoard(RobotEyeDisplay* display) {
     InitializeL298nController();
     RegisterL298nMcpTools();
     InitializeL298nTelegram(IsL298nWebServerRunning);
-    display.SetEmotionMotionCallback(UpdateL298nEmotion);
-    display.SetDriveStatusProvider(ReadRobotDriveStatus);
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY
+    if (display != nullptr) {
+        display->SetEmotionMotionCallback(UpdateL298nEmotion);
+        display->SetDriveStatusProvider(ReadRobotDriveStatus);
+    }
+#else
+    (void)display;
+#endif
 }
 
 void UpdateRobotNetwork(bool connected) {

@@ -32,16 +32,18 @@ Connect the speaker to the amplifier's + and - outputs, not to GND.
 
 ## SPI TFT display (ST7789 240×240)
 
+The default build temporarily disables the display. The firmware does not initialize the SPI panel or backlight, and GPIO21, GPIO40, GPIO41, GPIO42, GPIO45, and GPIO47 are left unconfigured by the display code. The wiring below is kept for when the screen is reattached. Run `idf.py reconfigure` before a direct build so an older local `sdkconfig` picks up the new display option. To reattach the screen later, set `CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY=y` in `config.json` for the canonical build, or enable the option in `idf.py menuconfig`.
+
 | Display pin | Connect to |
 | ----------- | ---------- |
 | GND         | GND        |
 | VCC         | 3V3        |
-| SCL         | GPIO21     |
-| SDA         | GPIO47     |
-| RES         | GPIO45     |
-| DC          | GPIO40     |
-| CS          | GPIO41     |
-| BLK         | GPIO42     |
+| SCL         |            |
+| SDA         |            |
+| RES         |            |
+| DC          |            |
+| CS          |            |
+| BLK         |            |
 
 The display pins labeled SCL and SDA carry SPI clock and data.
 

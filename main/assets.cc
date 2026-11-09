@@ -280,6 +280,15 @@ bool Assets::LvglStrategy::Apply(Assets* assets, bool refresh_display_theme) {
 
     Assets::LoadSrmodelsFromIndex(assets, root.get());
 
+    // NoDisplay does not initialize LVGL. Speech models still come from this
+    // partition, but font, emoji, and theme assets require a GUI display.
+    auto* display = Board::GetInstance().GetDisplay();
+    if (display == nullptr || !display->SupportsGuiOperations()) {
+        assets->DisableTextFontGlyphPush();
+        ESP_LOGI(TAG, "No GUI display; skipping LVGL assets");
+        return true;
+    }
+
     auto& theme_manager = LvglThemeManager::GetInstance();
     auto light_theme = theme_manager.GetTheme("light");
     auto dark_theme = theme_manager.GetTheme("dark");
