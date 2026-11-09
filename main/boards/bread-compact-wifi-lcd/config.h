@@ -137,6 +137,10 @@
 // HC-SR04 uses 5 V power. ECHO must be level-shifted to 3.3 V before this GPIO.
 #define HCSR04_TRIGGER_PIN GPIO_NUM_14
 #define HCSR04_ECHO_PIN GPIO_NUM_39
+
+// Keep the HC-SR04 aimed forward until servo scanning is added in Phase 7.
+#define HCSR04_SERVO_SIGNAL_PIN GPIO_NUM_6
+#define HCSR04_SERVO_CENTER_PULSE_US 1500
 #endif
 
 #ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03

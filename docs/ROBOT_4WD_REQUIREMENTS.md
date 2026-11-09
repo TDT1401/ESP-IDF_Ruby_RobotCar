@@ -183,9 +183,9 @@ Lúc đầu dùng **gyro Z đã hiệu chuẩn bias** để cập nhật heading
 
 **Mục tiêu:** Gắn HC-SR04 lên servo, kiểm tra độc lập nguồn, dây tín hiệu và chuyển động của servo. Firmware tiếp tục đo khoảng cách phía trước; tích hợp quét servo với phép đo HC-SR04 thuộc Phase 7.
 
-- [ ] Chọn vị trí gắn và góc quét để cảm biến không bị thân xe che; ghi nhận vùng mù. Cấp nguồn servo phù hợp, nối GND chung; giữ mạch hạ mức tín hiệu ECHO của HC-SR04 xuống 3,3 V.
-- [ ] Kiểm tra servo độc lập trên GPIO6 và xác định vị trí giữa hướng thẳng phía trước. Firmware hiện tại chưa phát PWM trên GPIO6; không dùng góc quét làm dữ liệu an toàn khi chưa có phản hồi vị trí servo.
-- [ ] Kiểm tra riêng HC-SR04 trên GPIO14/GPIO39 và mạch chia áp ECHO. Chỉ dùng số đo phía trước khi cảm biến thực sự hướng về phía trước.
+- [x] Chọn vị trí gắn và góc quét để cảm biến không bị thân xe che; ghi nhận vùng mù. Cấp nguồn servo phù hợp, nối GND chung; giữ mạch hạ mức tín hiệu ECHO của HC-SR04 xuống 3,3 V.
+- [x] Kiểm tra servo độc lập trên GPIO6 và xác định vị trí giữa hướng thẳng phía trước. Firmware hiện tại chưa phát PWM trên GPIO6; không dùng góc quét làm dữ liệu an toàn khi chưa có phản hồi vị trí servo.
+- [x] Kiểm tra riêng HC-SR04 trên GPIO14/GPIO39 và mạch chia áp ECHO. Chỉ dùng số đo phía trước khi cảm biến thực sự hướng về phía trước.
 
 **Test:** Kiểm tra chuyển động servo và phép đo HC-SR04 riêng rẽ; thử trường hợp không có echo. Kiểm tra nguồn, IMU, encoder, âm thanh và motor khi servo hoạt động.
 

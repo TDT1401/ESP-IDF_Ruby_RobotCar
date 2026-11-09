@@ -1,6 +1,7 @@
 #include "hcsr04_sensor.h"
 
 #include <driver/gpio.h>
+#include <driver/ledc.h>
 #include <esp_err.h>
 #include <esp_log.h>
 #include <esp_pm.h>
@@ -23,6 +24,35 @@ constexpr int kSamplePeriodMs = 60;  // HC-SR04 needs the previous acoustic burs
 constexpr int kEchoTimeoutMs = 35;
 constexpr int kMinEchoUs = 116;    // Approximately 2 cm.
 constexpr int kMaxEchoUs = 23200;  // Approximately 400 cm.
+constexpr auto kServoMode = LEDC_LOW_SPEED_MODE;
+constexpr auto kServoTimer = LEDC_TIMER_2;      // Backlight: 0; motors: 1.
+constexpr auto kServoChannel = LEDC_CHANNEL_3;  // Backlight: 0; motors: 1 and 2.
+constexpr int kServoPeriodUs = 20000;
+constexpr int kServoSettleMs = 300;
+
+void StartServoCenterPwm() {
+    static_assert(HCSR04_SERVO_CENTER_PULSE_US > 0 &&
+                  HCSR04_SERVO_CENTER_PULSE_US < kServoPeriodUs);
+
+    ledc_timer_config_t timer = {};
+    timer.speed_mode = kServoMode;
+    timer.timer_num = kServoTimer;
+    timer.duty_resolution = LEDC_TIMER_14_BIT;
+    timer.freq_hz = 50;
+    timer.clk_cfg = LEDC_AUTO_CLK;
+    ESP_ERROR_CHECK(ledc_timer_config(&timer));
+
+    ledc_channel_config_t channel = {};
+    channel.gpio_num = HCSR04_SERVO_SIGNAL_PIN;
+    channel.speed_mode = kServoMode;
+    channel.channel = kServoChannel;
+    channel.timer_sel = kServoTimer;
+    channel.duty =
+        (HCSR04_SERVO_CENTER_PULSE_US * (1U << 14) + kServoPeriodUs / 2) / kServoPeriodUs;
+    ESP_ERROR_CHECK(ledc_channel_config(&channel));
+    ESP_LOGI(kTag, "Servo center PWM on GPIO%d: %d us at 50 Hz", HCSR04_SERVO_SIGNAL_PIN,
+             HCSR04_SERVO_CENTER_PULSE_US);
+}
 
 class Hcsr04Sensor {
 public:
@@ -35,6 +65,7 @@ public:
         if (task_ != nullptr)
             return;
         callback_ = callback;
+        StartServoCenterPwm();
 
         gpio_config_t trigger = {};
         trigger.pin_bit_mask = 1ULL << HCSR04_TRIGGER_PIN;
@@ -146,6 +177,7 @@ private:
     }
 
     void Run() {
+        vTaskDelay(pdMS_TO_TICKS(kServoSettleMs));
         TickType_t next_sample = xTaskGetTickCount();
         while (true) {
 #ifdef CONFIG_PM_ENABLE
