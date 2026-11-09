@@ -9,11 +9,26 @@ bool ValidPose(const OdometrySnapshot& pose) {
     return pose.valid && std::isfinite(pose.x_m) && std::isfinite(pose.y_m) &&
            std::isfinite(pose.theta_rad) && std::isfinite(pose.centre_m);
 }
+
+bool ValidMagnitude(int value, int minimum, int maximum) {
+    return (value >= minimum && value <= maximum) ||
+           (value <= -minimum && value >= -maximum);
+}
+
+template <typename State>
+const char* StateName(State state, const char* running_name) {
+    switch (state) {
+        case State::kRunning: return running_name;
+        case State::kCompleted: return "completed";
+        case State::kInterrupted: return "interrupted";
+        case State::kFault: return "fault";
+        default: return "idle";
+    }
+}
 }  // namespace
 
 bool MotionGoalCommand::Valid(const DistanceDriveRequest& request) {
-    return ((request.distance_cm >= kMinDistanceCm && request.distance_cm <= kMaxDistanceCm) ||
-            (request.distance_cm <= -kMinDistanceCm && request.distance_cm >= -kMaxDistanceCm)) &&
+    return ValidMagnitude(request.distance_cm, kMinDistanceCm, kMaxDistanceCm) &&
            request.speed_percent >= 10 && request.speed_percent <= 100 &&
            request.timeout_seconds >= 1 && request.timeout_seconds <= kMaxTimeoutSeconds &&
            (request.owner == DistanceDriveOwner::kWeb ||
@@ -21,10 +36,7 @@ bool MotionGoalCommand::Valid(const DistanceDriveRequest& request) {
 }
 
 bool MotionGoalCommand::Valid(const AngleTurnRequest& request) {
-    return ((request.angle_degrees >= kMinAngleDegrees &&
-             request.angle_degrees <= kMaxAngleDegrees) ||
-            (request.angle_degrees <= -kMinAngleDegrees &&
-             request.angle_degrees >= -kMaxAngleDegrees)) &&
+    return ValidMagnitude(request.angle_degrees, kMinAngleDegrees, kMaxAngleDegrees) &&
            request.speed_percent >= kMinTurnSpeedPercent && request.speed_percent <= 100;
 }
 
@@ -147,24 +159,8 @@ WheelCommand MotionGoalCommand::turn_wheels() const {
 }
 
 AngleTurnSnapshot MotionGoalCommand::TurnSnapshot() const {
-    const char* state = "idle";
-    switch (turn_state_) {
-        case AngleTurnState::kRunning:
-            state = "running";
-            break;
-        case AngleTurnState::kCompleted:
-            state = "completed";
-            break;
-        case AngleTurnState::kInterrupted:
-            state = "interrupted";
-            break;
-        case AngleTurnState::kFault:
-            state = "fault";
-            break;
-        default:
-            break;
-    }
-    return {state, turn_request_.owner == AngleTurnOwner::kVoice ? "voice" : "web",
+    return {StateName(turn_state_, "running"),
+            turn_request_.owner == AngleTurnOwner::kVoice ? "voice" : "web",
             MotionName(turn_direction()), turn_request_.angle_degrees, turn_request_.speed_percent};
 }
 
@@ -182,23 +178,6 @@ WheelCommand MotionGoalCommand::wheels() const {
 }
 
 DistanceDriveSnapshot MotionGoalCommand::Snapshot(int64_t now_us) const {
-    const char* state = "idle";
-    switch (state_) {
-        case DistanceDriveState::kRunning:
-            state = "moving";
-            break;
-        case DistanceDriveState::kCompleted:
-            state = "completed";
-            break;
-        case DistanceDriveState::kInterrupted:
-            state = "interrupted";
-            break;
-        case DistanceDriveState::kFault:
-            state = "fault";
-            break;
-        default:
-            break;
-    }
     const int64_t elapsed =
         state_ == DistanceDriveState::kIdle
             ? 0
@@ -206,8 +185,8 @@ DistanceDriveSnapshot MotionGoalCommand::Snapshot(int64_t now_us) const {
     const int elapsed_ms =
         static_cast<int>(std::clamp<int64_t>(elapsed / 1000, 0, request_.timeout_seconds * 1000));
     return {
-        state,
-        OwnerName(request_.owner),
+        StateName(state_, "moving"),
+        request_.owner == DistanceDriveOwner::kVoice ? "voice" : "web",
         fault_,
         request_.speed_percent,
         request_.timeout_seconds,
@@ -217,15 +196,6 @@ DistanceDriveSnapshot MotionGoalCommand::Snapshot(int64_t now_us) const {
         progress_m_,
         request_.distance_cm / 100.0 - progress_m_,
         position_error_m_};
-}
-
-const char* MotionGoalCommand::OwnerName(DistanceDriveOwner owner) {
-    switch (owner) {
-        case DistanceDriveOwner::kVoice:
-            return "voice";
-        default:
-            return "web";
-    }
 }
 
 }  // namespace ruby_robot

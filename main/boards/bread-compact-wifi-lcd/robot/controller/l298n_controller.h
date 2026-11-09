@@ -53,13 +53,6 @@ esp_err_t StopL298nMotor(const L298nWebDriveRequest* request = nullptr);
 // Establish (0,0,0) while idle and stationary, without resetting sensor calibration.
 esp_err_t ResetL298nOdometry();
 
-// Compatibility entry points: autonomous modes and their settings are disabled.
-// Always return ESP_ERR_NOT_SUPPORTED.
-esp_err_t SetL298nFollowMode(bool enabled);
-esp_err_t SetL298nObstacleAvoidance(bool enabled);
-esp_err_t SetL298nFollowDistance(int distance_cm);
-esp_err_t SetL298nObstacleDistance(int distance_cm);
-
 // Read-only snapshot. Speed PI is available after wheel RPM references are configured.
 struct L298nMotorStatus {
     ruby_robot::CommandSnapshot command;
@@ -69,15 +62,11 @@ struct L298nMotorStatus {
     bool moving;
     bool pending;
     bool web_manual;
-    const char* autonomy_mode;
-    int follow_distance_cm;
     int obstacle_distance_cm;
-    int follow_target_effective_cm;
     int obstacle_stop_effective_cm;
     int web_warning_effective_cm;
     int measured_distance_cm;
     bool distance_valid;
-    bool autonomy_blocked;
     esp_err_t hardware_error;
     Fc03EncoderStatus encoder;
     ruby_robot::OdometrySnapshot odometry;

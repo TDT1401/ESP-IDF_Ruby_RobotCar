@@ -137,18 +137,14 @@ void L298nController::UpdateEmotion(const char* emotion, bool speaking) {
     }
 }
 
-void L298nController::ReleaseWebSleepLockLocked() {
+void L298nController::EndWebControlLocked() {
+    web_control_.Revoke();
 #ifdef CONFIG_PM_ENABLE
     if (web_sleep_lock_held_) {
         Check(esp_pm_lock_release(web_sleep_lock_));
         web_sleep_lock_held_ = false;
     }
 #endif
-}
-
-void L298nController::EndWebControlLocked() {
-    web_control_.Revoke();
-    ReleaseWebSleepLockLocked();
     StopLocked();
     command_interface_.ReleaseManual();
 }

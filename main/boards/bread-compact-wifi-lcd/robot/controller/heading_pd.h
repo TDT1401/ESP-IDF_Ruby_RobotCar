@@ -7,7 +7,6 @@ namespace ruby_robot {
 struct HeadingPdTargets {
     double left_rpm;
     double right_rpm;
-    double error_degrees;
     double correction_rpm;
 };
 
@@ -21,7 +20,7 @@ public:
         const double error = target_degrees - measured_degrees;
         const double correction = std::clamp(kp * error - kd * yaw_rate_dps,
                                              -maximum_correction_rpm, maximum_correction_rpm);
-        return {base_signed_rpm - correction, base_signed_rpm + correction, error, correction};
+        return {base_signed_rpm - correction, base_signed_rpm + correction, correction};
     }
 };
 

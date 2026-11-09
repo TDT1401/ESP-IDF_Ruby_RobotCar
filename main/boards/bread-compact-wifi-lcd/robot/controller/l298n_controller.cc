@@ -167,10 +167,7 @@ L298nMotorStatus L298nController::Snapshot() {
     status.moving = moving_;
     status.pending = motion_ != Motion::kStop && !moving_;
     status.web_manual = web_control_.active();
-    status.autonomy_mode = "manual";
-    status.follow_distance_cm = kDefaultFollowDistanceCm;
     status.obstacle_distance_cm = kDefaultObstacleDistanceCm;
-    status.follow_target_effective_cm = kDefaultFollowDistanceCm;
     status.obstacle_stop_effective_cm = kDefaultObstacleDistanceCm;
     status.web_warning_effective_cm =
         ScaleDistanceForSpeed(kDefaultObstacleDistanceCm, web_speed_percent_);
@@ -348,14 +345,6 @@ esp_err_t TurnL298nRight(const L298nTurnRequest& request) {
 }
 
 esp_err_t ResetL298nOdometry() { return L298nController::Instance().ResetOdometry(); }
-
-esp_err_t SetL298nFollowMode(bool) { return ESP_ERR_NOT_SUPPORTED; }
-
-esp_err_t SetL298nObstacleAvoidance(bool) { return ESP_ERR_NOT_SUPPORTED; }
-
-esp_err_t SetL298nFollowDistance(int) { return ESP_ERR_NOT_SUPPORTED; }
-
-esp_err_t SetL298nObstacleDistance(int) { return ESP_ERR_NOT_SUPPORTED; }
 
 esp_err_t StopL298nMotor(const L298nWebDriveRequest* request) {
     if (request != nullptr)

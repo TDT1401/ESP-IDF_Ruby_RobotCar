@@ -24,7 +24,6 @@ constexpr int64_t kTickUs = 10000;
 constexpr int64_t kSpeedPiPeriodUs = 100000;
 constexpr int64_t kHeadingPdPeriodUs = 50000;
 constexpr int64_t kTurnSettleUs = 150000;
-constexpr int kDefaultFollowDistanceCm = 30;
 constexpr int kDefaultObstacleDistanceCm = 20;
 constexpr int kSensorStaleMs = 250;
 constexpr int64_t kProximityWarningPeriodUs = 700000;
@@ -100,7 +99,6 @@ private:
     L298nController();
     ~L298nController();
     bool Check(esp_err_t error);
-    void ReleaseWebSleepLockLocked();
     void EndWebControlLocked();
     void StopLocked();
     void StopFailedMotionLocked(int64_t now_us, const char* fault = "control_error");
@@ -125,6 +123,7 @@ private:
     bool SpeedPiReadyLocked() const;
     bool ApplyWebDriveLocked(int left, int right);
     bool ApplyDirectionLocked();
+    bool ProximityWarningAllowedLocked(int64_t now_us) const;
 };
 
 }  // namespace ruby_robot

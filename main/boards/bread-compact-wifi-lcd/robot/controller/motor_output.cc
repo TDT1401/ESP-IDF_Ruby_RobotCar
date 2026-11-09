@@ -5,7 +5,8 @@
 namespace ruby_robot {
 
 void L298nController::StopOutputsLocked() {
-    last_motor_stop_us_ = esp_timer_get_time();
+    const int64_t now_us = esp_timer_get_time();
+    last_motor_stop_us_ = now_us;
     SetMpu6050MotorActive(false);
     heading_hold_active_ = false;
     heading_turn_active_ = false;
@@ -22,7 +23,7 @@ void L298nController::StopOutputsLocked() {
     last_speed_pi_us_ = 0;
     left_speed_pi_.Reset();
     right_speed_pi_.Reset();
-    encoder_.SetDrive(0, 0, esp_timer_get_time());
+    encoder_.SetDrive(0, 0, now_us);
     Check(driver_.Stop());
     motion_ = Motion::kStop;
     moving_ = false;

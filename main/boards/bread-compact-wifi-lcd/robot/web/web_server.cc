@@ -231,21 +231,15 @@ esp_err_t Action(httpd_req_t* req) {
         return Reply(req, "200 OK", "{\"ok\":true}");
     }
 
-    const bool set_speed = strcmp(action->valuestring, "speed") == 0;
     const bool forward = strcmp(action->valuestring, "forward") == 0;
     const bool backward = strcmp(action->valuestring, "backward") == 0;
     uint32_t value = 0;
-    if ((!set_speed && !forward && !backward) || cJSON_GetArraySize(json.get()) != 2 ||
-        !ReadInteger(json.get(), set_speed ? "speed" : "distance_cm", set_speed ? 0 : 5,
-                     set_speed ? 100 : 1000, &value))
+    if ((!forward && !backward) || cJSON_GetArraySize(json.get()) != 2 ||
+        !ReadInteger(json.get(), "distance_cm", 5, 1000, &value))
         return Reply(req, "400 Bad Request", "{\"error\":\"Invalid action\"}");
-    if (set_speed)
-        return Reply(req, "501 Not Implemented", "{\"error\":\"Action is disabled\"}");
     const L298nLinearRequest request{ruby_robot::DistanceDriveRequest{
         static_cast<int>(value), 0, 60, ruby_robot::DistanceDriveOwner::kWeb}};
     const auto error = forward ? MoveL298nForward(request) : MoveL298nBackward(request);
-    if (error == ESP_ERR_NOT_SUPPORTED)
-        return Reply(req, "501 Not Implemented", "{\"error\":\"Action is disabled\"}");
     if (error != ESP_OK)
         return Reply(req, "409 Conflict", "{\"error\":\"Controller unavailable\"}");
     return Reply(req, "200 OK", "{\"ok\":true}");
@@ -272,13 +266,9 @@ esp_err_t Status(httpd_req_t* req) {
         !cJSON_AddStringToObject(json.get(), "control_mode",
                                  motor.speed_pi_active ? "speed_pi" : "manual_pwm") ||
         !cJSON_AddNumberToObject(json.get(), "distance_cm", motor.measured_distance_cm) ||
-        !cJSON_AddStringToObject(json.get(), "autonomy_mode", motor.autonomy_mode) ||
         !cJSON_AddStringToObject(json.get(), "control_owner", motor.control_owner) ||
         !cJSON_AddBoolToObject(json.get(), "warning_sound_enabled", motor.warning_sound_enabled) ||
-        !cJSON_AddNumberToObject(json.get(), "follow_distance_cm", motor.follow_distance_cm) ||
         !cJSON_AddNumberToObject(json.get(), "obstacle_distance_cm", motor.obstacle_distance_cm) ||
-        !cJSON_AddNumberToObject(json.get(), "follow_target_cm",
-                                 motor.follow_target_effective_cm) ||
         !cJSON_AddNumberToObject(json.get(), "obstacle_stop_cm",
                                  motor.obstacle_stop_effective_cm) ||
         !cJSON_AddNumberToObject(json.get(), "warning_distance_cm",
@@ -286,7 +276,6 @@ esp_err_t Status(httpd_req_t* req) {
         !cJSON_AddBoolToObject(json.get(), "moving", motor.moving) ||
         !cJSON_AddStringToObject(json.get(), "motion", motor.motion) ||
         !cJSON_AddNumberToObject(json.get(), "speed_percent", motor.active_speed_percent) ||
-        !cJSON_AddNumberToObject(json.get(), "saved_speed_percent", motor.speed_percent) ||
         !cJSON_AddNumberToObject(json.get(), "uptime_seconds", esp_timer_get_time() / 1000000) ||
         !cJSON_AddBoolToObject(json.get(), "wifi_connected", wifi.IsConnected()) ||
         !cJSON_AddNumberToObject(json.get(), "wifi_rssi", wifi.GetRssi()) ||
@@ -336,71 +325,13 @@ esp_err_t Status(httpd_req_t* req) {
     return Reply(req, "200 OK", body.get());
 }
 
-esp_err_t Autonomy(httpd_req_t* req) {
-    char body[96];
-    if (!IsControlRequest(req) || req->content_len == 0 || req->content_len >= sizeof(body)) {
-        Reply(req, "400 Bad Request", "{\"error\":\"Invalid request\"}");
-        return ESP_FAIL;
-    }
-    const size_t received = ReceiveBody(req, body);
-    if (received == 0)
-        return ESP_FAIL;
-    if (memchr(body, '\0', received) != nullptr)
-        return Reply(req, "400 Bad Request", "{\"error\":\"Invalid JSON\"}");
-
-    using Json = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
-    Json json(cJSON_ParseWithLengthOpts(body, received + 1, nullptr, true), cJSON_Delete);
-    const auto* mode = cJSON_GetObjectItemCaseSensitive(json.get(), "mode");
-    const auto* enabled = cJSON_GetObjectItemCaseSensitive(json.get(), "enabled");
-    if (!cJSON_IsObject(json.get()) || cJSON_GetArraySize(json.get()) != 2 ||
-        !cJSON_IsString(mode) || !cJSON_IsBool(enabled))
-        return Reply(req, "400 Bad Request", "{\"error\":\"Invalid autonomy command\"}");
-
-    esp_err_t error = ESP_ERR_INVALID_ARG;
-    if (strcmp(mode->valuestring, "follow") == 0)
-        error = SetL298nFollowMode(cJSON_IsTrue(enabled));
-    else if (strcmp(mode->valuestring, "avoid") == 0)
-        error = SetL298nObstacleAvoidance(cJSON_IsTrue(enabled));
-    else
-        return Reply(req, "400 Bad Request", "{\"error\":\"Invalid autonomy mode\"}");
-    if (error != ESP_OK)
-        return Reply(req, "501 Not Implemented", "{\"error\":\"Autonomous modes are disabled\"}");
-    return Reply(req, "200 OK", "{\"ok\":true}");
-}
-
-esp_err_t Configure(httpd_req_t* req) {
-    char body[96];
-    if (!IsControlRequest(req) || req->content_len == 0 || req->content_len >= sizeof(body)) {
-        Reply(req, "400 Bad Request", "{\"error\":\"Invalid request\"}");
-        return ESP_FAIL;
-    }
-    const size_t received = ReceiveBody(req, body);
-    if (received == 0)
-        return ESP_FAIL;
-    if (memchr(body, '\0', received) != nullptr)
-        return Reply(req, "400 Bad Request", "{\"error\":\"Invalid JSON\"}");
-
-    using Json = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
-    Json json(cJSON_ParseWithLengthOpts(body, received + 1, nullptr, true), cJSON_Delete);
-    uint32_t follow_distance, obstacle_distance;
-    if (!cJSON_IsObject(json.get()) || cJSON_GetArraySize(json.get()) != 2 ||
-        !ReadInteger(json.get(), "follow_distance_cm", 10, 200, &follow_distance) ||
-        !ReadInteger(json.get(), "obstacle_distance_cm", 10, 100, &obstacle_distance))
-        return Reply(req, "400 Bad Request", "{\"error\":\"Invalid configuration\"}");
-    if (SetL298nFollowDistance(static_cast<int>(follow_distance)) != ESP_OK ||
-        SetL298nObstacleDistance(static_cast<int>(obstacle_distance)) != ESP_OK)
-        return Reply(req, "501 Not Implemented",
-                     "{\"error\":\"Autonomous settings are disabled\"}");
-    return Reply(req, "200 OK", "{\"ok\":true}");
-}
-
 esp_err_t StartServer() {
     if (server != nullptr)
         return ESP_OK;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.server_port = 8080;  // Wi-Fi provisioning keeps port 80.
     config.ctrl_port = 32769;
-    config.max_uri_handlers = 9;
+    config.max_uri_handlers = 5;
     config.max_open_sockets = 2;
     config.lru_purge_enable = true;
     config.stack_size = 6144;
@@ -417,8 +348,6 @@ esp_err_t StartServer() {
         {.uri = "/api/command", .method = HTTP_POST, .handler = Command, .user_ctx = nullptr},
         {.uri = "/api/action", .method = HTTP_POST, .handler = Action, .user_ctx = nullptr},
         {.uri = "/api/status", .method = HTTP_GET, .handler = Status, .user_ctx = nullptr},
-        {.uri = "/api/config", .method = HTTP_POST, .handler = Configure, .user_ctx = nullptr},
-        {.uri = "/api/autonomy", .method = HTTP_POST, .handler = Autonomy, .user_ctx = nullptr},
     };
     for (const auto& route : routes) {
         error = httpd_register_uri_handler(server, &route);

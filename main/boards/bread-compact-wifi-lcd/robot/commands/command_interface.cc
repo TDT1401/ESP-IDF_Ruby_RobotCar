@@ -5,18 +5,23 @@ namespace ruby_robot {
 bool CommandInterface::BeginManual() {
     if (mode_ != CommandMode::kIdle)
         return false;
-    manual_.Clear();
+    manual_wheels_ = {};
     mode_ = CommandMode::kManual;
     return true;
 }
 
 bool CommandInterface::SubmitManual(WheelCommand wheels) {
-    return mode_ == CommandMode::kManual && manual_.Submit(wheels);
+    if (mode_ != CommandMode::kManual || wheels.left_percent < -100 ||
+        wheels.left_percent > 100 || wheels.right_percent < -100 ||
+        wheels.right_percent > 100)
+        return false;
+    manual_wheels_ = wheels;
+    return true;
 }
 
 void CommandInterface::ReleaseManual() {
     if (mode_ == CommandMode::kManual) {
-        manual_.Clear();
+        manual_wheels_ = {};
         mode_ = CommandMode::kIdle;
     }
 }
@@ -146,7 +151,7 @@ void CommandInterface::StopMotion(int64_t now_us) {
         navigator_.Finish(NavigateState::kInterrupted);
         mode_ = CommandMode::kIdle;
     } else if (mode_ == CommandMode::kManual) {
-        manual_.Clear();
+        manual_wheels_ = {};
     }
 }
 
@@ -154,7 +159,7 @@ WheelCommand CommandInterface::wheels() const {
     if (mode_ == CommandMode::kNavigate)
         return {};
     if (mode_ == CommandMode::kManual)
-        return manual_.wheels();
+        return manual_wheels_;
     if (mode_ == CommandMode::kAngleTurn)
         return goal_.turn_wheels();
     if (mode_ == CommandMode::kDistanceDrive)

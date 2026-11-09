@@ -91,7 +91,6 @@ public:
     DistanceDriveSnapshot Snapshot(int64_t now_us) const;
     AngleTurnSnapshot TurnSnapshot() const;
     const char* fault() const { return fault_; }
-    static const char* OwnerName(DistanceDriveOwner owner);
 
 private:
     DistanceDriveRequest request_;

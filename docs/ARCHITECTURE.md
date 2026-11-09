@@ -40,7 +40,6 @@ main/boards/bread-compact-wifi-lcd/
 │   ├── serialization/          Presentation Layer: encoder → JSON
 │   ├── commands/               Application Layer: chế độ và mục tiêu hai bánh
 │   │   ├── command_interface.* Chọn chế độ, request và trạng thái chung
-│   │   ├── manual_command.*    Mục tiêu hai bánh khi lái thủ công
 │   │   ├── motion_goal_command.* Đích quãng đường và góc xoay
 │   │   └── wheel_command.h     Kiểu dữ liệu mục tiêu hai bánh
 │   ├── controller/             Application Layer: thực thi và an toàn
@@ -54,8 +53,7 @@ main/boards/bread-compact-wifi-lcd/
 │   ├── domain/                 Domain Layer: motion_policy, WebControlSession,
 │   │                           Navigator, Odometry và PoseEKF
 │   ├── drivers/                Infrastructure Layer: L298N GPIO/LEDC
-│   ├── sensors/                Infrastructure Layer: FC-03, HC-SR04, MPU6050
-│   └── tests/                  Kiểm tra web page và các kiểm tra board-local
+│   └── sensors/                Infrastructure Layer: FC-03, HC-SR04, MPU6050
 └── robot_eye/                  Presentation Layer: LVGL display và animation
 ```
 
@@ -85,9 +83,10 @@ cùng dùng API controller và cùng tuân theo một đường dừng motor.
 
 `CommandInterface` chọn một chế độ tại một thời điểm: `kIdle`, `kManual` (HUD),
 `kDistanceDrive` (tiến/lùi theo quãng đường), `kAngleTurn` (xoay theo góc) hoặc
-`kNavigate` (đi đến tọa độ tương đối). `manual_command.*` giữ mục tiêu hai bánh;
-`motion_goal_command.*` giữ đích quãng đường/góc; `domain/navigator.h` tính mục
-tiêu điều hướng. Controller nhận `CommandRequest`, kiểm tra quyền và cảm biến,
+`kNavigate` (đi đến tọa độ tương đối). `CommandInterface` giữ mục tiêu hai bánh
+khi lái thủ công; `motion_goal_command.*` giữ đích quãng đường/góc;
+`domain/navigator.h` tính mục tiêu điều hướng. Controller nhận `CommandRequest`,
+kiểm tra quyền và cảm biến,
 rồi lấy mục tiêu hai bánh và điều kiện kết thúc từ `CommandInterface`.
 
 ### Năm API hướng và dừng dùng chung

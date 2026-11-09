@@ -3,8 +3,8 @@
 #include <cstdint>
 #include <variant>
 
-#include "manual_command.h"
 #include "motion_goal_command.h"
+#include "wheel_command.h"
 #include "../domain/navigator.h"
 
 namespace ruby_robot {
@@ -66,7 +66,7 @@ public:
 private:
     CommandMode mode_ = CommandMode::kIdle;
     CommandMode last_mode_ = CommandMode::kIdle;
-    ManualCommand manual_;
+    WheelCommand manual_wheels_;
     MotionGoalCommand goal_;
     Navigator navigator_;
 };
