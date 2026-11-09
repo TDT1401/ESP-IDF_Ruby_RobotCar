@@ -38,7 +38,7 @@ RobotDriveStatus ReadRobotDriveStatus() {
 void InitializeRobotBoard(RobotEyeDisplay* display) {
     InitializeL298nController();
     RegisterL298nMcpTools();
-    InitializeL298nTelegram(IsL298nWebServerRunning);
+    InitializeL298nTelegram();
 #ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY
     if (display != nullptr) {
         display->SetEmotionMotionCallback(UpdateL298nEmotion);

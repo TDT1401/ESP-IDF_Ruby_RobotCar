@@ -7,7 +7,6 @@
 #include <esp_timer.h>
 #include <cJSON.h>
 
-#include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -23,7 +22,6 @@
 namespace {
 constexpr const char* kTag = "L298nWeb";
 httpd_handle_t server = nullptr;
-std::atomic<bool> server_ready{false};
 
 esp_err_t Reply(httpd_req_t* req, const char* status, const char* body) {
     httpd_resp_set_status(req, status);
@@ -430,7 +428,6 @@ esp_err_t StartServer() {
             return error;
         }
     }
-    server_ready.store(true);
     return ESP_OK;
 }
 }  // namespace
@@ -449,5 +446,3 @@ void UpdateL298nWebNetwork(bool connected) {
     if (station != nullptr && esp_netif_get_ip_info(station, &ip) == ESP_OK)
         ESP_LOGI(kTag, "Motor control: http://" IPSTR ":8080", IP2STR(&ip.ip));
 }
-
-bool IsL298nWebServerRunning() { return server_ready.load(); }

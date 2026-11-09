@@ -10,7 +10,7 @@
 
 namespace ruby_robot {
 
-enum class NavigateOwner { kWeb, kVoice, kTelegram };
+enum class NavigateOwner { kWeb, kVoice };
 enum class NavigateState { kIdle, kTurning, kDriving, kCompleted, kInterrupted, kFault };
 
 struct NavigateRequest {
@@ -42,8 +42,7 @@ public:
                std::abs(request.x_m) <= 10 && std::abs(request.y_m) <= 10 &&
                request.speed_percent >= 18 && request.speed_percent <= 70 &&
                request.timeout_seconds >= 1 && request.timeout_seconds <= 120 &&
-               (request.owner == NavigateOwner::kWeb || request.owner == NavigateOwner::kVoice ||
-                request.owner == NavigateOwner::kTelegram);
+               (request.owner == NavigateOwner::kWeb || request.owner == NavigateOwner::kVoice);
     }
 
     bool Start(const NavigateRequest& request, const OdometrySnapshot& pose, double speed_scale,
@@ -155,11 +154,9 @@ public:
             case NavigateState::kFault: state = "fault"; break;
             default: break;
         }
-        const char* owner = state_ == NavigateState::kIdle          ? "none"
-                            : request_.owner == NavigateOwner::kWeb ? "web"
-                            : request_.owner == NavigateOwner::kTelegram
-                                ? "telegram"
-                                : "voice";
+        const char* owner = "none";
+        if (state_ != NavigateState::kIdle)
+            owner = request_.owner == NavigateOwner::kWeb ? "web" : "voice";
         const int remaining_ms = Active()
                                      ? static_cast<int>(std::max<int64_t>(
                                            0, request_.timeout_seconds * 1000LL -

@@ -21,7 +21,8 @@ core XiaoZhi tiếp tục dùng giao diện `Board` chung.
 ![Sơ đồ các layer của Ruby RobotCar](architecture_layers.svg)
 
 Mũi tên thể hiện chiều **gọi và phụ thuộc**. Sensor readings đi lên qua controller;
-Web, Telegram, MCP và màn hình đọc trạng thái từ snapshot hoặc callback chỉ đọc.
+Web, MCP và màn hình đọc trạng thái xe từ snapshot hoặc callback chỉ đọc.
+Telegram chỉ xem trạng thái hệ thống/mạng và gửi thông báo, không điều khiển xe.
 Không có đường gọi trực tiếp từ `Presentation Layer` xuống GPIO/PWM.
 
 ## 3. Source Structure
@@ -69,7 +70,7 @@ danh tính board riêng để không ảnh hưởng OTA của board cũ.
 
 | Layer                    | Được làm                                                                                                                         | Không được làm                                                          |
 | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| **Presentation Layer**   | Validate input, gọi `l298n_controller.h`, format HTTP/JSON/Telegram/MCP, render display.                                         | Include `controller_internal.h`; tự đặt GPIO/PWM; tự đổi `CommandMode`. |
+| **Presentation Layer**   | Validate input; Web/MCP gọi `l298n_controller.h`; Telegram xử lý trạng thái hệ thống và thông báo.                                | Include `controller_internal.h`; tự đặt GPIO/PWM; tự đổi `CommandMode`. |
 | **Application Layer**    | Khóa mutex, cấp/thu quyền, chọn mode, kiểm tra `Application` state, deadline, sensor freshness, lỗi; gọi driver và tạo snapshot. | Đưa HTTP, Telegram hoặc LVGL vào logic điều khiển motor.                |
 | **Domain Layer**         | Tính toán thuần từ tham số được truyền vào: joystick mixing, ngưỡng, token/sequence/deadline.                                    | Dùng ESP-IDF driver, `config.h`, singleton mạng hoặc `Application`.     |
 | **Infrastructure Layer** | Điều khiển motor, lấy mẫu cảm biến và báo lỗi/telemetry.                                                                         | Parse request; chọn nguồn lệnh, mode hoặc thời điểm cho phép xe chạy.   |
@@ -77,8 +78,8 @@ danh tính board riêng để không ảnh hưởng OTA của board cũ.
 
 `robot_eye/` nhận Wi-Fi, nhiệt độ và trạng thái xe qua callback; màn hình không
 include motor controller. `robot/serialization/` chỉ chuyển dữ liệu sang JSON,
-không lấy mẫu encoder. Adapter có thể khác nhau về định dạng request, nhưng cùng
-dùng API controller và cùng tuân theo một đường dừng motor.
+không lấy mẫu encoder. Web và MCP có thể khác nhau về định dạng request, nhưng
+cùng dùng API controller và cùng tuân theo một đường dừng motor.
 
 ## 4. Command Interface
 
@@ -89,9 +90,9 @@ dùng API controller và cùng tuân theo một đường dừng motor.
 tiêu điều hướng. Controller nhận `CommandRequest`, kiểm tra quyền và cảm biến,
 rồi lấy mục tiêu hai bánh và điều kiện kết thúc từ `CommandInterface`.
 
-### Bốn API chuyển động dùng chung
+### Năm API hướng và dừng dùng chung
 
-`controller/l298n_controller.h` là điểm gọi chuyển động của Web, Telegram, MCP
+`controller/l298n_controller.h` là điểm gọi chuyển động của Web, MCP
 và tính năng mới. Có đúng năm API hướng/dừng:
 
 | Chức năng | API |
@@ -146,7 +147,7 @@ Ví dụ khi người dùng kéo joystick trên Web:
    yêu cầu cho hai bánh.
 3. Speed PI điều chỉnh tốc độ theo FC-03 nếu đã cấu hình. Motor Driver xuất
    GPIO/PWM để xe chạy.
-4. Web, Telegram, MCP và màn hình chỉ đọc trạng thái xe để hiển thị.
+4. Web, MCP và màn hình chỉ đọc trạng thái xe để hiển thị.
 
 Các quy tắc dừng phải luôn được giữ:
 

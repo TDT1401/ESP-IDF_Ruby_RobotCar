@@ -17,8 +17,7 @@ bool MotionGoalCommand::Valid(const DistanceDriveRequest& request) {
            request.speed_percent >= 10 && request.speed_percent <= 100 &&
            request.timeout_seconds >= 1 && request.timeout_seconds <= kMaxTimeoutSeconds &&
            (request.owner == DistanceDriveOwner::kWeb ||
-            request.owner == DistanceDriveOwner::kVoice ||
-            request.owner == DistanceDriveOwner::kTelegram);
+            request.owner == DistanceDriveOwner::kVoice);
 }
 
 bool MotionGoalCommand::Valid(const AngleTurnRequest& request) {
@@ -224,8 +223,6 @@ const char* MotionGoalCommand::OwnerName(DistanceDriveOwner owner) {
     switch (owner) {
         case DistanceDriveOwner::kVoice:
             return "voice";
-        case DistanceDriveOwner::kTelegram:
-            return "telegram";
         default:
             return "web";
     }

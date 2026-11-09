@@ -24,7 +24,6 @@
 
 #include <algorithm>
 #include <atomic>
-#include <charconv>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -34,11 +33,7 @@
 #include <new>
 #include <string>
 
-#include "../controller/l298n_controller.h"
 #include "application.h"
-#include "audio_codec.h"
-#include "board.h"
-#include "display.h"
 #include "mcp_server.h"
 #include "telegram_text.h"
 #include "wifi_manager.h"
@@ -49,10 +44,6 @@ constexpr size_t kMaxResponse = 8192;
 constexpr size_t kMaxOutboundText = 4000;
 constexpr UBaseType_t kOutboundQueueDepth = 3;
 constexpr double kMaxExactId = 4503599627370495.0;  // Telegram IDs have at most 52 bits.
-bool (*web_server_ready)() = nullptr;
-
-bool WebServerReady() { return web_server_ready != nullptr && web_server_ready(); }
-
 using Json = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
 using JsonText = std::unique_ptr<char, decltype(&cJSON_free)>;
 
@@ -83,22 +74,8 @@ const char* RssiQuality(int rssi) {
     return L298nTelegramText::kRssiWeak;
 }
 
-std::string WebMessage() {
-    auto& wifi = WifiManager::GetInstance();
-    if (!wifi.IsConnected())
-        return L298nTelegramText::kWebWifiDisconnected;
-    if (!WebServerReady())
-        return L298nTelegramText::kWebServerUnavailable;
-    const std::string url = "http://" + wifi.GetIpAddress() + ":8080";
-    return std::string(L298nTelegramText::kWebReadyHeader) + L298nTelegramText::kWebLinkPrefix +
-           "<a href=\"" + url + "\"><b>" + L298nTelegramText::kWebOpenText + "</b></a>\n" +
-           L298nTelegramText::kWebAddressLabel + "<code>" + url + "</code>" +
-           L298nTelegramText::kWebReadyFooter;
-}
-
 std::string StatusMessage() {
     auto& wifi = WifiManager::GetInstance();
-    const auto motor = GetL298nMotorStatus();
     const int rssi = wifi.GetRssi();
     const bool wifi_connected = wifi.IsConnected();
     const char* wifi_text =
@@ -111,57 +88,17 @@ std::string StatusMessage() {
              static_cast<long long>(uptime_seconds % 60));
 
     std::string message;
-    message.reserve(800);
+    message.reserve(320);
     message += L298nTelegramText::kStatusHeader;
     message += "\n";
     message += L298nTelegramText::kDivider;
-    message += "\n\n" + std::string(L298nTelegramText::kNavigationSection) + "\n";
-    message += L298nTelegramText::kSr04DeviceLabel;
-    if (motor.distance_valid) {
-        message += "<b>" + std::to_string(motor.measured_distance_cm) + " cm</b>\n";
-    } else {
-        message += L298nTelegramText::kSr04NoEcho;
-        message += "\n";
-    }
-    message += "\n\n";
-
-    message += L298nTelegramText::kDivider;
-    message += "\n\n<b>📊 HOẠT ĐỘNG</b>\n";
-    message += "• Xe đã đi (ước lượng từ lúc bật): ";
-    if (!motor.encoder.enabled) {
-        message += "FC-03 chưa bật";
-    } else if (!motor.encoder.ready) {
-        message += std::string("Lỗi: ") + esp_err_to_name(motor.encoder.error);
-    } else if (!motor.encoder.calibrated) {
-        message += "Chưa hiệu chuẩn FC-03";
-    } else {
-        char travel_text[32];
-        snprintf(travel_text, sizeof(travel_text), "<b>%.3f m</b>", motor.encoder.travel_m);
-        message += travel_text;
-        if (!motor.encoder.distance_complete)
-            message += " ⚠️ thiếu xung, số đo có thể chưa đủ";
-    }
-    message += "\n• Hoạt động: ";
+    message += "\n\n" + std::string(L298nTelegramText::kSystemSection) + "\n";
+    message += L298nTelegramText::kUptimeLabel;
     message += uptime_text;
+    message += "\n";
+    message += L298nTelegramText::kFreeRamLabel;
+    message += std::to_string(esp_get_free_heap_size() / 1024) + L298nTelegramText::kMemoryUnit;
     message += "\n\n";
-
-    if (motor.odometry.valid) {
-        char pose_text[192];
-        snprintf(pose_text, sizeof(pose_text), "Pose: x=%.3f m, y=%.3f m, theta=%.3f rad\n",
-                 motor.odometry.x_m, motor.odometry.y_m, motor.odometry.theta_rad);
-        message += pose_text;
-    } else {
-        message += std::string("Pose: ") + motor.odometry.fault + "\n";
-    }
-    const auto& distance = motor.command.distance_drive;
-    if (distance.target_m != 0) {
-        char drive_text[192];
-        snprintf(drive_text, sizeof(drive_text),
-                 "Distance: %s, %.3f/%.3f m, error=%.3f m, position_error=%.3f m, %s\n",
-                 distance.state, distance.progress_m, distance.target_m, distance.error_m,
-                 distance.position_error_m, distance.fault);
-        message += drive_text;
-    }
     message += L298nTelegramText::kDivider;
     message += "\n\n" + std::string(L298nTelegramText::kNetworkSection) + "\n";
     message += L298nTelegramText::kWifiLabel;
@@ -172,17 +109,6 @@ std::string StatusMessage() {
         std::to_string(rssi) + L298nTelegramText::kSignalUnitSeparator + RssiQuality(rssi) + "\n";
     message += L298nTelegramText::kIpLabel;
     message += "<code>" + wifi.GetIpAddress() + "</code>\n";
-    message += L298nTelegramText::kFreeRamLabel;
-    message += std::to_string(esp_get_free_heap_size() / 1024) + L298nTelegramText::kMemoryUnit;
-
-    if (wifi_connected && WebServerReady()) {
-        message += "\n\n" + std::string(L298nTelegramText::kStatusWebLinkPrefix);
-        message += "<a href=\"http://" + wifi.GetIpAddress() + ":8080\">";
-        message += L298nTelegramText::kWebOpenText;
-        message += "</a>";
-    } else {
-        message += "\n\n" + std::string(L298nTelegramText::kWebUnavailableStatus);
-    }
     return message;
 }
 
@@ -382,28 +308,9 @@ private:
         return Json(nullptr, cJSON_Delete);
     }
 
-    bool Send(const std::string& text, bool html = false, bool add_web_button = false) {
+    bool Send(const std::string& text, bool html = false) {
         Json request(cJSON_CreateObject(), cJSON_Delete);
-        Json keyboard(nullptr, cJSON_Delete);
-        if (add_web_button && WebServerReady()) {
-            keyboard.reset(cJSON_CreateObject());
-            Json row(cJSON_CreateArray(), cJSON_Delete);
-            Json button(cJSON_CreateObject(), cJSON_Delete);
-            const std::string url = "http://" + WifiManager::GetInstance().GetIpAddress() + ":8080";
-            const std::string button_text = L298nTelegramText::kStatusWebLinkPrefix +
-                                            std::string(L298nTelegramText::kWebOpenText);
-            if (!keyboard || !row || !button ||
-                !cJSON_AddStringToObject(button.get(), "text", button_text.c_str()) ||
-                !cJSON_AddStringToObject(button.get(), "url", url.c_str()))
-                return false;
-            cJSON_AddItemToArray(row.get(), button.release());
-            auto* rows = cJSON_AddArrayToObject(keyboard.get(), "inline_keyboard");
-            if (rows == nullptr)
-                return false;
-            cJSON_AddItemToArray(rows, row.release());
-        } else {
-            keyboard.reset(cJSON_Parse(L298nTelegramText::kKeyboardJson));
-        }
+        Json keyboard(cJSON_Parse(L298nTelegramText::kKeyboardJson), cJSON_Delete);
         if (!request || !keyboard ||
             !cJSON_AddStringToObject(request.get(), "chat_id", L298N_TELEGRAM_CHAT_ID) ||
             !cJSON_AddStringToObject(request.get(), "text", text.c_str()))
@@ -445,63 +352,11 @@ private:
         }
     }
 
-    void HandleSpeed(const std::string& argument) {
-        (void)argument;
-        Send(L298nTelegramText::kSpeedUnavailable, true);
-    }
-
-    void HandleDistanceMove(const std::string& argument, bool forward) {
-        int distance_cm = 0;
-        const auto result =
-            std::from_chars(argument.data(), argument.data() + argument.size(), distance_cm);
-        if (result.ec != std::errc{} || result.ptr != argument.data() + argument.size() ||
-            distance_cm < ruby_robot::MotionGoalCommand::kMinDistanceCm ||
-            distance_cm > ruby_robot::MotionGoalCommand::kMaxDistanceCm) {
-            Send(L298nTelegramText::kDistanceMoveUsage, true);
-            return;
-        }
-        const L298nLinearRequest request{ruby_robot::DistanceDriveRequest{
-            distance_cm, 0, 60, ruby_robot::DistanceDriveOwner::kTelegram}};
-        const esp_err_t error = forward ? MoveL298nForward(request) : MoveL298nBackward(request);
-        Send(error == ESP_OK ? L298nTelegramText::kDistanceMoveAccepted
-                             : L298nTelegramText::kDistanceMoveUnavailable,
-             true);
-    }
-
-    void HandleAutonomy(const std::string& raw_argument, bool follow) {
-        (void)raw_argument;
-        (void)follow;
-        Send(L298nTelegramText::kAutonomyUnavailable, true);
-    }
-
-    void RequestDistanceInput(bool forward) {
-        Send(forward ? L298nTelegramText::kForwardDistancePrompt
-                     : L298nTelegramText::kBackwardDistancePrompt,
-             true);
-    }
-
     bool HandleButton(const std::string& input) {
-        if (input == "⬆️ Tiến theo cm") {
-            RequestDistanceInput(true);
-        } else if (input == "⬇️ Lùi theo cm") {
-            RequestDistanceInput(false);
-        } else if (input == "🎙️ Đánh thức") {
+        if (input == "🎙️ Đánh thức") {
             HandleWake();
-        } else if (input == "⏹️ Dừng xe") {
-            StopL298nMotor();
-            Send(L298nTelegramText::kEmergencyStopped, true);
-        } else if (input == "👣 Bật Follow") {
-            HandleAutonomy("on", true);
-        } else if (input == "👣 Tắt Follow") {
-            HandleAutonomy("off", true);
-        } else if (input == "🚧 Bật né vật cản") {
-            HandleAutonomy("on", false);
-        } else if (input == "🚧 Tắt né vật cản") {
-            HandleAutonomy("off", false);
         } else if (input == "📊 Trạng thái") {
             Send(StatusMessage(), true);
-        } else if (input == "🌐 Mở trang web") {
-            Send(WebMessage(), true);
         } else if (input == "📖 Trợ giúp") {
             Send(L298nTelegramText::kMenu, true);
         } else {
@@ -515,7 +370,7 @@ private:
         int64_t chat;
         if (!ReadId(cJSON_GetObjectItemCaseSensitive(message, "chat"), "id", chat) ||
             chat != chat_id_)
-            return;  // Only the configured private chat/group can send robot commands.
+            return;  // Only the configured private chat/group can send requests.
         const auto* text = cJSON_GetObjectItemCaseSensitive(message, "text");
         if (!cJSON_IsString(text) || strlen(text->valuestring) > 128)
             return;
@@ -530,14 +385,8 @@ private:
             return;
 
         const auto end = command.find_first_of(" \r\n\t");
-        std::string argument;
-        if (end != std::string::npos) {
-            const auto argument_begin = command.find_first_not_of(" \r\n\t", end);
-            if (argument_begin != std::string::npos)
-                argument = command.substr(argument_begin,
-                                          command.find_last_not_of(" \r\n\t") - argument_begin + 1);
+        if (end != std::string::npos)
             command.resize(end);
-        }
         command = LowerAscii(command);
         const auto at = command.find('@');
         if (at != std::string::npos) {
@@ -547,28 +396,9 @@ private:
         }
         if (command == "/status")
             Send(StatusMessage(), true);
-        else if (command == "/web")
-            Send(WebMessage(), true);
         else if (command == "/wake")
             HandleWake();
-        else if (command == "/speed")
-            HandleSpeed(argument);
-        else if (command == "/forward")
-            HandleDistanceMove(argument, true);
-        else if (command == "/backward")
-            HandleDistanceMove(argument, false);
-        else if (command == "/reset_pose" && argument.empty())
-            Send(ResetL298nOdometry() == ESP_OK ? "Đã đặt gốc vị trí (0, 0, 0)."
-                                                : "Dừng xe, rời HUD và chờ cảm biến ổn định.",
-                 true);
-        else if (command == "/follow")
-            HandleAutonomy(argument, true);
-        else if (command == "/avoid")
-            HandleAutonomy(argument, false);
-        else if (command == "/stop") {
-            StopL298nMotor();
-            Send(L298nTelegramText::kEmergencyStopped, true);
-        } else if (command == "/start" || command == "/menu" || command == "/help")
+        else if (command == "/start" || command == "/menu" || command == "/help")
             Send(L298nTelegramText::kMenu, true);
         else if (!command.empty() && command.front() == '/')
             Send(L298nTelegramText::kUnknownCommand, true);
@@ -659,7 +489,7 @@ private:
                     std::string(boot_sent ? L298nTelegramText::kIpChangedHeader
                                           : L298nTelegramText::kBootHeader) +
                     L298nTelegramText::kBootFooter;
-                if (!Send(announcement, true, true))
+                if (!Send(announcement, true))
                     continue;
                 boot_sent = true;
                 announced_ip = ip;
@@ -680,10 +510,7 @@ private:
 };
 }  // namespace
 
-void InitializeL298nTelegram(bool (*ready)()) {
-    web_server_ready = ready;
-    Telegram::Instance().Start();
-}
+void InitializeL298nTelegram() { Telegram::Instance().Start(); }
 
 void UpdateL298nTelegramNetwork(bool connected) { Telegram::Instance().SetConnected(connected); }
 
@@ -691,8 +518,7 @@ void UpdateL298nTelegramNetwork(bool connected) { Telegram::Instance().SetConnec
 
 #include <esp_log.h>
 
-void InitializeL298nTelegram(bool (*web_server_ready)()) {
-    (void)web_server_ready;
+void InitializeL298nTelegram() {
 #if L298N_TELEGRAM_ENABLED
     ESP_LOGE("L298nTelegram", "Telegram needs CONFIG_MBEDTLS_CERTIFICATE_BUNDLE; not started");
 #else

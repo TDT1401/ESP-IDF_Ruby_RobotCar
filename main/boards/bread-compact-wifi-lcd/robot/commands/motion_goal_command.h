@@ -8,7 +8,7 @@
 
 namespace ruby_robot {
 
-enum class DistanceDriveOwner { kWeb, kVoice, kTelegram };
+enum class DistanceDriveOwner { kWeb, kVoice };
 enum class DistanceDriveState { kIdle, kRunning, kCompleted, kInterrupted, kFault };
 enum class AngleTurnOwner { kWeb, kVoice };
 enum class AngleTurnState { kIdle, kRunning, kCompleted, kInterrupted, kFault };
