@@ -98,13 +98,13 @@ components/
 | `ultrasonic_sensor` | HC-SR04, lọc khoảng cách và giữ servo ở vị trí giữa |
 | `motor_controller` | Command, safety, phiên điều khiển, PI/PD, odometry/EKF và snapshot |
 
-Board khởi tạo tại `main/boards/bread-compact-wifi-lcd/robot/robot_board.cc`:
+Board khởi tạo tại `main/boards/robot/robot_board.cc`:
 
-- Đọc pin, calibration và tuning từ `config.h`/Kconfig hiện có, giữ các kiểm tra
+- Đọc pin, calibration và tuning từ `config/board_config.h`/Kconfig hiện có, giữ các kiểm tra
   `static_assert`, rồi truyền bản sao cấu hình vào các component.
 - Cung cấp callback kiểm tra trạng thái ứng dụng, schedule lên main task và phát
   âm báo. `motor_controller` không include `application.h`, assets hay board config.
-- Khởi tạo controller trước khi đăng ký MCP/Telegram và callback của giao diện.
+- Khởi tạo controller trước khi đăng ký MCP/Telegram và nhận lệnh qua các adapter.
   Task monitor encoder, heading và odometry thuộc phía board; sensor driver không
   đọc ngược snapshot từ controller.
 
@@ -121,3 +121,73 @@ Giữ nguyên board/OTA identity, pin, LEDC timer/channel, chu kỳ task/timer, 
 calibration, timeout và Kconfig keys. Khi tắt FC-03, cấu hình encoder có
 `enabled=false`; driver không cấp phát PCNT và controller không bật speed PI.
 Code PCNT được guard bằng capability `SOC_PCNT_SUPPORTED`.
+
+## 5. Cấu hình dự án
+
+Firmware chỉ dùng một board, nên cấu hình nằm trực tiếp trong `config/`:
+
+```text
+config/
+├── build_config.json
+├── board_config.h
+├── audio_config.h
+├── robot_hardware_config.h
+└── motion_control_config.h
+```
+
+| File | Nội dung |
+| --- | --- |
+| `build_config.json` | Target ESP32-S3, bản build duy nhất và type/name OTA hiện có |
+| `board_config.h` | Header tổng hợp và pin button/LED/lamp |
+| `audio_config.h` | Sample rate, chân I2S và microphone debug |
+| `robot_hardware_config.h` | Pin motor, IMU, ultrasonic/servo; pin, calibration và filter/coast của encoder |
+| `motion_control_config.h` | Speed PI, heading PD, distance drive, odometry/EKF và debug điều khiển |
+
+Code khởi tạo board include `board_config.h`. CMake chỉ cung cấp đường dẫn
+`config/` qua `PRIV_INCLUDE_DIRS` của `main`; các component tiếp tục nhận
+struct cấu hình từ board, không include các header này.
+
+Tên macro, giá trị và các điều kiện Kconfig được giữ nguyên khi chia file.
+`config/build_config.json` cung cấp target và board/OTA identity cho CMake và
+build script. `sdkconfig` tiếp tục do ESP-IDF quản lý.
+
+
+## 6. Một board và một bản build
+
+```text
+main/boards/
+├── common/
+├── robot_car_board.cc
+└── robot/
+```
+
+`RobotCarBoard` trong `robot_car_board.cc` là factory duy nhất được đăng ký bằng
+`DECLARE_BOARD`. CMake dùng source này trực tiếp, không chọn thư mục board.
+`robot/` chứa phần khởi tạo và các adapter còn lại. Firmware không dùng màn hình;
+`RobotCarBoard` kế thừa `Board::GetDisplay()` để cung cấp `NoDisplay` và
+`GetBacklight()` mặc định trả về `nullptr`.
+
+Lệnh build duy nhất là `python scripts/build.py`; không truyền tên board hoặc
+`--name`. Các tùy chọn ngôn ngữ, wake word, build options và đóng gói vẫn được giữ.
+Build script đọc `config/build_config.json` và yêu cầu đúng một build entry cho
+target `esp32s3`.
+
+`BOARD_TYPE` và `BOARD_NAME` tiếp tục có giá trị `bread-compact-wifi-lcd` để
+giữ nhận diện Xiaozhi/OTA. Chúng được đọc từ metadata, không suy ra từ đường dẫn
+source. Các key Kconfig `CONFIG_BREAD_COMPACT_WIFI_LCD_*` và
+`CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI_LCD` được giữ để tương thích cấu hình hiện tại;
+cờ board là nội bộ, không còn mục chọn board trong menuconfig.
+
+
+## 7. Firmware không dùng màn hình
+
+`InitializeRobotBoard()` không nhận tham số display. Board không khởi tạo
+SPI/TFT/backlight và không đăng ký callback của RobotEye. Các file RobotEye,
+`config/display_config.h` và tùy chọn `BREAD_COMPACT_WIFI_LCD_DISPLAY` đã được gỡ.
+
+Lớp `Display`/`NoDisplay` của framework được giữ để các lời gọi từ `Application`,
+Wi-Fi, assets và MCP tiếp tục có đối tượng hợp lệ. Source/dependency display dùng
+chung vẫn phục vụ lớp framework này; việc gỡ RobotEye không thay đổi chúng.
+
+Pin, timer/channel PWM của motor và servo, cấu hình audio, API điều khiển và
+`BOARD_TYPE`/`BOARD_NAME` được giữ nguyên.

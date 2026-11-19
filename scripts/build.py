@@ -97,7 +97,7 @@ def zip_bin(name: str, version: str) -> None:
 
 
 def _get_manufacturer(cfg: dict) -> Optional[str]:
-    """Read manufacturer from config.json"""
+    """Read manufacturer from build_config.json"""
     m = cfg.get("manufacturer")
     if isinstance(m, str) and m.strip():
         return m.strip()
@@ -120,7 +120,7 @@ def _validate_reported_identifier(value: object, field: str) -> str:
 
 
 def _get_reported_type(cfg: dict) -> str:
-    """Read the compatibility-sensitive board type from config.json."""
+    """Read the compatibility-sensitive board type from build_config.json."""
     return _validate_reported_identifier(cfg.get("type"), 'top-level "type"')
 
 
@@ -385,10 +385,13 @@ def _wake_word_sdkconfig_options(
     return normalized, options, [implementation, model_symbol]
 
 ################################################################################
-# board / variant related functions
+# project build configuration
 ################################################################################
 
 _BOARDS_DIR = Path("main/boards")
+_BUILD_CONFIG = Path("config/build_config.json")
+_PROJECT_BOARD = "robotcar"
+_BOARD_CONFIG_SYMBOL = "CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI_LCD"
 
 _DISPLAY_STYLE_SYMBOLS = {
     "default": "CONFIG_USE_DEFAULT_MESSAGE_STYLE",
@@ -493,8 +496,8 @@ def _kconfig_config_board_dependencies(
     }
 
 
-def _board_source_text(board: str) -> str:
-    board_dir = _BOARDS_DIR / board
+def _board_source_text() -> str:
+    board_dir = _BOARDS_DIR
     parts: list[str] = []
     for path in sorted(board_dir.rglob("*")):
         if path.suffix in {".c", ".cc", ".cpp", ".h", ".hpp"}:
@@ -516,7 +519,6 @@ def _selected_choice_default(
 
 
 def _build_option_definitions(
-    board: str,
     target: str,
     board_config: str,
     build: dict[str, Any],
@@ -526,7 +528,7 @@ def _build_option_definitions(
     if not isinstance(sdkconfig_append, list) or not all(isinstance(item, str) for item in sdkconfig_append):
         raise ValueError(f"build {build.get('name')!r} sdkconfig_append must be a string list")
     assignments = _sdkconfig_assignments(sdkconfig_append)
-    source = _board_source_text(board)
+    source = _board_source_text()
     definitions: list[dict[str, Any]] = []
 
     for choice_name in ("DISPLAY_OLED_TYPE", "DISPLAY_LCD_TYPE"):
@@ -827,200 +829,58 @@ def _get_builds_for_idf(cfg: dict, idf_version: tuple[int, int, int]) -> list[di
     return builds
 
 
-def _get_board_display_name(
-    config_symbol: str,
-    kconfig_path: Path = Path("main/Kconfig.projbuild"),
-) -> str:
-    """Return the user-facing bool prompt for a CONFIG_BOARD_TYPE_* symbol."""
-    symbol = config_symbol.removeprefix("CONFIG_")
-    if not kconfig_path.exists():
-        raise ValueError(f"Board Kconfig file not found: {kconfig_path}")
-
-    in_symbol = False
-    for line in kconfig_path.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if stripped.startswith("config "):
-            if in_symbol:
-                break
-            in_symbol = stripped.split("config ", 1)[1].strip() == symbol
-            continue
-        if not in_symbol:
-            continue
-        prompt = re.match(r'^bool\s+"([^"]+)"', stripped)
-        if prompt:
-            return prompt.group(1)
-        if stripped.startswith(("choice ", "endchoice", "menu ", "endmenu")):
-            break
-
-    raise ValueError(
-        f'Kconfig bool prompt not found for {config_symbol} in {kconfig_path}'
-    )
+def _read_project_build(
+    idf_version: tuple[int, int, int],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Read the single project build, keeping OTA identity in metadata."""
+    with _BUILD_CONFIG.open(encoding="utf-8") as file:
+        cfg = json.load(file)
+    if not isinstance(cfg, dict):
+        raise ValueError(f"{_BUILD_CONFIG}: expected a JSON object")
+    _get_reported_type(cfg)
+    if cfg.get("target") != "esp32s3":
+        raise ValueError(f"{_BUILD_CONFIG}: Ruby RobotCar requires target esp32s3")
+    if not isinstance(cfg.get("preview", False), bool):
+        raise ValueError(f"{_BUILD_CONFIG}: preview must be a boolean")
+    builds = cfg.get("builds")
+    if not isinstance(builds, list) or len(builds) != 1 or not isinstance(builds[0], dict):
+        raise ValueError(f"{_BUILD_CONFIG}: exactly one build entry is required")
+    compatible = _get_builds_for_idf(cfg, idf_version)
+    if not compatible:
+        raise ValueError(f"{_BUILD_CONFIG}: build does not support ESP-IDF {idf_version}")
+    build = compatible[0]
+    options = build.get("sdkconfig_append", [])
+    if not isinstance(options, list) or not all(isinstance(item, str) for item in options):
+        raise ValueError(f"{_BUILD_CONFIG}: sdkconfig_append must be a string list")
+    _sdkconfig_assignments(options)
+    return cfg, build
 
 
 def _collect_variants(
-    config_filename: str = "config.json",
     idf_version: tuple[int, int, int] = (6, 0, 0),
 ) -> list[dict[str, Any]]:
-    """Traverse all boards under main/boards, collect variant information.
-
-    Return example:
-        [{"board": "bread-compact-ml307", "name": "bread-compact-ml307", "full_name": "bread-compact-ml307"}, ...]
-        [{"board": "waveshare/esp32-p4-nano", "name": "esp32-p4-nano-10.1-a", "full_name": "waveshare-esp32-p4-nano-10.1-a"}, ...]
-    """
-    variants: list[dict[str, str]] = []
-    errors: list[str] = []
-    type_owners: dict[str, str] = {}
-    name_owners: dict[str, str] = {}
-    identity_owners: dict[tuple[str, str], str] = {}
-
-    for cfg_path in sorted(_BOARDS_DIR.rglob(config_filename)):
-        board_dir = cfg_path.parent
-        if board_dir.name == "common":
-            continue
-        board = board_dir.relative_to(_BOARDS_DIR).as_posix()
-
-        try:
-            with cfg_path.open(encoding='utf-8') as f:
-                cfg = json.load(f)
-
-            manufacturer = _get_manufacturer(cfg)
-            reported_type = _get_reported_type(cfg)
-            target = cfg.get("target")
-            if not isinstance(target, str) or not target:
-                raise ValueError(f"{cfg_path}: missing non-empty target")
-
-            previous_board = type_owners.get(reported_type)
-            if previous_board is not None and previous_board != board:
-                errors.append(
-                    f"duplicate reported board type {reported_type!r} in "
-                    f"{previous_board} and {board}"
-                )
-            else:
-                type_owners[reported_type] = board
-
-            # Check manufacturer consistency with directory structure
-            if "/" in board:
-                # Board is in a subdirectory (e.g., waveshare/esp32-p4-nano)
-                expected_manufacturer = board.split("/")[0]
-                if not manufacturer:
-                    errors.append(
-                        f"{cfg_path}: Board is in '{expected_manufacturer}/' subdirectory, "
-                        f"but config.json is missing \"manufacturer\": \"{expected_manufacturer}\""
-                    )
-                elif manufacturer != expected_manufacturer:
-                    errors.append(
-                        f"{cfg_path}: manufacturer mismatch, "
-                        f"directory is '{expected_manufacturer}/' but config.json has \"{manufacturer}\""
-                    )
-            else:
-                # Board is directly under boards/ directory
-                if manufacturer:
-                    errors.append(
-                        f"{cfg_path}: Board is not in a manufacturer subdirectory, "
-                        f"but config.json defines manufacturer \"{manufacturer}\", "
-                        f"please move board to main/boards/{manufacturer}/{board}/"
-                    )
-
-            builds = _get_builds_for_idf(cfg, idf_version)
-            for build in builds:
-                name = _get_reported_name(build)
-                full_name = _get_release_full_name(manufacturer, build)
-
-                previous_config = name_owners.get(name)
-                if previous_config is not None:
-                    errors.append(
-                        f"duplicate reported board name {name!r} in "
-                        f"{previous_config} and {cfg_path}"
-                    )
-                else:
-                    name_owners[name] = str(cfg_path)
-
-                identity = (reported_type, name)
-                previous_config = identity_owners.get(identity)
-                if previous_config is not None:
-                    errors.append(
-                        f"duplicate reported board identity {identity!r} in "
-                        f"{previous_config} and {cfg_path}"
-                    )
-                else:
-                    identity_owners[identity] = str(cfg_path)
-
-                variants.append({
-                    "board": board,
-                    "name": name,
-                    "full_name": full_name,
-                    "type": reported_type,
-                    "target": target,
-                })
-
-        except Exception as e:
-            errors.append(f"{cfg_path}: {e}")
-
-    seen_names: dict[str, str] = {}
-    for variant in variants:
-        previous_board = seen_names.get(variant["full_name"])
-        if previous_board is not None:
-            errors.append(
-                f"duplicate artifact name {variant['full_name']!r} in "
-                f"{previous_board} and {variant['board']}"
-            )
-        else:
-            seen_names[variant["full_name"]] = variant["board"]
-
-    if errors:
-        details = "\n".join(f"  - {error}" for error in errors)
-        raise ValueError(f"Invalid board configuration:\n{details}")
-
-    # Enrich only after the compatibility identities above are validated, so
-    # duplicate/malformed config errors remain the primary actionable failure.
-    for variant in variants:
-        cfg_path = _BOARDS_DIR / variant["board"] / config_filename
-        with cfg_path.open(encoding="utf-8") as file:
-            cfg = json.load(file)
-        build = next(
-            item for item in _get_builds_for_idf(cfg, idf_version)
-            if _get_reported_name(item) == variant["name"]
-        )
-        sdkconfig_append = build.get("sdkconfig_append", [])
-        if not isinstance(sdkconfig_append, list) or not all(
-            isinstance(item, str) for item in sdkconfig_append
-        ):
-            raise ValueError(
-                f'{cfg_path}: build {variant["name"]!r} '
-                'sdkconfig_append must be a string list'
-            )
-        config_symbol = _resolve_board_config(
-            variant["board"],
-            variant["target"],
-            sdkconfig_append,
-            variant_name=variant["name"],
-        )
-        variant["config"] = config_symbol
-        variant["display_name"] = _get_board_display_name(config_symbol)
-        variant["wake_word_supported"] = _board_supports_wake_word(
-            variant["target"],
-            sdkconfig_append,
-        )
-        variant["build_options"] = _build_option_definitions(
-            variant["board"],
-            variant["target"],
-            config_symbol,
-            build,
-        )
-
-    return sorted(variants, key=lambda variant: (variant["board"], variant["name"]))
+    """Expose the single build through the existing metadata listing format."""
+    cfg, build = _read_project_build(idf_version)
+    target = cfg["target"]
+    options = build.get("sdkconfig_append", [])
+    config_symbol = _resolve_board_config(target, options)
+    return [{
+        "board": _PROJECT_BOARD,
+        "name": _get_reported_name(build),
+        "full_name": _get_release_full_name(_get_manufacturer(cfg), build),
+        "type": _get_reported_type(cfg),
+        "target": target,
+        "config": config_symbol,
+        "display_name": "Ruby RobotCar (ESP32-S3)",
+        "wake_word_supported": _board_supports_wake_word(target, options),
+        "build_options": _build_option_definitions(target, config_symbol, build),
+    }]
 
 
 def _select_variants_for_changes(
-    variants: list[dict[str, str]], changed_files: list[str]
-) -> list[dict[str, str]]:
-    """Select variants affected by a git diff.
-
-    Board ownership is resolved using the longest known board directory prefix,
-    so nested paths such as waveshare/esp32-c6-touch-amoled-2.06 are preserved.
-    """
-    known_boards = sorted({variant["board"] for variant in variants}, key=len, reverse=True)
-    affected: set[str] = set()
+    variants: list[dict[str, Any]], changed_files: list[str]
+) -> list[dict[str, Any]]:
+    """Select the project build when its source or configuration changes."""
     global_paths = {
         ".github/workflows/build.yml",
         "CMakeLists.txt",
@@ -1029,70 +889,13 @@ def _select_variants_for_changes(
         "scripts/gen_lang.py",
         "scripts/versions.py",
     }
-
     for raw_path in changed_files:
         path = raw_path.strip()
-        if not path:
-            continue
-        if (path in global_paths or path.startswith("components/") or
-                path.startswith("partitions/") or
-                path.startswith("sdkconfig.defaults") or
-                (path.startswith("main/") and not path.startswith("main/boards/")) or
-                path.startswith("main/boards/common/")):
+        if (path in global_paths or
+                path.startswith(("main/", "components/", "config/", "partitions/")) or
+                path.startswith("sdkconfig.defaults")):
             return variants
-
-        prefix = "main/boards/"
-        if path.startswith(prefix):
-            relative = path[len(prefix):]
-            board = next(
-                (candidate for candidate in known_boards
-                 if relative == candidate or relative.startswith(f"{candidate}/")),
-                None,
-            )
-            if board is not None:
-                affected.add(board)
-
-    return [variant for variant in variants if variant["board"] in affected]
-
-
-
-def _find_board_config_candidates(board_type: str) -> list[str]:
-    """Find all CONFIG_BOARD_TYPE_xxx candidates for the given board_type."""
-    board_path = board_type.strip("/")
-    lines = Path("main/CMakeLists.txt").read_text(encoding="utf-8").splitlines()
-    candidates: list[str] = []
-    branch_symbol: Optional[str] = None
-    branch_lines: list[str] = []
-
-    def finish_branch() -> None:
-        if branch_symbol is None:
-            return
-
-        branch = "\n".join(branch_lines)
-        directory_match = re.search(r'set\(BOARD_DIR\s+"([^"]+)"\)', branch)
-        directory = directory_match.group(1) if directory_match else None
-        if directory == board_path:
-            candidates.append(branch_symbol)
-
-    condition_pattern = re.compile(r"^\s*(?:if|elseif)\(([^)]+)\)")
-    for line in lines:
-        condition_match = condition_pattern.match(line)
-        if condition_match:
-            finish_branch()
-            condition = condition_match.group(1)
-            branch_symbol = (
-                condition if condition.startswith("CONFIG_BOARD_TYPE_") else None
-            )
-            branch_lines = []
-        elif re.match(r"^\s*(?:else|endif)\b", line):
-            finish_branch()
-            branch_symbol = None
-            branch_lines = []
-        elif branch_symbol is not None:
-            branch_lines.append(line)
-    finish_branch()
-
-    return candidates
+    return []
 
 
 def _extract_board_config_from_sdkconfig_append(sdkconfig_append: list[str]) -> Optional[str]:
@@ -1157,84 +960,16 @@ def _symbol_supports_target(symbol: str, target: str) -> bool:
     return False
 
 
-def _resolve_board_config(
-    board_type: str,
-    target: str,
-    sdkconfig_append: list[str],
-    *,
-    variant_name: Optional[str] = None,
-) -> str:
-    """Resolve CONFIG_BOARD_TYPE_xxx for current board build."""
-    def validate_target(symbol: str) -> str:
-        if not _symbol_supports_target(symbol, target):
-            raise ValueError(
-                f"Board config {symbol} for {board_type!r} does not support "
-                f"target {target!r}"
-            )
-        return symbol
-
+def _resolve_board_config(target: str, sdkconfig_append: list[str]) -> str:
+    """Keep the existing Kconfig symbol without selecting a board directory."""
     explicit = _extract_board_config_from_sdkconfig_append(sdkconfig_append)
-    candidates = _find_board_config_candidates(board_type)
-    if not candidates:
-        raise ValueError(f"Cannot find board config symbol for {board_type}")
-
-    if explicit and _board_config_symbol_exists(explicit):
-        if explicit not in candidates:
-            raise ValueError(
-                f"Board config {explicit} does not select board directory "
-                f"{board_type!r}"
-            )
-        return validate_target(explicit)
-    if explicit:
-        print(
-            f"[WARN] Explicit board config {explicit} does not exist in Kconfig; "
-            f"resolving it from BOARD_DIR={board_type!r} instead.",
-            file=sys.stderr,
-        )
-
-    if len(candidates) == 1:
-        return validate_target(candidates[0])
-
-    if variant_name:
-        expected = "CONFIG_BOARD_TYPE_" + re.sub(
-            r"[^A-Z0-9]+",
-            "_",
-            variant_name.upper(),
-        ).strip("_")
-        by_variant = [candidate for candidate in candidates if candidate == expected]
-        if len(by_variant) == 1:
-            return validate_target(by_variant[0])
-
-    by_target = [c for c in candidates if _symbol_supports_target(c, target)]
-    if len(by_target) == 1:
-        return validate_target(by_target[0])
-    if len(by_target) > 1:
-        selected = by_target[0]
-        print(
-            f"[WARN] Ambiguous board config for {board_type} (target={target}), "
-            f"target-matched candidates={by_target}, selecting first: {selected}",
-            file=sys.stderr,
-        )
-        return validate_target(selected)
-
-    raise ValueError(
-        f"No board config for {board_type!r} supports target {target!r}; "
-        f"candidates: {candidates}"
-    )
-
-
-# Kconfig "select" entries are not automatically applied when we simply append
-# sdkconfig lines from config.json, so add the required dependencies here to
-# mimic menuconfig behaviour.
-_AUTO_SELECT_RULES: dict[str, list[str]] = {
-    "CONFIG_USE_ESP_BLUFI_WIFI_PROVISIONING": [
-        "CONFIG_BT_ENABLED=y",
-        "CONFIG_BT_BLUEDROID_ENABLED=y",
-        "CONFIG_BT_BLE_42_FEATURES_SUPPORTED=y",
-        "CONFIG_BT_BLE_50_FEATURES_SUPPORTED=n",
-        "CONFIG_BT_BLE_BLUFI_ENABLE=y",
-    ],
-}
+    if explicit is not None and explicit != _BOARD_CONFIG_SYMBOL:
+        raise ValueError(f"{_BUILD_CONFIG}: unsupported board config {explicit}")
+    if not _board_config_symbol_exists(_BOARD_CONFIG_SYMBOL):
+        raise ValueError(f"Project Kconfig is missing {_BOARD_CONFIG_SYMBOL}")
+    if not _symbol_supports_target(_BOARD_CONFIG_SYMBOL, target):
+        raise ValueError(f"Project configuration does not support target {target!r}")
+    return _BOARD_CONFIG_SYMBOL
 
 
 def _apply_auto_selects(sdkconfig_append: list[str]) -> list[str]:
@@ -1269,13 +1004,6 @@ def _merge_sdkconfig_options(
         values[key] = option
     return [values[key] for key in keys]
 
-
-################################################################################
-# Check board_type in CMakeLists
-################################################################################
-
-def _board_type_exists(board_type: str) -> bool:
-    return bool(_find_board_config_candidates(board_type))
 
 ################################################################################
 # Compile implementation
@@ -1450,239 +1178,142 @@ def _validate_configured_options(options: list[str], option_name: str) -> None:
         )
 
 
-def build_board(
-    board_type: str,
-    config_filename: str = "config.json",
+def build_project(
     *,
-    name_filter: str,
     create_zip: bool = False,
     language: Optional[str] = None,
     wake_word: Optional[str] = None,
     build_options: Optional[dict[str, object]] = None,
     idf_version: tuple[int, int, int] = (6, 0, 0),
 ) -> None:
-    """Compile one specified variant of the specified board type.
-
-    Args:
-        board_type: directory name under main/boards
-        config_filename: config.json name (default: config.json)
-        name_filter: build["name"] to compile
-        create_zip: package merged-binary.bin under releases/ when true
-        language: optional locale such as en-US
-        wake_word: optional ESP-SR model name or "disabled"
-        build_options: optional semantic, board-validated option values
-    """
-    cfg_path = _BOARDS_DIR / Path(board_type) / config_filename
-    if not cfg_path.exists():
-        print(f"[WARN] {cfg_path} does not exist, skipping {board_type}")
-        return
-
+    """Compile the sole project build using its existing OTA identity."""
+    cfg, build = _read_project_build(idf_version)
     project_version = get_project_version()
-    print(f"Project Version: {project_version} ({cfg_path})")
-
-    with cfg_path.open(encoding='utf-8') as f:
-        cfg = json.load(f)
+    print(f"Project Version: {project_version} ({_BUILD_CONFIG})")
     target = cfg["target"]
     reported_type = _get_reported_type(cfg)
     preview = cfg.get("preview", False)
-    if not isinstance(preview, bool):
-        raise ValueError(f"{cfg_path}: preview must be a boolean")
     manufacturer = _get_manufacturer(cfg)
 
-    builds = _get_builds_for_idf(cfg, idf_version)
-    builds = [
-        build for build in builds
-        if _get_reported_name(build) == name_filter
+    name = _get_reported_name(build)
+    final_name = _get_release_full_name(manufacturer, build)
+
+    # Process sdkconfig_append
+    build_sdkconfig_append = build.get("sdkconfig_append", [])
+    board_type_config = _resolve_board_config(target, build_sdkconfig_append)
+    sdkconfig_append = _merge_sdkconfig_options(
+        build_sdkconfig_append,
+        [f"{board_type_config}=y"],
+    )
+
+    option_definitions = _build_option_definitions(
+        target,
+        board_type_config,
+        build,
+    )
+
+    user_options: list[str] = []
+    validation_symbols: list[tuple[list[str], str]] = [
+        ([board_type_config], "project configuration"),
     ]
-    if not builds:
+    build_option_sdkconfig: list[str] = []
+    selected_language = None
+    selected_wake_word = None
+    selected_build_options: Optional[dict[str, object]] = None
+    if language is not None:
+        selected_language, option = _language_sdkconfig_option(language)
+        user_options.append(option)
+        validation_symbols.append(
+            ([option.split("=", 1)[0]], "--language")
+        )
+    if wake_word is not None:
+        (
+            selected_wake_word,
+            wake_word_options,
+            wake_word_symbols,
+        ) = _wake_word_sdkconfig_options(wake_word, target)
+        user_options.extend(wake_word_options)
+        validation_symbols.append((wake_word_symbols, "--wake-word"))
+
+    # A build entry may carry semantic defaults to preserve an existing
+    # board-specific behavior after it moves out of hardcoded C++.
+    if build_options is not None or "build_options" in build:
+        selected_build_options = _normalize_build_options(
+            option_definitions,
+            build_options or {},
+        )
+        build_option_sdkconfig = _build_options_sdkconfig(
+            option_definitions,
+            selected_build_options,
+            _sdkconfig_assignments(build_sdkconfig_append),
+        )
+        user_options.extend(build_option_sdkconfig)
+
+    sdkconfig_append = _merge_sdkconfig_options(
+        sdkconfig_append,
+        user_options,
+    )
+    sdkconfig_append = _apply_auto_selects(sdkconfig_append)
+
+    print("-" * 80)
+    print(f"name: {final_name}")
+    if final_name != name:
+        print(f"reported_name: {name}")
+    print(f"reported_type: {reported_type}")
+    print(f"target: {target}")
+    if manufacturer:
+        print(f"manufacturer: {manufacturer}")
+    if selected_language:
+        print(f"language: {selected_language}")
+    if selected_wake_word:
+        print(f"wake_word: {selected_wake_word}")
+    if selected_build_options is not None:
         print(
-            f"[ERROR] Variant {name_filter} not found in "
-            f"{board_type}'s {config_filename}",
-            file=sys.stderr,
+            "build_options: "
+            + json.dumps(selected_build_options, ensure_ascii=False, sort_keys=True)
         )
-        sys.exit(1)
+    for item in sdkconfig_append:
+        print(f"sdkconfig_append: {item}")
 
-    for build in builds:
-        name = _get_reported_name(build)
-        final_name = _get_release_full_name(manufacturer, build)
+    _emit_build_stage("dependencies_resolving")
+    os.environ.pop("IDF_TARGET", None)
+    _prepare_target(target, preview)
+    _configure_build(
+        target,
+        sdkconfig_append,
+        name,
+        preview,
+    )
+    for symbols, option_name in validation_symbols:
+        _validate_configured_symbols(symbols, option_name)
+    _validate_configured_options(build_option_sdkconfig, "--build-options-json")
 
-        # Process sdkconfig_append
-        build_sdkconfig_append = build.get("sdkconfig_append", [])
-        explicit_board_cfg = _extract_board_config_from_sdkconfig_append(build_sdkconfig_append)
-        board_type_config = _resolve_board_config(
-            board_type,
-            target,
-            build_sdkconfig_append,
-            variant_name=name,
-        )
-        if explicit_board_cfg == board_type_config:
-            print(
-                f"[INFO] Board config explicitly set in config.json: {explicit_board_cfg}, "
-                "skip auto-select.",
-            )
-            sdkconfig_append = list(build_sdkconfig_append)
-        else:
-            # Replace a stale/misspelled explicit symbol with the canonical
-            # Kconfig symbol. Listing and building must resolve board identity
-            # through the same path or their exposed options can diverge.
-            sdkconfig_append = [f"{board_type_config}=y"]
-            sdkconfig_append.extend(
-                item for item in build_sdkconfig_append
-                if item.strip() != f"{explicit_board_cfg}=y"
-            )
+    # build.name is the compatibility-sensitive OTA-reported board identity.
+    _emit_build_stage("compiling")
+    _run_idf("build", preview=preview)
 
-        option_definitions = _build_option_definitions(
-            board_type,
-            target,
-            board_type_config,
-            build,
-        )
+    # merge-bin
+    _emit_build_stage("packaging")
+    merge_bin(preview)
 
-        user_options: list[str] = []
-        validation_symbols: list[tuple[list[str], str]] = [
-            ([board_type_config], "board selection"),
-        ]
-        build_option_sdkconfig: list[str] = []
-        selected_language = None
-        selected_wake_word = None
-        selected_build_options: Optional[dict[str, object]] = None
-        if language is not None:
-            selected_language, option = _language_sdkconfig_option(language)
-            user_options.append(option)
-            validation_symbols.append(
-                ([option.split("=", 1)[0]], "--language")
-            )
-        if wake_word is not None:
-            (
-                selected_wake_word,
-                wake_word_options,
-                wake_word_symbols,
-            ) = _wake_word_sdkconfig_options(wake_word, target)
-            user_options.extend(wake_word_options)
-            validation_symbols.append((wake_word_symbols, "--wake-word"))
-
-        # A build entry may carry semantic defaults to preserve an existing
-        # board-specific behavior after it moves out of hardcoded C++.
-        if build_options is not None or "build_options" in build:
-            selected_build_options = _normalize_build_options(
-                option_definitions,
-                build_options or {},
-            )
-            build_option_sdkconfig = _build_options_sdkconfig(
-                option_definitions,
-                selected_build_options,
-                _sdkconfig_assignments(build_sdkconfig_append),
-            )
-            user_options.extend(build_option_sdkconfig)
-
-        sdkconfig_append = _merge_sdkconfig_options(
-            sdkconfig_append,
-            user_options,
-        )
-        sdkconfig_append = _apply_auto_selects(sdkconfig_append)
-
-        print("-" * 80)
-        print(f"name: {final_name}")
-        if final_name != name:
-            print(f"reported_name: {name}")
-        print(f"reported_type: {reported_type}")
-        print(f"target: {target}")
-        if manufacturer:
-            print(f"manufacturer: {manufacturer}")
-        if selected_language:
-            print(f"language: {selected_language}")
-        if selected_wake_word:
-            print(f"wake_word: {selected_wake_word}")
-        if selected_build_options is not None:
-            print(
-                "build_options: "
-                + json.dumps(selected_build_options, ensure_ascii=False, sort_keys=True)
-            )
-        for item in sdkconfig_append:
-            print(f"sdkconfig_append: {item}")
-
-        _emit_build_stage("dependencies_resolving")
-        os.environ.pop("IDF_TARGET", None)
-        _prepare_target(target, preview)
-        _configure_build(
-            target,
-            sdkconfig_append,
-            name,
-            preview,
-        )
-        for symbols, option_name in validation_symbols:
-            _validate_configured_symbols(symbols, option_name)
-        _validate_configured_options(build_option_sdkconfig, "--build-options-json")
-
-        # build.name is the compatibility-sensitive OTA-reported board identity.
-        _emit_build_stage("compiling")
-        _run_idf("build", preview=preview)
-
-        # merge-bin
-        _emit_build_stage("packaging")
-        merge_bin(preview)
-
-        if create_zip:
-            zip_bin(final_name, project_version)
+    if create_zip:
+        zip_bin(final_name, project_version)
 
 ################################################################################
 # CLI entry
 ################################################################################
 
 
-def _print_board_list(variants: list[dict[str, str]]) -> None:
-    by_board: dict[str, list[str]] = {}
+def _print_board_list(variants: list[dict[str, Any]]) -> None:
     for variant in variants:
-        by_board.setdefault(variant["board"], []).append(variant["name"])
-
-    for board, names in by_board.items():
-        print(board)
-        if len(names) > 1:
-            for name in names:
-                print(f"  - {name}")
-
-
-def _select_variant(board: str, variants: list[dict[str, str]]) -> str:
-    board_variants = [variant for variant in variants if variant["board"] == board]
-    if not board_variants:
-        print(f"[ERROR] No build variants found for {board}.", file=sys.stderr)
-        sys.exit(1)
-    if len(board_variants) == 1:
-        return board_variants[0]["name"]
-
-    print(f"Available variants for {board}:")
-    for index, variant in enumerate(board_variants, start=1):
-        print(f"  {index}. {variant['name']}")
-
-    if not sys.stdin.isatty():
-        print(
-            "[ERROR] Multiple variants found in non-interactive mode; "
-            "select one with --name.",
-            file=sys.stderr,
-        )
-        sys.exit(2)
-
-    while True:
-        try:
-            answer = input(f"Select a variant [1-{len(board_variants)}]: ").strip()
-        except EOFError:
-            print("\n[ERROR] No variant selected.", file=sys.stderr)
-            sys.exit(2)
-        if answer.isdigit() and 1 <= int(answer) <= len(board_variants):
-            return board_variants[int(answer) - 1]["name"]
-        for variant in board_variants:
-            if answer == variant["name"]:
-                return variant["name"]
-        print("Enter a listed number or variant name.")
+        print(f"{variant['display_name']}: {variant['name']} ({variant['target']})")
 
 
 def main(argv: Optional[list[str]] = None) -> None:
     parser = argparse.ArgumentParser(
-        description="Configure and build one XiaoZhi board variant.",
+        description="Configure and build the Ruby RobotCar firmware.",
     )
-    parser.add_argument("board", nargs="?", default=None, help="Board type or 'all'")
-    parser.add_argument("-c", "--config", default="config.json", help="Config filename (default: config.json)")
-    parser.add_argument("--list-boards", action="store_true", help="List all supported boards and variants")
+    parser.add_argument("--list-boards", action="store_true", help="Show the single project build")
     parser.add_argument(
         "--list-languages",
         action="store_true",
@@ -1698,7 +1329,6 @@ def main(argv: Optional[list[str]] = None) -> None:
         action="store_true",
         help="Output list results in JSON format",
     )
-    parser.add_argument("--name", help="build.name to compile (the OTA-reported board name)")
     parser.add_argument(
         "--language",
         metavar="LOCALE",
@@ -1716,8 +1346,8 @@ def main(argv: Optional[list[str]] = None) -> None:
         "--build-options-json",
         metavar="JSON",
         help=(
-            "Semantic board options as a JSON object. Accepted keys are "
-            "reported by --list-boards --json for the selected variant."
+            "Project options as a JSON object. Accepted keys are "
+            "reported by --list-boards --json."
         ),
     )
     parser.add_argument(
@@ -1728,22 +1358,17 @@ def main(argv: Optional[list[str]] = None) -> None:
     parser.add_argument(
         "--select-changed",
         action="store_true",
-        help="Read changed paths from stdin and output the affected variants as JSON",
+        help="Read changed paths from stdin and output the affected project build as JSON",
     )
 
     cli_args = sys.argv[1:] if argv is None else argv
-    if not cli_args:
-        parser.print_help()
-        return
     args = parser.parse_args(cli_args)
 
     if args.select_changed:
         if (
-            args.board
-            or args.list_boards
+            args.list_boards
             or args.list_languages
             or args.list_wake_words
-            or args.name
             or args.language
             or args.wake_word
             or args.build_options_json
@@ -1752,17 +1377,15 @@ def main(argv: Optional[list[str]] = None) -> None:
         ):
             parser.error("--select-changed cannot be combined with build or list options")
         idf_version = _detect_idf_version_for_listing()
-        variants = _collect_variants(config_filename=args.config, idf_version=idf_version)
+        variants = _collect_variants(idf_version=idf_version)
         selected = _select_variants_for_changes(variants, sys.stdin.read().splitlines())
         print(json.dumps(selected))
         return
 
     if args.list_languages:
         if (
-            args.board is not None
-            or args.list_boards
+            args.list_boards
             or args.list_wake_words
-            or args.name
             or args.language
             or args.wake_word
             or args.build_options_json
@@ -1781,9 +1404,7 @@ def main(argv: Optional[list[str]] = None) -> None:
 
     if args.list_wake_words:
         if (
-            args.board is not None
-            or args.list_boards
-            or args.name
+            args.list_boards
             or args.language
             or args.wake_word
             or args.build_options_json
@@ -1805,13 +1426,10 @@ def main(argv: Optional[list[str]] = None) -> None:
         return
 
     if args.list_boards:
-        if args.board is not None:
-            parser.error("--list-boards does not accept a board")
         if (
             args.list_languages
             or args.list_wake_words
             or args.zip
-            or args.name
             or args.language
             or args.wake_word
             or args.build_options_json
@@ -1821,26 +1439,15 @@ def main(argv: Optional[list[str]] = None) -> None:
                 "list options"
             )
         idf_version = _detect_idf_version_for_listing()
-        variants = _collect_variants(config_filename=args.config, idf_version=idf_version)
+        variants = _collect_variants(idf_version=idf_version)
         if args.json:
             print(json.dumps(variants))
         else:
             _print_board_list(variants)
         return
 
-    if args.board is None:
-        parser.error("a board is required unless --list-boards is used")
-
-    # Compile mode
-    board_type_input: str = args.board
-    name_filter: Optional[str] = args.name
-    idf_version = _detect_idf_version()
     if args.json:
-        parser.error("--json is only valid when listing boards")
-    if board_type_input == "all" and name_filter:
-        parser.error("--name cannot be combined with board 'all'")
-    if board_type_input == "all" and args.build_options_json:
-        parser.error("--build-options-json cannot be combined with board 'all'")
+        parser.error("--json is only valid with a list option")
 
     parsed_build_options: Optional[dict[str, object]] = None
     if args.build_options_json is not None:
@@ -1852,50 +1459,13 @@ def main(argv: Optional[list[str]] = None) -> None:
             parser.error("--build-options-json must contain a JSON object")
         parsed_build_options = raw_build_options
 
-    # Check board_type in CMakeLists
-    if board_type_input != "all" and not _board_type_exists(board_type_input):
-        print(f"[ERROR] board_type {board_type_input} not found in main/CMakeLists.txt", file=sys.stderr)
-        sys.exit(1)
-
-    variants_all = _collect_variants(config_filename=args.config, idf_version=idf_version)
-
-    if board_type_input == "all":
-        selected_variants = variants_all
-    else:
-        if name_filter is None:
-            name_filter = _select_variant(board_type_input, variants_all)
-        selected_variants = [
-            variant
-            for variant in variants_all
-            if variant["board"] == board_type_input
-            and variant["name"] == name_filter
-        ]
-        if not selected_variants:
-            print(
-                f"[ERROR] Variant {name_filter} not found for {board_type_input}.",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-
-    for variant in selected_variants:
-        bt = variant["board"]
-        if not _board_type_exists(bt):
-            print(f"[ERROR] board_type {bt} not found in main/CMakeLists.txt", file=sys.stderr)
-            sys.exit(1)
-        cfg_path = _BOARDS_DIR / bt / args.config
-        if bt == board_type_input and not cfg_path.exists():
-            print(f"Board {bt} has no {args.config} config file, skipping")
-            return
-        build_board(
-            bt,
-            config_filename=args.config,
-            name_filter=variant["name"],
-            create_zip=args.zip,
-            language=args.language,
-            wake_word=args.wake_word,
-            build_options=parsed_build_options,
-            idf_version=idf_version,
-        )
+    build_project(
+        create_zip=args.zip,
+        language=args.language,
+        wake_word=args.wake_word,
+        build_options=parsed_build_options,
+        idf_version=_detect_idf_version(),
+    )
 
 
 if __name__ == "__main__":

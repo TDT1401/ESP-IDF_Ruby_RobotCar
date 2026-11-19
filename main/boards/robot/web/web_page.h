@@ -521,7 +521,7 @@ inline constexpr char kL298nWebPage[] = R"html(
               piNumber(data.encoder?.left?.rpm) + ' / ' + piNumber(data.encoder?.right?.rpm) +
               ' RPM; PWM ' + data.left_pwm_percent + ' / ' + data.right_pwm_percent + '%'
             : data.speed_pi_calibrated ? 'PI tốc độ sẵn sàng' :
-              'PI tốc độ chờ RPM tham chiếu từng bánh trong config.h';
+              'PI tốc độ chờ RPM tham chiếu từng bánh trong config/motion_control_config.h';
         if (typeof document.querySelector === 'function') {
           const speedLabel = document.querySelector('.hud-speed span');
           if (speedLabel) speedLabel.textContent =

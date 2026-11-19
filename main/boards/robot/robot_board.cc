@@ -11,13 +11,10 @@
 #include <cstring>
 #include <utility>
 
-#include "../config.h"
+#include "board_config.h"
 #include "application.h"
 #include "assets/lang_config.h"
 
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY
-#include "../robot_eye/robot_eye_display.h"
-#endif
 #include "mcp/mcp_tools.h"
 #include "motor_controller.h"
 #include "telegram/telegram.h"
@@ -74,7 +71,7 @@ static_assert(FC03_LEFT_WHEEL_DIAMETER_MM >= 0 && FC03_LEFT_WHEEL_DIAMETER_MM <=
 
 MotorDriverConfig MakeMotorDriverConfig() {
     MotorDriverConfig config = {};
-    // Channel 0 belongs to the backlight; channel 3 belongs to the servo.
+    // Keep motor channels 1/2/4/5; channel 3 belongs to the servo.
     config.motors = {{
         {MOTOR_LEFT_EN_PIN, MOTOR_LEFT_IN1_PIN, MOTOR_LEFT_IN2_PIN, LEDC_CHANNEL_1, false},
         {MOTOR_RIGHT_EN_PIN, MOTOR_RIGHT_IN1_PIN, MOTOR_RIGHT_IN2_PIN, LEDC_CHANNEL_2, false},
@@ -248,7 +245,8 @@ void StartFc03Monitor(Fc03EncoderStatus (*snapshot)()) {
                 } else {
                     ESP_LOGI(kTag,
                              "UNCALIBRATED: metres/RPM unavailable; set the 4 FC03 calibration "
-                             "values in config.h. Use total differences to count wheel turns.");
+                             "values in config/robot_hardware_config.h. "
+                             "Use total differences to count wheel turns.");
                 }
                 if (status.left.no_pulses || status.right.no_pulses) {
                     ESP_LOGW(kTag,
@@ -280,27 +278,9 @@ void StartFc03Monitor(Fc03EncoderStatus (*snapshot)()) {
 #endif
 }
 
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY
-RobotDriveStatus ReadRobotDriveStatus() {
-    const auto motor = GetL298nMotorStatus();
-    RobotDriveStatus view;
-    view.active = motor.web_manual || motor.pending || motor.moving;
-    view.motion = motor.motion;
-    view.speed_percent = motor.active_speed_percent;
-    view.owner = motor.control_owner;
-    view.web_manual = motor.web_manual;
-    view.distance_valid = motor.distance_valid;
-    view.distance_cm = motor.measured_distance_cm;
-    view.warning_distance_cm = motor.web_manual ? motor.web_warning_effective_cm
-                                                 : motor.obstacle_stop_effective_cm;
-    view.warning_sound_enabled = motor.warning_sound_enabled;
-    return view;
-}
-#endif
-
 }  // namespace
 
-void InitializeRobotBoard(RobotEyeDisplay* display) {
+void InitializeRobotBoard() {
     InitializeL298nController(MakeMotorControllerConfig());
 #if HEADING_PD_DEBUG || ODOMETRY_DEBUG
     if (xTaskCreate(ControlMonitorTask, "control_monitor", 4096, nullptr, 2, nullptr) != pdPASS)
@@ -309,14 +289,6 @@ void InitializeRobotBoard(RobotEyeDisplay* display) {
     StartFc03Monitor([]() { return GetL298nMotorStatus().encoder; });
     RegisterL298nMcpTools();
     InitializeL298nTelegram();
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY
-    if (display != nullptr) {
-        display->SetEmotionMotionCallback(UpdateL298nEmotion);
-        display->SetDriveStatusProvider(ReadRobotDriveStatus);
-    }
-#else
-    (void)display;
-#endif
 }
 
 void UpdateRobotNetwork(bool connected) {

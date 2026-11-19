@@ -1,5 +1,8 @@
 # RobotEye attribution
 
+Historical notice: the RobotEye adaptation has been removed from the current
+firmware. The original attribution and license below are retained for prior revisions.
+
 The vector eye geometry, expression set, morphing, blinking, gaze, drift, and boot-animation
 model in `robot_eye/robot_eye_*.cc` are adapted from
 [fonzu/RobotEye](https://github.com/fonzu/RobotEye), version 1.0.0, commit

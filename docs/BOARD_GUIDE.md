@@ -1,6 +1,6 @@
-# Bread Compact Wi-Fi LCD — Wiring
+# Ruby RobotCar — Wiring
 
-[Tiếng Việt](../../../docs/bread-compact-wifi-lcd.vi.md)
+[Tiếng Việt](BOARD_GUIDE.vi.md)
 
 This pin map is for the ESP32-S3-N16R8 board. Disconnect power before wiring. Connect the ESP32-S3, all modules, and the motor supply to a common GND. Use the supply voltage shown for each module; never put a 5 V signal on an ESP32-S3 GPIO.
 
@@ -30,24 +30,13 @@ This pin map is for the ESP32-S3-N16R8 board. Disconnect power before wiring. Co
 
 Connect the speaker to the amplifier's + and - outputs, not to GND.
 
-## SPI TFT display (ST7789 240×240)
+## Display
 
-The default build disables the display and does not initialize the SPI panel or backlight. The dual-L298N wiring below assigns GPIO21, GPIO40, GPIO41, GPIO42, GPIO45, and GPIO47 to the right L298N. Disconnect the TFT wires from these pins and keep `CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY=n`. GPIO18 is now unused. A replacement display requiring fewer pins will be selected and assigned separately.
+This firmware runs without a display and does not initialize SPI/TFT or backlight.
+Do not connect a TFT to GPIO21, GPIO40, GPIO41, GPIO42, GPIO45 or GPIO47: these pins
+are assigned to the right L298N. GPIO18 remains unused.
 
-| Display pin | Connect to |
-| ----------- | ---------- |
-| GND         | GND        |
-| VCC         | 3V3        |
-| SCL         |            |
-| SDA         |            |
-| RES         |            |
-| DC          |            |
-| CS          |            |
-| BLK         |            |
-
-The display pins labeled SCL and SDA carry SPI clock and data.
-
-## Dual L298N conventional-wheel wiring — bread-compact-wifi-lcd build
+## Dual L298N conventional-wheel wiring
 
 The car uses four conventional wheels with differential left/right steering. Front wheels are at the vehicle's front, and rear wheels are at its rear. Each L298N bridge drives one motor independently. Retain the HC-SR04 servo on GPIO6, audio, IMU, both encoders, and the current USB/UART pins.
 
@@ -69,10 +58,10 @@ GPIO45, connected to right L298N ENA, is a strapping pin selecting VDD_SPI volta
 
 Remove all four ENA/ENB jumpers across both modules so the ESP32 supplies four independent PWM signals. A 10 kΩ pull-down on each ENA/ENB input is recommended. Connect the ESP32, both modules, and the separate motor supply to a common GND. Do not power the motors from the ESP32-S3 3V3 or 5V rail. Both FC-03 encoders are on the front wheels: left on GPIO38, right on GPIO48. The rear wheels do not have encoders.
 
-The single `bread-compact-wifi-lcd` build keeps its existing firmware/OTA identity and uses four conventional wheels with two L298N modules whenever `CONFIG_BREAD_COMPACT_WIFI_LCD_L298N=y`. The target remains ESP32-S3 with 16 MB flash and `partitions/v2/16m.csv` from the project defaults. Build manually in an ESP-IDF environment with:
+The single project build keeps its existing firmware/OTA identity in `config/build_config.json` and uses four conventional wheels with two L298N modules whenever `CONFIG_BREAD_COMPACT_WIFI_LCD_L298N=y`. The target remains ESP32-S3 with 16 MB flash and `partitions/v2/16m.csv` from the project defaults. Build manually in an ESP-IDF environment with:
 
 ```sh
-python scripts/build.py bread-compact-wifi-lcd
+python scripts/build.py
 ```
 
 The HUD joystick controls forward/backward motion, curved turns, and rotation in place using `left = y + x` and `right = y - x`, normalized together to the selected speed. Both wheels on each side receive the same logical direction and PWM. Speed PI uses the front encoder on each side; rear wheels follow front PWM without separate feedback. Motor LEDC channels are 1/2/4/5; the servo retains channel 3. Stop, network loss, and session expiry disable all four bridges; direction changes include a stop interval.

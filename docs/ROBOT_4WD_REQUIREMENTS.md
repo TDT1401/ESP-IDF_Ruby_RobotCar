@@ -13,7 +13,6 @@
 - 2 cảm biến encoder FC-03.
 - IMU MPU6050.
 - Cảm biến siêu âm HC-SR04.
-- Màn hình TFT ST7789 240×240.
 - Microphone I2S.
 - Mạch khuếch đại MAX98357A và loa.
 - Nguồn cấp cho board và nguồn motor riêng.

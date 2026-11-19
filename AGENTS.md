@@ -2,7 +2,7 @@
 
 ## Project
 
-XiaoZhi is an ESP-IDF C/C++ voice-assistant firmware supporting many chips, boards, displays, audio devices, and network transports. A build selects exactly one board implementation.
+Ruby RobotCar is an ESP-IDF C/C++ voice-assistant robot firmware for one ESP32-S3 board, one build configuration, and no physical display. Its source is under `main/boards/`, with exactly one board factory.
 
 Use ESP-IDF v6.1 when possible. The minimum supported SDK is ESP-IDF v6.0.1. IDF 5.x is not supported.
 
@@ -11,17 +11,19 @@ Use ESP-IDF v6.1 when possible. The minimum supported SDK is ESP-IDF v6.0.1. IDF
 - `main/application.*`: main event loop, protocol lifecycle, and high-level behavior.
 - `main/device_state_machine.*`: legal runtime state transitions.
 - `main/boards/common/`: board interfaces and reusable hardware/network helpers.
-- `main/boards/**/`: board-specific pins, initialization, and build variants.
+- `main/boards/robot_car_board.cc`: the sole `RobotCarBoard` factory.
+- `main/boards/robot/`: robot integration, input adapters, and serialization.
+- `config/`: project-owned hardware settings, motion tuning, and `build_config.json` for the single firmware build.
 - `components/motor_driver/`: project-owned L298N GPIO/LEDC driver; hardware configuration is supplied by the board.
 - `components/wheel_encoder/`, `components/imu/`, `components/ultrasonic_sensor/`: project-owned sensor drivers configured by the board.
 - `components/motor_controller/`: motion control, commands, safety, odometry and read-only snapshots; application integration uses callbacks supplied by the board.
 - `main/audio/`: codecs, audio tasks, engines, wake words, and queues.
 - `main/protocols/`: transport-neutral API plus WebSocket and MQTT/UDP.
-- `main/display/` and `main/led/`: reusable UI implementations.
+- `main/display/` and `main/led/`: shared framework display/LED interfaces; this board uses the inherited `NoDisplay` and no backlight.
 - `main/mcp_server.*`: common device-side MCP tools and dispatch.
 - `main/Kconfig.projbuild`: board and feature configuration.
 - `main/CMakeLists.txt`: source, board, locale, font, and asset selection.
-- `scripts/build.py`: canonical board/variant build entry point.
+- `scripts/build.py`: canonical single-project build entry point; no board or variant argument.
 
 Read the closest existing implementation before adding a new one. Prefer the narrowest owning layer; do not put board-specific behavior into core modules.
 
@@ -29,8 +31,8 @@ Read the closest existing implementation before adding a new one. Prefer the nar
 
 - Preserve unrelated worktree changes and keep patches focused.
 - A build must export exactly one board factory through `DECLARE_BOARD(...)`.
-- Never alter an existing board's pins to support different hardware. Add a uniquely named board or release variant; board identity affects OTA compatibility.
-- Core code depends on `Board` interfaces, never a concrete board class or board `config.h`.
+- Preserve pin assignments and OTA identity during structural changes. Do not introduce another board or build variant unless explicitly requested.
+- Core code depends on `Board` interfaces, never a concrete board class or project hardware configuration headers. Robot components receive configuration structs from board initialization.
 - Treat camera, backlight, display, LED, battery, and similar capabilities as optional.
 - Change runtime state through `Application::SetDeviceState()` and the state machine.
 - Callbacks may run outside the main task. Schedule application mutations with `Application::Schedule()` or event bits.
@@ -43,11 +45,15 @@ Read the closest existing implementation before adding a new one. Prefer the nar
 
 ## Boards and Configuration
 
-Board selection is a coupled chain:
+Project configuration is a coupled chain:
 
-`config.json` -> `scripts/build.py` -> `main/Kconfig.projbuild` -> `main/CMakeLists.txt` -> board source and `config.h`.
+`config/build_config.json` -> `scripts/build.py` -> `main/Kconfig.projbuild` -> `main/CMakeLists.txt` -> `main/boards/robot_car_board.cc` and `config/board_config.h`.
 
-When adding a board or variant, update every relevant link in that chain. Include a unique board identity, correct chip target, flash/partition settings, exactly one `DECLARE_BOARD`, and board documentation. Follow `docs/custom-board.md`.
+`config/build_config.json` has exactly one build entry for ESP32-S3. Preserve its `type` and `builds[0].name` values (`bread-compact-wifi-lcd`): these are `BOARD_TYPE`/`BOARD_NAME` reported to Xiaozhi/OTA, independent of source paths.
+
+`config/board_config.h` includes the audio, robot hardware and motion tuning headers. The configuration directory is a private include path of `main`; components receive configuration structs and must not include these headers.
+
+Keep the remaining Kconfig keys for saved configuration compatibility; the unused `BREAD_COMPACT_WIFI_LCD_DISPLAY` option was removed. `BOARD_TYPE_BREAD_COMPACT_WIFI_LCD` is an internal default, not a user-facing board selector. Follow `docs/custom-board.md` for this project's integration rules.
 
 ## Commands
 
@@ -59,35 +65,34 @@ idf.py --version
 ```
 
 ```sh
-# Discover exact board and variant names
+# Inspect the single build's metadata
 python3 scripts/build.py --list-boards
 
-# Canonical variant build
-python3 scripts/build.py <board-directory> --name <variant-name>
+# Build the single project configuration
+python3 scripts/build.py
 
 # Format/check touched files
 clang-format -i <files>
 clang-format --dry-run -Werror <files>
 ```
 
-The build script changes local `sdkconfig` and build state. Do not assume the build directory still represents a previous target.
+The build script changes local `sdkconfig` and build state. It reuses `build/`; no additional board/variant build directories are defined.
 
 ## Validation
 
-- Board-only change: build affected variants and smoke-test changed hardware.
-- Core, common-board, audio, protocol, display, dependency, Kconfig, or CMake change: build representative affected chip/network paths.
+- Board-only change: build the single firmware and smoke-test changed hardware.
+- Core, common-board, audio, protocol, display, dependency, Kconfig, or CMake change: validate the ESP32-S3 build and affected feature/protocol paths.
 - Protocol changes: verify WebSocket and MQTT/UDP when shared behavior changes.
 - Audio changes: verify capture, playback, wake/VAD, interruption, reconnect, and applicable AEC modes.
-- UI/assets changes: verify applicable no-display/OLED/LVGL paths and partition size.
+- UI/assets changes: verify the `NoDisplay` path and partition size.
 - Always report what was tested and what still needs physical hardware. A successful build is not hardware validation.
 
 ## Authoritative Documentation
 
 - Overview and SDK policy: `README.md`
-- Board guide: `docs/custom-board.md`
+- Board integration: `docs/custom-board.md`; wiring: `docs/BOARD_GUIDE.md`, `docs/BOARD_GUIDE.vi.md`
 - Audio design: `main/audio/README.md`
 - Code style: `docs/code_style.md`
 - Protocols: `docs/websocket.md`, `docs/mqtt-udp.md`, `docs/mcp-protocol.md`
-- CI matrix: `.github/workflows/build.yml`
 
 Keep detailed or fast-changing information in those files, not here. Add a nested `AGENTS.md` only when a subsystem needs specialized instructions.

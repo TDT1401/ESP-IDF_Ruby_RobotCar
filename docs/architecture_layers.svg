@@ -18,13 +18,13 @@
 
   <rect width="1120" height="700" rx="24" fill="#f7f9fc"/>
   <text x="48" y="52" class="title">Hierarchical Layered Architecture</text>
-  <text x="48" y="79" class="subtitle">Bread Compact Wi-Fi LCD / Ruby RobotCar</text>
+  <text x="48" y="79" class="subtitle">Ruby RobotCar / ESP32-S3</text>
 
   <rect x="48" y="107" width="1024" height="88" rx="18" fill="#e8eefc" stroke="#9bafe0" stroke-width="2"/>
   <circle cx="84" cy="151" r="19" fill="#586fb5"/>
   <text x="84" y="152" class="badge">0</text>
   <text x="118" y="142" class="name">Composition Root</text>
-  <text x="118" y="170" class="path">board factory · config.json · Kconfig · CMake · robot_board.cc</text>
+  <text x="118" y="170" class="path">RobotCarBoard · build_config.json · Kconfig · CMake · robot_board.cc</text>
 
   <path d="M 560 195 L 560 228" stroke="#37516f" stroke-width="3" fill="none" marker-end="url(#arrow)"/>
   <text x="578" y="217" class="arrow-label">wires APIs and callbacks</text>
@@ -33,7 +33,7 @@
   <circle cx="84" cy="273" r="19" fill="#218c9a"/>
   <text x="84" y="274" class="badge">1</text>
   <text x="118" y="266" class="name">Presentation Layer</text>
-  <text x="118" y="294" class="path">robot/web · robot/telegram · robot/mcp · robot/serialization · robot_eye</text>
+  <text x="118" y="294" class="path">robot/web · robot/telegram · robot/mcp · robot/serialization</text>
   <text x="118" y="319" class="detail">Validate external input, call the controller API, render read-only status.</text>
 
   <path d="M 560 341 L 560 374" stroke="#37516f" stroke-width="3" fill="none" marker-end="url(#arrow)"/>

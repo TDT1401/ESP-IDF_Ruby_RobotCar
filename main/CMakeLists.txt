@@ -59,24 +59,20 @@ function(find_component_by_pattern PATTERN COMPONENT_VAR PATH_VAR)
     endforeach()
 endfunction()
 
-# This firmware has one ESP32-S3 board and one OTA identity.
-if(CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI_LCD)
-    set(BOARD_DIR "bread-compact-wifi-lcd")
-elseif(CMAKE_BUILD_EARLY_EXPANSION)
-    set(BOARD_DIR "bread-compact-wifi-lcd")
-else()
-    message(FATAL_ERROR "Select the bread-compact-wifi-lcd board")
+# The project has one board factory and one supported chip.
+if(NOT CMAKE_BUILD_EARLY_EXPANSION AND NOT CONFIG_IDF_TARGET_ESP32S3)
+    message(FATAL_ERROR "Ruby RobotCar requires the ESP32-S3 target")
 endif()
 set(BUILTIN_TEXT_FONT font_noto_sans_basic_16_4)
 set(BUILTIN_ICON_FONT font_material_symbols_16_4)
 set(DEFAULT_EMOJI_COLLECTION noto-color-emoji_32)
 
-set(BOARD_CONFIG_FILE "${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD_DIR}/config.json")
+set(BOARD_CONFIG_FILE "${PROJECT_DIR}/config/build_config.json")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${BOARD_CONFIG_FILE}")
 
-# BOARD_TYPE and BOARD_MANUFACTURER are reported by the firmware.
-# Prefer config.json and fall back to values derived from the full board directory.
+# OTA identity is read from metadata and remains independent of source paths.
 set(BOARD_TYPE "")
+set(BOARD_NAME "")
 set(BOARD_MANUFACTURER "")
 if(EXISTS "${BOARD_CONFIG_FILE}")
     file(READ "${BOARD_CONFIG_FILE}" BOARD_CONFIG_JSON)
@@ -84,16 +80,14 @@ if(EXISTS "${BOARD_CONFIG_FILE}")
     if(BOARD_TYPE_MATCH)
         set(BOARD_TYPE "${CMAKE_MATCH_1}")
     endif()
+    string(REGEX MATCH "\"name\"[ \t\r\n]*:[ \t\r\n]*\"([^\"]+)\"" BOARD_NAME_MATCH "${BOARD_CONFIG_JSON}")
+    if(BOARD_NAME_MATCH)
+        set(BOARD_NAME "${CMAKE_MATCH_1}")
+    endif()
     string(REGEX MATCH "\"manufacturer\"[ \t\r\n]*:[ \t\r\n]*\"([^\"]+)\"" BOARD_MANUFACTURER_MATCH "${BOARD_CONFIG_JSON}")
     if(BOARD_MANUFACTURER_MATCH)
         set(BOARD_MANUFACTURER "${CMAKE_MATCH_1}")
     endif()
-endif()
-if(NOT BOARD_TYPE)
-    string(REPLACE "/" "-" BOARD_TYPE "${BOARD_DIR}")
-endif()
-if(NOT BOARD_MANUFACTURER AND BOARD_DIR MATCHES "^([^/]+)/")
-    set(BOARD_MANUFACTURER "${CMAKE_MATCH_1}")
 endif()
 if(NOT CMAKE_BUILD_EARLY_EXPANSION AND NOT BOARD_TYPE MATCHES "^[a-z0-9.-]+$")
     message(FATAL_ERROR
@@ -101,30 +95,15 @@ if(NOT CMAKE_BUILD_EARLY_EXPANSION AND NOT BOARD_TYPE MATCHES "^[a-z0-9.-]+$")
     )
 endif()
 
-file(GLOB BOARD_SOURCES
-    ${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD_DIR}/*.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD_DIR}/*.c
-)
-list(APPEND SOURCES ${BOARD_SOURCES})
-
-if(CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI_LCD AND CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY)
-    list(APPEND SOURCES
-        "boards/bread-compact-wifi-lcd/robot_eye/robot_eye_animation.cc"
-        "boards/bread-compact-wifi-lcd/robot_eye/robot_eye_display.cc"
-        "boards/bread-compact-wifi-lcd/robot_eye/robot_eye_geometry.cc"
-        "boards/bread-compact-wifi-lcd/robot_eye/robot_eye_info.cc"
-        "boards/bread-compact-wifi-lcd/robot_eye/robot_eye_renderer.cc"
-        "boards/bread-compact-wifi-lcd/robot_eye/robot_eye_weather.cc"
-    )
-endif()
+list(APPEND SOURCES "boards/robot_car_board.cc")
 
 if(CONFIG_BREAD_COMPACT_WIFI_LCD_L298N)
-    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/robot_board.cc")
-    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/serialization/fc03_json.cc")
-    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/serialization/odometry_json.cc")
-    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/mcp/mcp_tools.cc")
-    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/web/web_server.cc")
-    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/telegram/telegram.cc")
+    list(APPEND SOURCES "boards/robot/robot_board.cc")
+    list(APPEND SOURCES "boards/robot/serialization/fc03_json.cc")
+    list(APPEND SOURCES "boards/robot/serialization/odometry_json.cc")
+    list(APPEND SOURCES "boards/robot/mcp/mcp_tools.cc")
+    list(APPEND SOURCES "boards/robot/web/web_server.cc")
+    list(APPEND SOURCES "boards/robot/telegram/telegram.cc")
 endif()
 
 list(APPEND SOURCES
@@ -182,6 +161,7 @@ file(GLOB COMMON_SOUNDS ${CMAKE_CURRENT_SOURCE_DIR}/assets/common/*.ogg)
 idf_component_register(SRCS ${SOURCES}
                     EMBED_FILES ${LANG_SOUNDS} ${COMMON_SOUNDS}
                     INCLUDE_DIRS ${INCLUDE_DIRS}
+                    PRIV_INCLUDE_DIRS "${PROJECT_DIR}/config"
                     WHOLE_ARCHIVE
                     PRIV_REQUIRES
                         motor_controller
@@ -207,14 +187,6 @@ idf_component_register(SRCS ${SOURCES}
                     )
 
 # Use target_compile_definitions to define the reported board identity
-# If BOARD_NAME is empty, use BOARD_TYPE
-if(NOT BOARD_NAME)
-    set(BOARD_NAME ${BOARD_TYPE})
-endif()
-# This board has one release identity with motor, ultrasonic, and encoder support.
-if(CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI_LCD)
-    set(BOARD_NAME "bread-compact-wifi-lcd")
-endif()
 if(NOT CMAKE_BUILD_EARLY_EXPANSION AND NOT BOARD_NAME MATCHES "^[a-z0-9.-]+$")
     message(FATAL_ERROR
         "Invalid BOARD_NAME '${BOARD_NAME}': only lowercase letters, digits, '.' and '-' are allowed"

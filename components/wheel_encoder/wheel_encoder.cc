@@ -54,7 +54,8 @@ void Fc03Encoder::Initialize() {
         ESP_LOGW(kTag,
                  "UNCALIBRATED: turn each wheel exactly 10 revolutions by hand; "
                  "(end total - start total)/10 = pulses per WHEEL revolution. "
-                 "Set FC03_*_PULSES_PER_REV and FC03_*_WHEEL_DIAMETER_MM in config.h.");
+                 "Set FC03_*_PULSES_PER_REV and FC03_*_WHEEL_DIAMETER_MM in "
+                 "config/robot_hardware_config.h.");
     }
     ESP_LOGI(kTag,
              "Totals reset at reboot. Directions are inferred from commands, not measured. "

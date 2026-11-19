@@ -1,6 +1,6 @@
-# Bread Compact Wi-Fi LCD — Hướng dẫn nối dây
+# Ruby RobotCar — Hướng dẫn nối dây
 
-[English](../main/boards/bread-compact-wifi-lcd/BOARD_GUIDE.md)
+[English](BOARD_GUIDE.md)
 
 Sơ đồ chân này dành cho board ESP32-S3-N16R8. Ngắt nguồn trước khi nối dây. Nối GND chung giữa ESP32-S3, các module và nguồn motor. Cấp đúng điện áp ghi cho từng module; không đưa tín hiệu 5 V vào GPIO của ESP32-S3.
 
@@ -30,24 +30,13 @@ Sơ đồ chân này dành cho board ESP32-S3-N16R8. Ngắt nguồn trước khi
 
 Nối loa vào hai ngõ ra + và - của mạch khuếch đại, không nối vào GND.
 
-## Màn hình TFT SPI (ST7789 240×240)
+## Màn hình
 
-Bản build mặc định đang tắt màn hình. Firmware không khởi tạo SPI/TFT hay đèn nền. Sơ đồ hai L298N bên dưới dùng GPIO21, GPIO40, GPIO41, GPIO42, GPIO45 và GPIO47 cho L298N phải; phải tháo dây TFT khỏi các chân này và giữ `CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY=n`. GPIO18 hiện để trống. Màn hình thay thế ít chân hơn sẽ được chọn và phân công chân riêng sau.
+Firmware không dùng màn hình và không khởi tạo SPI/TFT hay đèn nền.
+Không nối TFT vào GPIO21, GPIO40, GPIO41, GPIO42, GPIO45 hoặc GPIO47 vì các chân này
+được dùng cho L298N phải. GPIO18 vẫn để trống.
 
-| Chân màn hình | Nối với |
-| ------------- | ------- |
-| GND           | GND     |
-| VCC           | 3V3     |
-| SCL           |         |
-| SDA           |         |
-| RES           |         |
-| DC            |         |
-| CS            |         |
-| BLK           |         |
-
-Chân SCL và SDA trên màn hình mang xung nhịp và dữ liệu SPI.
-
-## Hai L298N và bánh thường — build bread-compact-wifi-lcd
+## Hai L298N và bánh thường
 
 Xe dùng bốn bánh thường, điều khiển vi sai trái/phải. Bánh trước ở đầu xe, bánh sau ở đuôi xe. Mỗi kênh L298N điều khiển riêng một motor. Giữ servo HC-SR04 tại GPIO6, audio, IMU, hai encoder và các chân USB/UART hiện tại.
 
@@ -69,10 +58,10 @@ GPIO45 nối ENA của L298N phải là chân strapping chọn điện áp VDD_S
 
 Tháo cả bốn jumper ENA/ENB trên hai module để ESP32 cấp bốn tín hiệu PWM độc lập. Khuyến nghị điện trở kéo xuống 10 kΩ tại mỗi chân ENA/ENB. Nối GND chung giữa ESP32, hai module và nguồn motor riêng. Không cấp nguồn motor từ đường 3V3 hoặc 5V của ESP32-S3. Hai encoder FC-03 gắn ở bánh trước: trái dùng GPIO38, phải dùng GPIO48; hai bánh sau chưa có encoder.
 
-Build duy nhất `bread-compact-wifi-lcd` giữ tên firmware/OTA hiện có và dùng bốn bánh thường với hai L298N khi bật `CONFIG_BREAD_COMPACT_WIFI_LCD_L298N=y`. Target vẫn là ESP32-S3, flash 16 MB và partition `partitions/v2/16m.csv` theo defaults của dự án. Khi tự build trong môi trường ESP-IDF, dùng:
+Bản build duy nhất giữ tên firmware/OTA hiện có trong `config/build_config.json` và dùng bốn bánh thường với hai L298N khi bật `CONFIG_BREAD_COMPACT_WIFI_LCD_L298N=y`. Target vẫn là ESP32-S3, flash 16 MB và partition `partitions/v2/16m.csv` theo defaults của dự án. Khi tự build trong môi trường ESP-IDF, dùng:
 
 ```sh
-python scripts/build.py bread-compact-wifi-lcd
+python scripts/build.py
 ```
 
 Joystick trên HUD điều khiển tiến/lùi/rẽ và quay tại chỗ bằng cách phối hợp tốc độ trái/phải: `left = y + x`, `right = y - x`, chuẩn hóa chung theo tốc độ đã chọn. Hai bánh cùng bên nhận cùng chiều logic và PWM. Speed PI dùng encoder trước của mỗi bên; bánh sau nhận cùng PWM với bánh trước, chưa có feedback riêng. Bốn kênh PWM dùng LEDC 1/2/4/5; servo giữ kênh 3. Dừng, mất kết nối hoặc hết phiên điều khiển ngắt cả bốn kênh; đổi chiều có khoảng dừng.

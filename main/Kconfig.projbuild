@@ -40,14 +40,9 @@ choice
 endchoice
 
 config BOARD_TYPE_BREAD_COMPACT_WIFI_LCD
-    bool "Ruby RobotCar (ESP32-S3)"
+    bool
     depends on IDF_TARGET_ESP32S3
     default y
-
-config BREAD_COMPACT_WIFI_LCD_DISPLAY
-    bool "ST7789 240x240"
-    depends on BOARD_TYPE_BREAD_COMPACT_WIFI_LCD
-    default n
 
 config BREAD_COMPACT_WIFI_LCD_L298N
     bool "L298N motors with HC-SR04"

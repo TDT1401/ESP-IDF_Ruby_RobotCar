@@ -6,15 +6,15 @@ An ESP32 mobile robotics learning project. Ruby RobotCar combines the XiaoZhi vo
 
 ![Ruby RobotCar four-wheel ESP32-S3 robot](docs/ruby_car.png)
 
-The source is configured for one hardware setup: an ESP32-S3-N16R8, L298N motor driver, HC-SR04 ultrasonic sensor, two FC-03 wheel encoders, and a ST7789 240×240 TFT display. The firmware locales are Vietnamese, English, and Simplified Chinese. For pin connections, see the [board wiring guide](main/boards/bread-compact-wifi-lcd/BOARD_GUIDE.md).
+The source is configured for one hardware setup: an ESP32-S3-N16R8, L298N motor driver, HC-SR04 ultrasonic sensor, and two FC-03 wheel encoders. This firmware runs without a display. The firmware locales are Vietnamese, English, and Simplified Chinese. For pin connections, see the [board wiring guide](docs/BOARD_GUIDE.md).
 
 ## Where to start
 
 | If you want to… | Read… |
 | --- | --- |
-| Connect the board and modules | [Board wiring guide](main/boards/bread-compact-wifi-lcd/BOARD_GUIDE.md) |
+| Connect the board and modules | [Board wiring guide](docs/BOARD_GUIDE.md) |
 | Build and flash the firmware | [Build and flash](#build-and-flash) |
-| Learn how the firmware selects and configures a board | [Custom board guide](docs/custom-board.md) |
+| Learn how the hardware and single firmware build are configured | [Board integration guide](docs/custom-board.md) |
 | Understand MCP communication between the assistant and device | [MCP protocol documentation](docs/mcp-protocol.md) |
 | Learn about the server communication transports | [WebSocket](docs/websocket.md) · [MQTT + UDP](docs/mqtt-udp.md) |
 
@@ -23,9 +23,13 @@ The source is configured for one hardware setup: an ESP32-S3-N16R8, L298N motor 
 Use ESP-IDF v6.1 when possible (minimum v6.0.1). From the repository root:
 
 ```sh
-python scripts/build.py bread-compact-wifi-lcd --language vi-VN --wake-word wn9_hiesp
+python scripts/build.py --language vi-VN --wake-word wn9_hiesp
 idf.py -p <SERIAL_PORT> flash monitor
 ```
+
+Omit the optional language and wake-word flags to use the project defaults:
+`python scripts/build.py`. The sole build is defined in `config/build_config.json`;
+its existing Xiaozhi OTA type/name are preserved.
 
 ## Hands-on learning path
 
@@ -33,7 +37,7 @@ idf.py -p <SERIAL_PORT> flash monitor
 2. Assemble the hardware and check the power supply, common ground, and signal voltage levels before powering it on.
 3. Install ESP-IDF, then build and flash the firmware with the commands above.
 4. Connect the robot to Wi-Fi and try the control page.
-5. Explore `main/boards/bread-compact-wifi-lcd/robot/` to see how the car control features are connected to the firmware.
+5. Explore `main/boards/robot/` to see how the car control features are connected to the firmware.
 
 ## What you can learn
 
@@ -47,6 +51,6 @@ This is a learning and experimentation project. Travel distance depends on encod
 
 ## Origin and license
 
-The voice-assistant firmware is based on the open-source [XiaoZhi ESP32](https://github.com/78/xiaozhi-esp32) project. The display adaptation has a separate [RobotEye attribution notice](docs/ROBOT_EYE_NOTICE.md). This repository is released under the [MIT License](LICENSE). Retain the copyright and license notices when using or redistributing the code.
+The voice-assistant firmware is based on the open-source [XiaoZhi ESP32](https://github.com/78/xiaozhi-esp32) project. This repository is released under the [MIT License](LICENSE). Retain the copyright and license notices when using or redistributing the code.
 
 When reporting an issue, include the board, ESP-IDF version, and relevant logs. Do not post Wi-Fi passwords, Telegram tokens, or personal account details in the repository.
