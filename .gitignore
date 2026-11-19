@@ -1,5 +1,6 @@
 tmp/
-components/
+/components/*
+!/components/motor_driver/
 managed_components/
 build/
 dist/

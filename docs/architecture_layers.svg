@@ -62,7 +62,7 @@
   <circle cx="618" cy="579" r="19" fill="#b77b27"/>
   <text x="618" y="580" class="badge">3b</text>
   <text x="652" y="572" class="name">Infrastructure Layer</text>
-  <text x="652" y="601" class="path">robot/drivers · robot/sensors · config.h</text>
+  <text x="652" y="601" class="path">motor_driver · robot/sensors · config.h</text>
   <text x="652" y="628" class="detail">Motor GPIO/PWM and sensor hardware.</text>
 
   <text x="48" y="681" class="detail">Dependency direction: Presentation → Application → Domain / Infrastructure. Telemetry returns via Application snapshots.</text>

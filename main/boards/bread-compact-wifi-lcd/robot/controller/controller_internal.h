@@ -4,9 +4,9 @@
 #include "../domain/motion_policy.h"
 #include "../domain/pose_ekf.h"
 #include "../domain/web_control_session.h"
-#include "../drivers/l298n_motor_driver.h"
 #include "heading_pd.h"
 #include "l298n_controller.h"
+#include "motor_driver.h"
 #include "speed_pi.h"
 
 #include <esp_err.h>
@@ -47,7 +47,7 @@ public:
 private:
     // Network callbacks and the timer share this controller. Keep the mutex scope short.
     std::mutex mutex_;
-    L298nMotorDriver driver_;
+    MotorDriver driver_;
     CommandInterface command_interface_;
     WebControlSession web_control_;
     Fc03Encoder encoder_;

@@ -73,6 +73,33 @@ void ControlMonitorTask(void*) {
 #endif
 
 namespace ruby_robot {
+namespace {
+
+MotorDriverConfig MakeMotorDriverConfig() {
+    MotorDriverConfig config = {};
+    // Channel 0 belongs to the backlight; channel 3 belongs to the servo.
+    config.motors = {{
+        {MOTOR_LEFT_EN_PIN, MOTOR_LEFT_IN1_PIN, MOTOR_LEFT_IN2_PIN, LEDC_CHANNEL_1, false},
+        {MOTOR_RIGHT_EN_PIN, MOTOR_RIGHT_IN1_PIN, MOTOR_RIGHT_IN2_PIN, LEDC_CHANNEL_2, false},
+        {MOTOR_REAR_LEFT_EN_PIN, MOTOR_REAR_LEFT_IN1_PIN, MOTOR_REAR_LEFT_IN2_PIN, LEDC_CHANNEL_4,
+         false},
+        {MOTOR_REAR_RIGHT_EN_PIN, MOTOR_REAR_RIGHT_IN1_PIN, MOTOR_REAR_RIGHT_IN2_PIN, LEDC_CHANNEL_5,
+         false},
+    }};
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N_INVERT_LEFT
+    config.motors[static_cast<unsigned>(Wheel::kLeft)].inverted = true;
+#endif
+#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N_INVERT_RIGHT
+    config.motors[static_cast<unsigned>(Wheel::kRight)].inverted = true;
+#endif
+    config.mode = LEDC_LOW_SPEED_MODE;
+    config.timer = LEDC_TIMER_1;
+    config.duty_resolution = LEDC_TIMER_10_BIT;
+    config.freq_hz = 1000;
+    return config;
+}
+
+}  // namespace
 
 L298nController& L298nController::Instance() {
     static L298nController controller;
@@ -224,7 +251,7 @@ L298nMotorStatus L298nController::Snapshot() {
     return status;
 }
 
-L298nController::L298nController() {
+L298nController::L298nController() : driver_(MakeMotorDriverConfig()) {
 #ifdef CONFIG_PM_ENABLE
     ESP_ERROR_CHECK(esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "l298n", &sleep_lock_));
     ESP_ERROR_CHECK(esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "l298n_web", &web_sleep_lock_));
