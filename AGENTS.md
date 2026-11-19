@@ -13,6 +13,8 @@ Use ESP-IDF v6.1 when possible. The minimum supported SDK is ESP-IDF v6.0.1. IDF
 - `main/boards/common/`: board interfaces and reusable hardware/network helpers.
 - `main/boards/**/`: board-specific pins, initialization, and build variants.
 - `components/motor_driver/`: project-owned L298N GPIO/LEDC driver; hardware configuration is supplied by the board.
+- `components/wheel_encoder/`, `components/imu/`, `components/ultrasonic_sensor/`: project-owned sensor drivers configured by the board.
+- `components/motor_controller/`: motion control, commands, safety, odometry and read-only snapshots; application integration uses callbacks supplied by the board.
 - `main/audio/`: codecs, audio tasks, engines, wake words, and queues.
 - `main/protocols/`: transport-neutral API plus WebSocket and MQTT/UDP.
 - `main/display/` and `main/led/`: reusable UI implementations.
@@ -36,7 +38,7 @@ Read the closest existing implementation before adding a new one. Prefer the nar
 - Keep shared message semantics in `Protocol`; verify both transports when changing its contract.
 - Validate network input and preserve `cJSON` ownership. NVS keys are persistent API and require migration when changed.
 - Guard target-specific features with Kconfig/component rules. Do not assume every target has PSRAM or S3/P4 resources.
-- Do not manually edit generated/vendor output: `build/`, `releases/`, `managed_components/`, `components/` (except project-owned `components/motor_driver/`), `sdkconfig*`, `main/assets/lang_config.h`, or generated mmap headers.
+- Do not manually edit generated/vendor output: `build/`, `releases/`, `managed_components/`, `components/` (except project-owned `motor_driver`, `wheel_encoder`, `imu`, `ultrasonic_sensor` and `motor_controller`), `sdkconfig*`, `main/assets/lang_config.h`, or generated mmap headers.
 - Format only touched C/C++ files with the repository `.clang-format`; avoid unrelated mass formatting.
 
 ## Boards and Configuration

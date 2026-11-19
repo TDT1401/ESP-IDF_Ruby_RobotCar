@@ -122,18 +122,6 @@ if(CONFIG_BREAD_COMPACT_WIFI_LCD_L298N)
     list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/robot_board.cc")
     list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/serialization/fc03_json.cc")
     list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/serialization/odometry_json.cc")
-    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/sensors/fc03_encoder.cc")
-    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/sensors/hcsr04_sensor.cc")
-    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/sensors/mpu6050_imu.cc")
-    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/controller/l298n_controller.cc")
-    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/commands/command_interface.cc")
-    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/commands/motion_goal_command.cc")
-    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/controller/motor_output.cc")
-    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/controller/motion_executor.cc")
-    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/controller/speed_control.cc")
-    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/controller/odometry_control.cc")
-    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/controller/sensor_behavior.cc")
-    list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/controller/web_control.cc")
     list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/mcp/mcp_tools.cc")
     list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/web/web_server.cc")
     list(APPEND SOURCES "boards/bread-compact-wifi-lcd/robot/telegram/telegram.cc")
@@ -196,7 +184,7 @@ idf_component_register(SRCS ${SOURCES}
                     INCLUDE_DIRS ${INCLUDE_DIRS}
                     WHOLE_ARCHIVE
                     PRIV_REQUIRES
-                        motor_driver
+                        motor_controller
                         esp_pm
                         esp_psram
                         esp_netif

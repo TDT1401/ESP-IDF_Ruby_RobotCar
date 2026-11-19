@@ -1,4 +1,4 @@
-#include "motion_goal_command.h"
+#include "commands/motion_goal_command.h"
 
 #include <algorithm>
 #include <cmath>

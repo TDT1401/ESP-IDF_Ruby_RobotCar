@@ -4,37 +4,17 @@
 #include <cmath>
 #include <cstdlib>
 
-#include "../../config.h"
-#include "../sensors/mpu6050_imu.h"
+#include "imu.h"
 
 namespace ruby_robot {
 namespace {
 
-static_assert(SPEED_PI_REFERENCE_PWM_PERCENT > 0 && SPEED_PI_REFERENCE_PWM_PERCENT <= 100);
-static_assert(SPEED_PI_LEFT_REFERENCE_RPM >= 0 && SPEED_PI_RIGHT_REFERENCE_RPM >= 0);
-static_assert(SPEED_PI_LEFT_KP >= 0 && SPEED_PI_LEFT_KI >= 0);
-static_assert(SPEED_PI_RIGHT_KP >= 0 && SPEED_PI_RIGHT_KI >= 0);
-static_assert(HEADING_PD_KP_RPM_PER_DEG >= 0 && HEADING_PD_KD_RPM_PER_DPS >= 0);
-static_assert(HEADING_PD_MAX_CORRECTION_RPM >= 0);
-static_assert(HEADING_TURN_SLOWDOWN_DEGREES > HEADING_TURN_TOLERANCE_DEGREES);
-static_assert(HEADING_TURN_TOLERANCE_DEGREES > 0);
-static_assert(HEADING_TURN_SETTLE_RATE_DPS > 0);
-static_assert(HEADING_TURN_MIN_RPM > 0);
-static_assert(HEADING_TURN_LEFT_FRICTION_PWM_PERCENT >= 0 &&
-              HEADING_TURN_LEFT_FRICTION_PWM_PERCENT < 100);
-static_assert(HEADING_TURN_RIGHT_FRICTION_PWM_PERCENT >= 0 &&
-              HEADING_TURN_RIGHT_FRICTION_PWM_PERCENT < 100);
-static_assert(DISTANCE_DRIVE_LEFT_FRICTION_PWM_PERCENT >= 0 &&
-              DISTANCE_DRIVE_LEFT_FRICTION_PWM_PERCENT < 100);
-static_assert(DISTANCE_DRIVE_RIGHT_FRICTION_PWM_PERCENT >= 0 &&
-              DISTANCE_DRIVE_RIGHT_FRICTION_PWM_PERCENT < 100);
-
-double TargetRpm(int requested_percent, double reference_rpm) {
-    return std::abs(requested_percent) * reference_rpm / SPEED_PI_REFERENCE_PWM_PERCENT;
+double TargetRpm(int requested_percent, double reference_rpm, int reference_pwm_percent) {
+    return std::abs(requested_percent) * reference_rpm / reference_pwm_percent;
 }
 
-int PercentForRpm(double signed_rpm, double reference_rpm) {
-    const double scale = SPEED_PI_REFERENCE_PWM_PERCENT / reference_rpm;
+int PercentForRpm(double signed_rpm, double reference_rpm, int reference_pwm_percent) {
+    const double scale = reference_pwm_percent / reference_rpm;
     return std::clamp(static_cast<int>(std::lround(signed_rpm * scale)), -100, 100);
 }
 
@@ -48,32 +28,30 @@ double FeedforwardPercent(int requested_percent, double friction_pwm_percent) {
         100.0);
 }
 
-double FrictionPwmPercent(CommandMode mode, bool heading_turn, bool left) {
+double FrictionPwmPercent(CommandMode mode, bool heading_turn, bool left,
+                         const MotorControllerConfig& config) {
     if (heading_turn)
-        return left ? HEADING_TURN_LEFT_FRICTION_PWM_PERCENT
-                    : HEADING_TURN_RIGHT_FRICTION_PWM_PERCENT;
+        return left ? config.heading_turn_left_friction_pwm_percent
+                    : config.heading_turn_right_friction_pwm_percent;
     if (mode == CommandMode::kDistanceDrive || mode == CommandMode::kNavigate)
-        return left ? DISTANCE_DRIVE_LEFT_FRICTION_PWM_PERCENT
-                    : DISTANCE_DRIVE_RIGHT_FRICTION_PWM_PERCENT;
+        return left ? config.distance_drive_left_friction_pwm_percent
+                    : config.distance_drive_right_friction_pwm_percent;
     return 0;
 }
 
 }  // namespace
 
-bool L298nController::SpeedPiConfiguredLocked() const {
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03
-    return SPEED_PI_LEFT_REFERENCE_RPM > 0 && SPEED_PI_RIGHT_REFERENCE_RPM > 0;
-#else
-    return false;
-#endif
+bool MotorController::SpeedPiConfiguredLocked() const {
+    return config_.encoder.enabled && config_.speed_pi_left_reference_rpm > 0 &&
+           config_.speed_pi_right_reference_rpm > 0;
 }
 
-bool L298nController::SpeedPiReadyLocked() const {
+bool MotorController::SpeedPiReadyLocked() const {
     const auto encoder = encoder_.Snapshot();
     return SpeedPiConfiguredLocked() && encoder.ready && encoder.calibrated;
 }
 
-bool L298nController::SetRequestedWheelsLocked(int left_percent, int right_percent) {
+bool MotorController::SetRequestedWheelsLocked(int left_percent, int right_percent) {
     const bool pi_configured = SpeedPiConfiguredLocked();
     if (pi_configured && !SpeedPiReadyLocked()) {
         speed_pi_fault_ = "encoder_error";
@@ -88,9 +66,9 @@ bool L298nController::SetRequestedWheelsLocked(int left_percent, int right_perce
         (right_percent < 0) != (requested_right_percent_ < 0))
         right_speed_pi_.Reset();
     const double left_friction =
-        FrictionPwmPercent(command_interface_.mode(), heading_turn_active_, true);
+        FrictionPwmPercent(command_interface_.mode(), heading_turn_active_, true, config_);
     const double right_friction =
-        FrictionPwmPercent(command_interface_.mode(), heading_turn_active_, false);
+        FrictionPwmPercent(command_interface_.mode(), heading_turn_active_, false, config_);
     int left_output =
         static_cast<int>(std::lround(FeedforwardPercent(left_percent, left_friction)));
     int right_output =
@@ -111,7 +89,7 @@ bool L298nController::SetRequestedWheelsLocked(int left_percent, int right_perce
     return true;
 }
 
-bool L298nController::UpdateHeadingPdLocked(int64_t now_us) {
+bool MotorController::UpdateHeadingPdLocked(int64_t now_us) {
     if (!heading_hold_active_)
         return true;
     const auto imu = GetMpu6050Status();
@@ -127,14 +105,14 @@ bool L298nController::UpdateHeadingPdLocked(int64_t now_us) {
 
     // Use a common wheel RPM even if the two sides have different reference RPM.
     const double reference_rpm =
-        std::min(SPEED_PI_LEFT_REFERENCE_RPM, SPEED_PI_RIGHT_REFERENCE_RPM);
-    const double base_rpm = reference_rpm * speed / SPEED_PI_REFERENCE_PWM_PERCENT;
+        std::min(config_.speed_pi_left_reference_rpm, config_.speed_pi_right_reference_rpm);
+    const double base_rpm = reference_rpm * speed / config_.speed_pi_reference_pwm_percent;
     const double error = heading_target_degrees_ - imu.heading_degrees;
     HeadingPdTargets targets{};
     if (heading_turn_active_) {
         turn_progress_degrees_ = imu.heading_degrees - heading_turn_start_degrees_;
-        const bool at_target = std::abs(error) <= HEADING_TURN_TOLERANCE_DEGREES;
-        if (at_target && std::abs(imu.gyro_z_dps) <= HEADING_TURN_SETTLE_RATE_DPS) {
+        const bool at_target = std::abs(error) <= config_.heading_turn_tolerance_degrees;
+        if (at_target && std::abs(imu.gyro_z_dps) <= config_.heading_turn_settle_rate_dps) {
             if (turn_settled_since_us_ == 0)
                 turn_settled_since_us_ = now_us;
             heading_turn_complete_ = now_us - turn_settled_since_us_ >= kTurnSettleUs;
@@ -145,29 +123,32 @@ bool L298nController::UpdateHeadingPdLocked(int64_t now_us) {
             const int turn_sign = motion_ == Motion::kLeft ? 1 : -1;
             // Scale the turn P gain by the requested speed: use the RPM ceiling
             // far from the goal, then slow down inside the configured angle.
-            const double turn_kp = base_rpm / HEADING_TURN_SLOWDOWN_DEGREES;
+            const double turn_kp = base_rpm / config_.heading_turn_slowdown_degrees;
             const auto turn =
                 HeadingPd::Update(0, heading_target_degrees_, imu.heading_degrees, imu.gyro_z_dps,
-                                  turn_kp, HEADING_PD_KD_RPM_PER_DPS, base_rpm);
+                                  turn_kp, config_.heading_pd_kd_rpm_per_dps, base_rpm);
             // Do not reverse wheel directions in a running command.
             const double forward_correction = turn_sign * turn.correction_rpm;
             if (forward_correction > 0) {
                 targets.correction_rpm =
                     turn_sign * std::clamp(forward_correction,
-                                           std::min(HEADING_TURN_MIN_RPM, base_rpm), base_rpm);
+                                           std::min(config_.heading_turn_min_rpm, base_rpm), base_rpm);
             }
             targets.left_rpm = -targets.correction_rpm;
             targets.right_rpm = targets.correction_rpm;
         }
     } else {
         const double signed_rpm = motion_ == Motion::kBackward ? -base_rpm : base_rpm;
-        const double correction_limit = std::min(HEADING_PD_MAX_CORRECTION_RPM, base_rpm * 0.5);
+        const double correction_limit =
+            std::min(config_.heading_pd_max_correction_rpm, base_rpm * 0.5);
         targets = HeadingPd::Update(signed_rpm, heading_target_degrees_, imu.heading_degrees,
-                                    imu.gyro_z_dps, HEADING_PD_KP_RPM_PER_DEG,
-                                    HEADING_PD_KD_RPM_PER_DPS, correction_limit);
+                                    imu.gyro_z_dps, config_.heading_pd_kp_rpm_per_deg,
+                                    config_.heading_pd_kd_rpm_per_dps, correction_limit);
     }
-    const int left_percent = PercentForRpm(targets.left_rpm, SPEED_PI_LEFT_REFERENCE_RPM);
-    const int right_percent = PercentForRpm(targets.right_rpm, SPEED_PI_RIGHT_REFERENCE_RPM);
+    const int left_percent = PercentForRpm(targets.left_rpm, config_.speed_pi_left_reference_rpm,
+                                          config_.speed_pi_reference_pwm_percent);
+    const int right_percent = PercentForRpm(targets.right_rpm, config_.speed_pi_right_reference_rpm,
+                                           config_.speed_pi_reference_pwm_percent);
     if (!SetRequestedWheelsLocked(left_percent, right_percent))
         return false;
     encoder_.SetDrive((left_percent > 0) - (left_percent < 0),
@@ -179,7 +160,7 @@ bool L298nController::UpdateHeadingPdLocked(int64_t now_us) {
     return true;
 }
 
-bool L298nController::UpdateSpeedPiLocked(int64_t now_us) {
+bool MotorController::UpdateSpeedPiLocked(int64_t now_us) {
     if (!SpeedPiConfiguredLocked())
         return true;
     const auto encoder = encoder_.Snapshot();
@@ -201,25 +182,28 @@ bool L298nController::UpdateSpeedPiLocked(int64_t now_us) {
         right_speed_pi_.Reset();
     }
     const double bounded_dt_s = std::min(dt_s, 0.25);
-    const double left_target_rpm = TargetRpm(requested_left_percent_, SPEED_PI_LEFT_REFERENCE_RPM);
+    const double left_target_rpm =
+        TargetRpm(requested_left_percent_, config_.speed_pi_left_reference_rpm,
+                  config_.speed_pi_reference_pwm_percent);
     const double right_target_rpm =
-        TargetRpm(requested_right_percent_, SPEED_PI_RIGHT_REFERENCE_RPM);
+        TargetRpm(requested_right_percent_, config_.speed_pi_right_reference_rpm,
+                  config_.speed_pi_reference_pwm_percent);
     const double left_feedforward = FeedforwardPercent(
         requested_left_percent_,
-        FrictionPwmPercent(command_interface_.mode(), heading_turn_active_, true));
+        FrictionPwmPercent(command_interface_.mode(), heading_turn_active_, true, config_));
     const double right_feedforward = FeedforwardPercent(
         requested_right_percent_,
-        FrictionPwmPercent(command_interface_.mode(), heading_turn_active_, false));
+        FrictionPwmPercent(command_interface_.mode(), heading_turn_active_, false, config_));
     const int left =
         requested_left_percent_ == 0
             ? 0
             : left_speed_pi_.Update(left_target_rpm, encoder.left.rpm, left_feedforward,
-                                    bounded_dt_s, SPEED_PI_LEFT_KP, SPEED_PI_LEFT_KI);
+                                    bounded_dt_s, config_.speed_pi_left_kp, config_.speed_pi_left_ki);
     const int right =
         requested_right_percent_ == 0
             ? 0
             : right_speed_pi_.Update(right_target_rpm, encoder.right.rpm, right_feedforward,
-                                     bounded_dt_s, SPEED_PI_RIGHT_KP, SPEED_PI_RIGHT_KI);
+                                     bounded_dt_s, config_.speed_pi_right_kp, config_.speed_pi_right_ki);
     last_speed_pi_us_ = now_us;
     if (!ApplyMotorPwmLocked(left, right))
         return false;

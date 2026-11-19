@@ -1,17 +1,18 @@
 #pragma once
 
-#include "../commands/command_interface.h"
-#include "../domain/motion_policy.h"
-#include "../domain/pose_ekf.h"
-#include "../domain/web_control_session.h"
+#include "commands/command_interface.h"
+#include "domain/motion_policy.h"
+#include "domain/pose_ekf.h"
+#include "domain/web_control_session.h"
 #include "heading_pd.h"
-#include "l298n_controller.h"
+#include "motor_controller.h"
 #include "motor_driver.h"
 #include "speed_pi.h"
 
 #include <esp_err.h>
 #include <esp_pm.h>
 #include <esp_timer.h>
+#include <sdkconfig.h>
 
 #include <cstdint>
 #include <mutex>
@@ -28,9 +29,11 @@ constexpr int kDefaultObstacleDistanceCm = 20;
 constexpr int kSensorStaleMs = 250;
 constexpr int64_t kProximityWarningPeriodUs = 700000;
 
-class L298nController {
+class MotorController {
 public:
-    static L298nController& Instance();
+    static void Initialize(const MotorControllerConfig& config);
+    static MotorController& Instance();
+    int DefaultDistanceSpeed() const { return config_.distance_drive_max_speed_percent; }
 
     void Stop();
     esp_err_t StartCommand(const CommandRequest& request);
@@ -45,6 +48,7 @@ public:
     void UpdateEmotion(const char* emotion, bool speaking);
 
 private:
+    MotorControllerConfig config_;
     // Network callbacks and the timer share this controller. Keep the mutex scope short.
     std::mutex mutex_;
     MotorDriver driver_;
@@ -96,8 +100,8 @@ private:
     bool proximity_warning_enabled_ = true;
     int64_t next_warning_at_us_ = 0;
 
-    L298nController();
-    ~L298nController();
+    explicit MotorController(const MotorControllerConfig& config);
+    ~MotorController();
     bool Check(esp_err_t error);
     void EndWebControlLocked();
     void StopLocked();
@@ -107,10 +111,10 @@ private:
     void UpdateOdometryLocked(int64_t now_us);
     OdometrySnapshot NavigationPoseLocked() const;
     bool OdometryStationaryLocked(int64_t now_us) const;
-    static DistanceDriveLimits DistanceLimits();
+    DistanceDriveLimits DistanceLimits() const;
     int ActiveSpeedLocked() const;
     bool PrepareMotionLocked(Motion motion);
-    static bool MotionAllowed();
+    bool MotionAllowed() const;
     void Tick();
     bool ApplySpeedLocked();
     bool ApplyCommandLocked();

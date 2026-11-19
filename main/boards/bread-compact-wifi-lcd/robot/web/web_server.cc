@@ -12,7 +12,7 @@
 #include <cstring>
 #include <memory>
 
-#include "../controller/l298n_controller.h"
+#include "motor_controller.h"
 #include "../serialization/fc03_json.h"
 #include "../serialization/odometry_json.h"
 #include "application.h"

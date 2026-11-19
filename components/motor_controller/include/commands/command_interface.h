@@ -27,7 +27,7 @@ struct CommandSnapshot {
     NavigateSnapshot navigate;
 };
 
-// Serialized by L298nController's mutex. Chooses manual control or one motion goal.
+// Serialized by MotorController's mutex. Chooses manual control or one motion goal.
 class CommandInterface {
 public:
     bool BeginManual();

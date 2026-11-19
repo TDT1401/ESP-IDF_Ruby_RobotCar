@@ -1,61 +1,49 @@
-#include "fc03_encoder.h"
+#include "wheel_encoder.h"
 
+#include <driver/gpio.h>
 #include <esp_log.h>
-#include <esp_timer.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
 
 #include <algorithm>
-#include <cinttypes>
 #include <cmath>
 
-#include "../../config.h"
-
 namespace {
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03
+#if SOC_PCNT_SUPPORTED
 constexpr char kTag[] = "FC03";
 #endif
 
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03
+#if SOC_PCNT_SUPPORTED
 constexpr int kCountLimit = 30000;
 constexpr int64_t kNoPulseTimeoutUs = 2000000;
 constexpr int64_t kRateStaleMinimumUs = 250000;
-constexpr int kPins[] = {FC03_LEFT_GPIO, FC03_RIGHT_GPIO};
-constexpr double kPulsesPerRev[] = {FC03_LEFT_PULSES_PER_REV, FC03_RIGHT_PULSES_PER_REV};
-constexpr double kDiameterMm[] = {FC03_LEFT_WHEEL_DIAMETER_MM, FC03_RIGHT_WHEEL_DIAMETER_MM};
 constexpr double kPi = 3.14159265358979323846;
-static_assert(FC03_LEFT_GPIO != FC03_RIGHT_GPIO);
-static_assert(FC03_GLITCH_FILTER_NS > 0 && FC03_GLITCH_FILTER_NS <= 12000);
-static_assert(FC03_COAST_MS >= 0 && FC03_COAST_MS <= 2000);
-static_assert(kPulsesPerRev[0] >= 0 && kPulsesPerRev[0] <= 1000000 && kPulsesPerRev[1] >= 0 &&
-              kPulsesPerRev[1] <= 1000000);
-static_assert(kDiameterMm[0] >= 0 && kDiameterMm[0] <= 1000 && kDiameterMm[1] >= 0 &&
-              kDiameterMm[1] <= 1000);
 #endif
 }  // namespace
 
 Fc03Encoder::~Fc03Encoder() {
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03
+#if SOC_PCNT_SUPPORTED
     ReleaseCounters();
 #endif
 }
 
 void Fc03Encoder::Initialize() {
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03
-    if (status_.enabled)
+#if SOC_PCNT_SUPPORTED
+    if (!config_.enabled || status_.enabled)
         return;
     status_.enabled = true;
     status_.calibrated =
-        kPulsesPerRev[0] > 0 && kPulsesPerRev[1] > 0 && kDiameterMm[0] > 0 && kDiameterMm[1] > 0;
-    ESP_LOGI(kTag, "D0 left=GPIO%d right=GPIO%d; rising edges; filter=%d ns; coast=%d ms", kPins[0],
-             kPins[1], FC03_GLITCH_FILTER_NS, FC03_COAST_MS);
+        config_.pulses_per_rev[0] > 0 && config_.pulses_per_rev[1] > 0 &&
+        config_.wheel_diameter_mm[0] > 0 && config_.wheel_diameter_mm[1] > 0;
+    ESP_LOGI(kTag, "D0 left=GPIO%d right=GPIO%d; rising edges; filter=%d ns; coast=%d ms",
+             config_.gpio[0], config_.gpio[1], config_.glitch_filter_ns, config_.coast_ms);
     ESP_LOGI(kTag,
              "Calibration L: %.3f pulses/wheel-rev, %.3f mm; R: %.3f pulses/wheel-rev, %.3f mm",
-             kPulsesPerRev[0], kDiameterMm[0], kPulsesPerRev[1], kDiameterMm[1]);
+             config_.pulses_per_rev[0], config_.wheel_diameter_mm[0], config_.pulses_per_rev[1],
+             config_.wheel_diameter_mm[1]);
     for (int i = 0; i < 2; ++i) {
-        status_.error = InitializeCounter(counters_[i], kPins[i]);
+        status_.error = InitializeCounter(counters_[i], config_.gpio[i]);
         if (status_.error != ESP_OK) {
-            ESP_LOGE(kTag, "GPIO%d PCNT setup failed: %s; encoder telemetry unavailable", kPins[i],
+            ESP_LOGE(kTag, "GPIO%d PCNT setup failed: %s; encoder telemetry unavailable",
+                     config_.gpio[i],
                      esp_err_to_name(status_.error));
             ReleaseCounters();
             return;
@@ -74,7 +62,7 @@ void Fc03Encoder::Initialize() {
 #endif
 }
 
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03
+#if SOC_PCNT_SUPPORTED
 esp_err_t Fc03Encoder::InitializeCounter(Counter& counter, int gpio) {
     pcnt_unit_config_t unit = {};
     unit.low_limit = -kCountLimit;
@@ -84,7 +72,7 @@ esp_err_t Fc03Encoder::InitializeCounter(Counter& counter, int gpio) {
     if (error != ESP_OK)
         return error;
     pcnt_glitch_filter_config_t filter = {};
-    filter.max_glitch_ns = FC03_GLITCH_FILTER_NS;
+    filter.max_glitch_ns = config_.glitch_filter_ns;
     if ((error = pcnt_unit_set_glitch_filter(counter.unit, &filter)) != ESP_OK)
         return error;
     pcnt_chan_config_t channel = {};
@@ -138,7 +126,7 @@ void Fc03Encoder::FinishSegment() {
 #endif
 
 void Fc03Encoder::Update(int64_t now_us) {
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03
+#if SOC_PCNT_SUPPORTED
     if (!status_.ready)
         return;
     int counts[2] = {};
@@ -174,7 +162,7 @@ void Fc03Encoder::Update(int64_t now_us) {
         const uint32_t delta = count - counter.previous;
         counter.previous = count;
         wheel.pulses += delta;
-        wheel.level = gpio_get_level(static_cast<gpio_num_t>(kPins[i]));
+        wheel.level = gpio_get_level(static_cast<gpio_num_t>(config_.gpio[i]));
         if (delta != 0) {
             if (counter.last_pulse_us > 0 && now_us > counter.last_pulse_us) {
                 const double sample_hz =
@@ -206,12 +194,13 @@ void Fc03Encoder::Update(int64_t now_us) {
             wheel.command != 0 &&
             now_us - std::max(counter.drive_started_us, counter.last_pulse_us) >= kNoPulseTimeoutUs;
         if (status_.calibrated) {
-            const double metres_per_pulse = kPi * kDiameterMm[i] / (1000.0 * kPulsesPerRev[i]);
+            const double metres_per_pulse =
+                kPi * config_.wheel_diameter_mm[i] / (1000.0 * config_.pulses_per_rev[i]);
             wheel.distance_m = wheel.pulses * metres_per_pulse;
             wheel.signed_distance_m += delta * metres_per_pulse * counter.direction;
             segment_centre_m_ += delta * metres_per_pulse * counter.direction / 2.0;
         }
-        wheel.rpm = status_.calibrated ? wheel.hz * 60.0 / kPulsesPerRev[i] : 0;
+        wheel.rpm = status_.calibrated ? wheel.hz * 60.0 / config_.pulses_per_rev[i] : 0;
     }
     // Keep a signed sum for each direction segment. Taking abs on EVERY sample would
     // incorrectly add distance while spinning, because left/right pulses are asynchronous.
@@ -222,7 +211,9 @@ void Fc03Encoder::Update(int64_t now_us) {
 }
 
 void Fc03Encoder::SetDrive(int left, int right, int64_t now_us) {
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03
+#if SOC_PCNT_SUPPORTED
+    if (!config_.enabled)
+        return;
     Update(now_us);  // Attribute already counted pulses to the OLD direction.
     const int commands[] = {(left > 0) - (left < 0), (right > 0) - (right < 0)};
     const int centre_command = (left + right > 0) - (left + right < 0);
@@ -241,7 +232,7 @@ void Fc03Encoder::SetDrive(int left, int right, int64_t now_us) {
         counter.drive_started_us = now_us;
         wheel.no_pulses = false;
         if (commands[i] == 0) {
-            counter.coast_until_us = now_us + FC03_COAST_MS * 1000LL;
+            counter.coast_until_us = now_us + config_.coast_ms * 1000LL;
         } else {
             counter.last_pulse_us = 0;
             counter.rate_decay_at_us = 0;
@@ -258,74 +249,5 @@ void Fc03Encoder::SetDrive(int left, int right, int64_t now_us) {
     (void)left;
     (void)right;
     (void)now_us;
-#endif
-}
-
-void StartFc03Monitor(Fc03EncoderStatus (*snapshot)()) {
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03
-    static Fc03EncoderStatus (*read_status)() = snapshot;
-    static TaskHandle_t task = nullptr;
-    if (task != nullptr)
-        return;
-    const auto result = xTaskCreate(
-        [](void*) {
-#if FC03_DEBUG
-            uint64_t previous_left = 0, previous_right = 0;
-            int64_t previous_at = esp_timer_get_time();
-#endif
-            while (true) {
-                vTaskDelay(pdMS_TO_TICKS(2000));
-                const auto status = read_status();  // Locks only while copying a snapshot.
-                if (!status.ready) {
-                    ESP_LOGE(kTag, "Encoder unavailable: %s", esp_err_to_name(status.error));
-                    vTaskDelete(nullptr);
-                    return;
-                }
-#if FC03_DEBUG
-                const int64_t now = esp_timer_get_time();
-                ESP_LOGI(kTag,
-                         "dt=%.2fs D0 L/R=%d/%d cmd=%d/%d total=%" PRIu64 "/%" PRIu64
-                         " delta=%" PRIu64 "/%" PRIu64 " Hz=%.1f/%.1f",
-                         (now - previous_at) / 1000000.0, status.left.level, status.right.level,
-                         status.left.command, status.right.command, status.left.pulses,
-                         status.right.pulses, status.left.pulses - previous_left,
-                         status.right.pulses - previous_right, status.left.hz, status.right.hz);
-                if (status.calibrated) {
-                    ESP_LOGI(kTag,
-                             "RPM L/R=%.1f/%.1f wheel_m=%.3f/%.3f travel_est_m=%.3f complete=%d",
-                             status.left.rpm, status.right.rpm, status.left.distance_m,
-                             status.right.distance_m, status.travel_m, status.distance_complete);
-                } else {
-                    ESP_LOGI(kTag,
-                             "UNCALIBRATED: metres/RPM unavailable; set the 4 FC03 calibration "
-                             "values in config.h. Use total differences to count wheel turns.");
-                }
-                if (status.left.no_pulses || status.right.no_pulses) {
-                    ESP_LOGW(kTag,
-                             "No pulses for >=2s while commanded: left=%d right=%d. Check D0, "
-                             "disc alignment, sensitivity (if adjustable), or stalled motor.",
-                             status.left.no_pulses, status.right.no_pulses);
-                }
-                if (!status.distance_complete) {
-                    ESP_LOGW(kTag,
-                             "Unknown-direction pulses L/R=%" PRIu64 "/%" PRIu64
-                             "; wheel totals include them, robot travel excludes them. "
-                             "Reboot after manual calibration before a driving test.",
-                             status.left.unknown_direction_pulses,
-                             status.right.unknown_direction_pulses);
-                }
-                previous_left = status.left.pulses;
-                previous_right = status.right.pulses;
-                previous_at = now;
-#endif
-            }
-        },
-        "fc03_monitor", 3072, nullptr, 1, &task);
-    if (result != pdPASS) {
-        task = nullptr;
-        ESP_LOGE(kTag, "Could not start monitor logging task; telemetry still available over HTTP");
-    }
-#else
-    (void)snapshot;
 #endif
 }

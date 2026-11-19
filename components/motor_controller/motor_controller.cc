@@ -2,122 +2,42 @@
 
 #include <esp_log.h>
 #include <esp_system.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
 
+#include <cassert>
 #include <cmath>
 #include <cstdlib>
-#include <cstring>
 #include <numbers>
 
-#include "../../config.h"
-#include "../sensors/hcsr04_sensor.h"
-#include "../sensors/mpu6050_imu.h"
-
-#if HEADING_PD_DEBUG || ODOMETRY_DEBUG
-namespace {
-
-void ControlMonitorTask(void*) {
-#if HEADING_PD_DEBUG
-    bool fault_reported = false;
-#endif
-#if ODOMETRY_DEBUG
-    ESP_LOGI(
-        "Odometry",
-        "time_ms,mode,state,valid,x_m,y_m,theta_rad,left_m,right_m,"
-        "wheel_heading_valid,wheel_theta_rad,target_m,progress_m,error_m,position_error_m,fault");
-#endif
-    while (true) {
-        vTaskDelay(pdMS_TO_TICKS(200));
-        const auto status = GetL298nMotorStatus();
-#if ODOMETRY_DEBUG
-        const auto& pose = status.odometry;
-        const auto& ekf = status.ekf;
-        const auto& drive = status.command.distance_drive;
-        ESP_LOGI(
-            "Odometry", "%lld,%s,%s,%d,%.4f,%.4f,%.5f,%.4f,%.4f,%d,%.5f,%.3f,%.4f,%.4f,%.4f,%s",
-            static_cast<long long>(esp_timer_get_time() / 1000), status.command.mode, drive.state,
-            pose.valid, pose.x_m, pose.y_m, pose.theta_rad, pose.left_m, pose.right_m,
-            pose.wheel_heading_valid, pose.wheel_theta_rad, drive.target_m, drive.progress_m,
-            drive.error_m, drive.position_error_m, pose.valid ? drive.fault : pose.fault);
-        ESP_LOGI("PoseEKF", "%lld,%d,%.4f,%.4f,%.5f,%.4f,%.4f,%.5f,%s",
-                 static_cast<long long>(esp_timer_get_time() / 1000), ekf.valid, ekf.x_m,
-                 ekf.y_m, ekf.theta_rad, std::sqrt(ekf.variance_x_m2),
-                 std::sqrt(ekf.variance_y_m2), std::sqrt(ekf.variance_theta_rad2), ekf.fault);
-#endif
-#if HEADING_PD_DEBUG
-        if (!status.heading_hold_active) {
-            if (!fault_reported && (std::strcmp(status.heading_fault, "none") != 0 ||
-                                    std::strcmp(status.speed_pi_fault, "none") != 0)) {
-                ESP_LOGW("HeadingPD", "control stopped: heading=%s, speed_pi=%s",
-                         status.heading_fault, status.speed_pi_fault);
-                fault_reported = true;
-            }
-            continue;
-        }
-        fault_reported = false;
-        ESP_LOGI("HeadingPD",
-                 "limit=%d%%, ref=%.2f deg, actual=%.2f deg, error=%.2f deg, "
-                 "gyro=%.2f deg/s, correction=%.2f RPM, "
-                 "left=%.1f/%.1f RPM PWM=%d, right=%.1f/%.1f RPM PWM=%d",
-                 status.active_speed_percent, status.heading_target_degrees, status.heading_degrees,
-                 status.heading_error_degrees, status.gyro_z_dps, status.heading_correction_rpm,
-                 status.speed_pi_left_target_rpm, status.encoder.left.rpm, status.left_pwm_percent,
-                 status.speed_pi_right_target_rpm, status.encoder.right.rpm,
-                 status.right_pwm_percent);
-#endif
-    }
-}
-
-}  // namespace
-#endif
+#include "imu.h"
+#include "ultrasonic_sensor.h"
 
 namespace ruby_robot {
 namespace {
 
-MotorDriverConfig MakeMotorDriverConfig() {
-    MotorDriverConfig config = {};
-    // Channel 0 belongs to the backlight; channel 3 belongs to the servo.
-    config.motors = {{
-        {MOTOR_LEFT_EN_PIN, MOTOR_LEFT_IN1_PIN, MOTOR_LEFT_IN2_PIN, LEDC_CHANNEL_1, false},
-        {MOTOR_RIGHT_EN_PIN, MOTOR_RIGHT_IN1_PIN, MOTOR_RIGHT_IN2_PIN, LEDC_CHANNEL_2, false},
-        {MOTOR_REAR_LEFT_EN_PIN, MOTOR_REAR_LEFT_IN1_PIN, MOTOR_REAR_LEFT_IN2_PIN, LEDC_CHANNEL_4,
-         false},
-        {MOTOR_REAR_RIGHT_EN_PIN, MOTOR_REAR_RIGHT_IN1_PIN, MOTOR_REAR_RIGHT_IN2_PIN, LEDC_CHANNEL_5,
-         false},
-    }};
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N_INVERT_LEFT
-    config.motors[static_cast<unsigned>(Wheel::kLeft)].inverted = true;
-#endif
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N_INVERT_RIGHT
-    config.motors[static_cast<unsigned>(Wheel::kRight)].inverted = true;
-#endif
-    config.mode = LEDC_LOW_SPEED_MODE;
-    config.timer = LEDC_TIMER_1;
-    config.duty_resolution = LEDC_TIMER_10_BIT;
-    config.freq_hz = 1000;
-    return config;
-}
+MotorController* controller_instance = nullptr;
 
 }  // namespace
 
-L298nController& L298nController::Instance() {
-    static L298nController controller;
-    return controller;
+void MotorController::Initialize(const MotorControllerConfig& config) {
+    static MotorController controller(config);
+    controller_instance = &controller;
 }
 
-void L298nController::Stop() {
+MotorController& MotorController::Instance() {
+    assert(controller_instance != nullptr);
+    return *controller_instance;
+}
+
+void MotorController::Stop() {
     std::lock_guard lock(mutex_);
     EndWebControlLocked();  // A spoken stop also invalidates in-flight browser commands.
 }
 
-esp_err_t L298nController::StartCommand(const CommandRequest& request) {
-    static_assert(HEADING_TURN_AUTO_SPEED_PERCENT >= MotionGoalCommand::kMinTurnSpeedPercent &&
-                  HEADING_TURN_AUTO_SPEED_PERCENT <= 100);
+esp_err_t MotorController::StartCommand(const CommandRequest& request) {
     auto resolved_request = request;
     if (auto* turn = std::get_if<AngleTurnRequest>(&resolved_request);
         turn && turn->speed_percent == 0)
-        turn->speed_percent = HEADING_TURN_AUTO_SPEED_PERCENT;
+        turn->speed_percent = config_.heading_turn_auto_speed_percent;
     if (!CommandInterface::Valid(resolved_request))
         return ESP_ERR_INVALID_ARG;
     const auto requirements = CommandInterface::Requirements(resolved_request);
@@ -174,7 +94,7 @@ esp_err_t L298nController::StartCommand(const CommandRequest& request) {
     return ESP_OK;
 }
 
-L298nMotorStatus L298nController::Snapshot() {
+L298nMotorStatus MotorController::Snapshot() {
     std::lock_guard lock(mutex_);
     const bool distance_fresh =
         sensor_valid_ && esp_timer_get_time() - last_sensor_update_us_ <= kSensorStaleMs * 1000LL;
@@ -217,11 +137,11 @@ L298nMotorStatus L298nController::Snapshot() {
                              (requested_left_percent_ != 0 || requested_right_percent_ != 0);
     if (SpeedPiConfiguredLocked()) {
         status.speed_pi_left_target_rpm = std::abs(requested_left_percent_) *
-                                          SPEED_PI_LEFT_REFERENCE_RPM /
-                                          SPEED_PI_REFERENCE_PWM_PERCENT;
+                                          config_.speed_pi_left_reference_rpm /
+                                          config_.speed_pi_reference_pwm_percent;
         status.speed_pi_right_target_rpm = std::abs(requested_right_percent_) *
-                                           SPEED_PI_RIGHT_REFERENCE_RPM /
-                                           SPEED_PI_REFERENCE_PWM_PERCENT;
+                                           config_.speed_pi_right_reference_rpm /
+                                           config_.speed_pi_reference_pwm_percent;
     }
     status.speed_pi_target_rpm =
         (status.speed_pi_left_target_rpm + status.speed_pi_right_target_rpm) / 2.0;
@@ -251,15 +171,18 @@ L298nMotorStatus L298nController::Snapshot() {
     return status;
 }
 
-L298nController::L298nController() : driver_(MakeMotorDriverConfig()) {
+MotorController::MotorController(const MotorControllerConfig& config)
+    : config_(config), driver_(config_.motor), encoder_(config_.encoder) {
+    assert(config_.motion_allowed != nullptr && config_.schedule != nullptr &&
+           config_.play_proximity_warning != nullptr);
 #ifdef CONFIG_PM_ENABLE
     ESP_ERROR_CHECK(esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "l298n", &sleep_lock_));
     ESP_ERROR_CHECK(esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "l298n_web", &web_sleep_lock_));
 #endif
     encoder_.Initialize();
-    InitializeMpu6050();
+    InitializeMpu6050(config_.imu);
     esp_timer_create_args_t timer = {};
-    timer.callback = [](void* arg) { static_cast<L298nController*>(arg)->Tick(); };
+    timer.callback = [](void* arg) { static_cast<MotorController*>(arg)->Tick(); };
     timer.arg = this;
     timer.dispatch_method = ESP_TIMER_TASK;
     timer.name = "l298n_deadline";
@@ -268,7 +191,7 @@ L298nController::L298nController() : driver_(MakeMotorDriverConfig()) {
     ESP_ERROR_CHECK(esp_timer_start_periodic(timer_, kTickUs));
 }
 
-L298nController::~L298nController() {
+MotorController::~MotorController() {
     esp_timer_stop(timer_);
     esp_timer_delete(timer_);
     Stop();
@@ -278,7 +201,7 @@ L298nController::~L298nController() {
 #endif
 }
 
-bool L298nController::Check(esp_err_t error) {
+bool MotorController::Check(esp_err_t error) {
     if (error != ESP_OK && fault_ == ESP_OK) {
         fault_ = error;  // Latch hardware errors until reboot; never auto-resume.
     }
@@ -287,51 +210,46 @@ bool L298nController::Check(esp_err_t error) {
 
 }  // namespace ruby_robot
 
-using ruby_robot::L298nController;
+using ruby_robot::MotorController;
 
-void InitializeL298nController() {
+void InitializeL298nController(const ruby_robot::MotorControllerConfig& config) {
     // Singleton and sensor callbacks live for the entire firmware lifetime.
-    L298nController::Instance();
-#if HEADING_PD_DEBUG || ODOMETRY_DEBUG
-    if (xTaskCreate(ControlMonitorTask, "control_monitor", 4096, nullptr, 2, nullptr) != pdPASS)
-        ESP_LOGW("MotorControl", "Could not start control monitor");
-#endif
-    StartFc03Monitor([]() { return L298nController::Instance().Snapshot().encoder; });
-    InitializeHcsr04Sensor([](int distance_cm, bool valid) {
-        auto& controller = L298nController::Instance();
+    MotorController::Initialize(config);
+    InitializeHcsr04Sensor(config.ultrasonic, [](int distance_cm, bool valid) {
+        auto& controller = MotorController::Instance();
         controller.UpdateDistance(distance_cm, valid);
         controller.ScheduleProximityWarning();
     });
-    ESP_ERROR_CHECK(esp_register_shutdown_handler([]() { L298nController::Instance().Stop(); }));
+    ESP_ERROR_CHECK(esp_register_shutdown_handler([]() { MotorController::Instance().Stop(); }));
 }
 
 void UpdateL298nEmotion(const char* emotion, bool speaking) {
-    L298nController::Instance().UpdateEmotion(emotion, speaking);
+    MotorController::Instance().UpdateEmotion(emotion, speaking);
 }
 
 esp_err_t BeginL298nWebControl(uint32_t* session) {
-    return L298nController::Instance().BeginWebControl(session);
+    return MotorController::Instance().BeginWebControl(session);
 }
 
 esp_err_t ReleaseL298nWebControl(const L298nWebDriveRequest& request) {
-    return L298nController::Instance().ReleaseWebControl(request);
+    return MotorController::Instance().ReleaseWebControl(request);
 }
 
 void SetL298nWebConnected(bool connected) {
-    L298nController::Instance().SetWebConnected(connected);
+    MotorController::Instance().SetWebConnected(connected);
 }
 
 esp_err_t StartL298nCommand(const ruby_robot::CommandRequest& request) {
-    return L298nController::Instance().StartCommand(request);
+    return MotorController::Instance().StartCommand(request);
 }
 
-L298nMotorStatus GetL298nMotorStatus() { return L298nController::Instance().Snapshot(); }
+L298nMotorStatus GetL298nMotorStatus() { return MotorController::Instance().Snapshot(); }
 
 namespace {
 
 esp_err_t StartLinearMotion(const L298nLinearRequest& request, ruby_robot::Motion motion) {
     if (const auto* web = std::get_if<L298nWebDriveRequest>(&request))
-        return L298nController::Instance().WebCommand(*web, motion);
+        return MotorController::Instance().WebCommand(*web, motion);
     auto goal = std::get<ruby_robot::DistanceDriveRequest>(request);
     if (goal.distance_cm < ruby_robot::MotionGoalCommand::kMinDistanceCm ||
         goal.distance_cm > ruby_robot::MotionGoalCommand::kMaxDistanceCm)
@@ -339,13 +257,13 @@ esp_err_t StartLinearMotion(const L298nLinearRequest& request, ruby_robot::Motio
     if (motion == ruby_robot::Motion::kBackward)
         goal.distance_cm = -goal.distance_cm;
     if (goal.speed_percent == 0)
-        goal.speed_percent = DISTANCE_DRIVE_MAX_SPEED_PERCENT;
+        goal.speed_percent = MotorController::Instance().DefaultDistanceSpeed();
     return StartL298nCommand(goal);
 }
 
 esp_err_t StartTurnMotion(const L298nTurnRequest& request, ruby_robot::Motion motion) {
     if (const auto* web = std::get_if<L298nWebDriveRequest>(&request))
-        return L298nController::Instance().WebCommand(*web, motion);
+        return MotorController::Instance().WebCommand(*web, motion);
     auto goal = std::get<ruby_robot::AngleTurnRequest>(request);
     if (goal.angle_degrees < ruby_robot::MotionGoalCommand::kMinAngleDegrees ||
         goal.angle_degrees > ruby_robot::MotionGoalCommand::kMaxAngleDegrees)
@@ -373,11 +291,11 @@ esp_err_t TurnL298nRight(const L298nTurnRequest& request) {
     return StartTurnMotion(request, ruby_robot::Motion::kRight);
 }
 
-esp_err_t ResetL298nOdometry() { return L298nController::Instance().ResetOdometry(); }
+esp_err_t ResetL298nOdometry() { return MotorController::Instance().ResetOdometry(); }
 
 esp_err_t StopL298nMotor(const L298nWebDriveRequest* request) {
     if (request != nullptr)
-        return L298nController::Instance().WebCommand(*request, ruby_robot::Motion::kStop);
-    L298nController::Instance().Stop();
+        return MotorController::Instance().WebCommand(*request, ruby_robot::Motion::kStop);
+    MotorController::Instance().Stop();
     return ESP_OK;
 }

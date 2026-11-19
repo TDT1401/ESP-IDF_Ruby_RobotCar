@@ -15,7 +15,7 @@ bool ValidWebDriveRequest(const L298nWebDriveRequest& request) {
 
 }  // namespace
 
-void L298nController::SetWebConnected(bool connected) {
+void MotorController::SetWebConnected(bool connected) {
     std::lock_guard lock(mutex_);
     web_control_.SetConnected(connected);
     if (!connected && web_control_.active()) {
@@ -25,7 +25,7 @@ void L298nController::SetWebConnected(bool connected) {
     }
 }
 
-esp_err_t L298nController::BeginWebControl(uint32_t* session) {
+esp_err_t MotorController::BeginWebControl(uint32_t* session) {
     if (session == nullptr)
         return ESP_ERR_INVALID_ARG;
     std::lock_guard lock(mutex_);
@@ -61,7 +61,7 @@ esp_err_t L298nController::BeginWebControl(uint32_t* session) {
     return ESP_OK;
 }
 
-esp_err_t L298nController::ReleaseWebControl(const L298nWebDriveRequest& request) {
+esp_err_t MotorController::ReleaseWebControl(const L298nWebDriveRequest& request) {
     if (!ValidWebDriveRequest(request))
         return ESP_ERR_INVALID_ARG;
     std::lock_guard lock(mutex_);
@@ -72,7 +72,7 @@ esp_err_t L298nController::ReleaseWebControl(const L298nWebDriveRequest& request
     return ESP_OK;
 }
 
-esp_err_t L298nController::WebCommand(const L298nWebDriveRequest& request, Motion motion) {
+esp_err_t MotorController::WebCommand(const L298nWebDriveRequest& request, Motion motion) {
     if (!ValidWebDriveRequest(request) ||
         (request.joystick && JoystickMotion(request.joystick_x, request.joystick_y) != motion))
         return ESP_ERR_INVALID_ARG;
@@ -129,7 +129,7 @@ esp_err_t L298nController::WebCommand(const L298nWebDriveRequest& request, Motio
     return fault_;
 }
 
-void L298nController::UpdateEmotion(const char* emotion, bool speaking) {
+void MotorController::UpdateEmotion(const char* emotion, bool speaking) {
     std::lock_guard lock(mutex_);
     if (speaking && IsSleepEmotion(emotion)) {
         if (!web_control_.active())
@@ -137,7 +137,7 @@ void L298nController::UpdateEmotion(const char* emotion, bool speaking) {
     }
 }
 
-void L298nController::EndWebControlLocked() {
+void MotorController::EndWebControlLocked() {
     web_control_.Revoke();
 #ifdef CONFIG_PM_ENABLE
     if (web_sleep_lock_held_) {

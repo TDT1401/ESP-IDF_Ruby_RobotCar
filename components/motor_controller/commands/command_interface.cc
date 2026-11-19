@@ -1,4 +1,4 @@
-#include "command_interface.h"
+#include "commands/command_interface.h"
 
 namespace ruby_robot {
 

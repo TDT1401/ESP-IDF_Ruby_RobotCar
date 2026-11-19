@@ -3,14 +3,63 @@
 #include <esp_err.h>
 
 #include <cstdint>
+#include <functional>
 #include <variant>
 
-#include "../commands/command_interface.h"
-#include "../sensors/fc03_encoder.h"
-#include "../domain/pose_ekf.h"
+#include "commands/command_interface.h"
+#include "domain/pose_ekf.h"
+#include "imu.h"
+#include "motor_driver.h"
+#include "ultrasonic_sensor.h"
+#include "wheel_encoder.h"
 
-// Board-lifetime controller; call once after the LCD backlight is initialized.
-void InitializeL298nController();
+namespace ruby_robot {
+
+struct MotorControllerConfig {
+    MotorDriverConfig motor;
+    WheelEncoderConfig encoder;
+    ImuConfig imu;
+    UltrasonicSensorConfig ultrasonic;
+
+    int speed_pi_reference_pwm_percent;
+    double speed_pi_left_reference_rpm;
+    double speed_pi_right_reference_rpm;
+    double speed_pi_left_kp;
+    double speed_pi_left_ki;
+    double speed_pi_right_kp;
+    double speed_pi_right_ki;
+    double heading_pd_kp_rpm_per_deg;
+    double heading_pd_kd_rpm_per_dps;
+    double heading_pd_max_correction_rpm;
+    int heading_turn_auto_speed_percent;
+    double heading_turn_slowdown_degrees;
+    double heading_turn_min_rpm;
+    double heading_turn_tolerance_degrees;
+    double heading_turn_settle_rate_dps;
+    double heading_turn_left_friction_pwm_percent;
+    double heading_turn_right_friction_pwm_percent;
+    double odometry_track_width_mm;
+    bool navigation_use_ekf;
+    int distance_drive_max_speed_percent;
+    double distance_drive_acceleration_mps2;
+    double distance_drive_deceleration_mps2;
+    int distance_drive_min_speed_percent;
+    double distance_drive_left_friction_pwm_percent;
+    double distance_drive_right_friction_pwm_percent;
+    double distance_drive_tolerance_mm;
+    double distance_drive_settle_rpm;
+    int distance_drive_settle_ms;
+
+    // Supplied by the board; callbacks must remain valid for the firmware lifetime.
+    bool (*motion_allowed)();
+    void (*schedule)(std::function<void()> callback);
+    void (*play_proximity_warning)();
+};
+
+}  // namespace ruby_robot
+
+// Board-lifetime controller; initialize before calling the runtime API below.
+void InitializeL298nController(const ruby_robot::MotorControllerConfig& config);
 
 // Legacy board callback; an active browser drive keeps its own safety deadline.
 void UpdateL298nEmotion(const char* emotion, bool speaking);

@@ -1,13 +1,23 @@
 #pragma once
 
 #include <esp_err.h>
-#include <sdkconfig.h>
+#include <soc/soc_caps.h>
 
+#include <array>
 #include <cstdint>
 
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03
+#if SOC_PCNT_SUPPORTED
 #include <driver/pulse_cnt.h>
 #endif
+
+struct WheelEncoderConfig {
+    bool enabled = false;
+    std::array<int, 2> gpio = {-1, -1};
+    std::array<double, 2> pulses_per_rev = {};
+    std::array<double, 2> wheel_diameter_mm = {};
+    int glitch_filter_ns = 0;
+    int coast_ms = 0;
+};
 
 struct Fc03WheelStatus {
     uint64_t pulses = 0;
@@ -36,7 +46,7 @@ struct Fc03EncoderStatus {
 // its mutex. Update/SetDrive never log, allocate, sleep or perform network operations.
 class Fc03Encoder {
 public:
-    Fc03Encoder() = default;
+    explicit Fc03Encoder(const WheelEncoderConfig& config) : config_(config) {}
     ~Fc03Encoder();
     Fc03Encoder(const Fc03Encoder&) = delete;
     Fc03Encoder& operator=(const Fc03Encoder&) = delete;
@@ -47,8 +57,9 @@ public:
     Fc03EncoderStatus Snapshot() const { return status_; }
 
 private:
+    WheelEncoderConfig config_;
     Fc03EncoderStatus status_;
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03
+#if SOC_PCNT_SUPPORTED
     struct Counter {
         pcnt_unit_handle_t unit = nullptr;
         pcnt_channel_handle_t channel = nullptr;
@@ -73,6 +84,3 @@ private:
     void FinishSegment();
 #endif
 };
-
-// Logging runs in a separate low-priority task, outside motor timer/locks/audio tasks.
-void StartFc03Monitor(Fc03EncoderStatus (*snapshot)());

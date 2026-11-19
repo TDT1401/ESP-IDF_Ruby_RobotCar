@@ -1,4 +1,4 @@
-#include "mpu6050_imu.h"
+#include "imu.h"
 
 #include <driver/i2c_master.h>
 #include <esp_log.h>
@@ -12,24 +12,23 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "../../config.h"
-
 namespace {
 
 constexpr char kTag[] = "MPU6050";
+ImuConfig config = {};
 #define IMU_LOGI(...)                    \
     do {                                 \
-        if constexpr (MPU6050_DEBUG)     \
+        if (config.debug)                \
             ESP_LOGI(kTag, __VA_ARGS__); \
     } while (false)
 #define IMU_LOGW(...)                    \
     do {                                 \
-        if constexpr (MPU6050_DEBUG)     \
+        if (config.debug)                \
             ESP_LOGW(kTag, __VA_ARGS__); \
     } while (false)
 #define IMU_LOGE(...)                    \
     do {                                 \
-        if constexpr (MPU6050_DEBUG)     \
+        if (config.debug)                \
             ESP_LOGE(kTag, __VA_ARGS__); \
     } while (false)
 constexpr uint8_t kWhoAmI = 0x75;
@@ -50,8 +49,6 @@ constexpr double kStationaryRateDps = 0.3;
 constexpr double kBiasTimeConstantSeconds = 30.0;
 constexpr int kPersistentReadErrorSamples = 5;
 constexpr double kGyroScale = 131.0;  // LSB/(degree/s) at +/-250 degrees/s.
-static_assert(MPU6050_SDA_PIN != MPU6050_SCL_PIN);
-static_assert(MPU6050_SDA_PIN != LAMP_GPIO && MPU6050_SCL_PIN != LAMP_GPIO);
 
 i2c_master_bus_handle_t bus = nullptr;
 i2c_master_dev_handle_t device = nullptr;
@@ -131,7 +128,7 @@ void SampleTask(void*) {
             IMU_LOGI("Gyro Z reads recovered after %d errors", consecutive_errors);
         consecutive_errors = 0;
         const int16_t raw = static_cast<int16_t>((data[0] << 8) | data[1]);
-        const double rate = raw / kGyroScale * MPU6050_GYRO_Z_SIGN;
+        const double rate = raw / kGyroScale * config.gyro_z_sign;
         if (!calibrated && motor_active.load(std::memory_order_relaxed)) {
             if (!reported_motor_active) {
                 IMU_LOGW("Calibration paused: motors active; stop the car for 2 seconds");
@@ -239,15 +236,16 @@ void SetInitializationError(const char* stage, esp_err_t error) {
 
 }  // namespace
 
-void InitializeMpu6050() {
+void InitializeMpu6050(const ImuConfig& board_config) {
     if (task != nullptr || bus != nullptr)
         return;
+    config = board_config;
     IMU_LOGI("Starting I2C0: SDA=GPIO%d, SCL=GPIO%d, 100 kHz, configured address=0x%02x",
-             MPU6050_SDA_PIN, MPU6050_SCL_PIN, MPU6050_I2C_ADDRESS);
+             config.sda_pin, config.scl_pin, config.address);
     i2c_master_bus_config_t bus_config = {};
     bus_config.i2c_port = I2C_NUM_0;
-    bus_config.sda_io_num = MPU6050_SDA_PIN;
-    bus_config.scl_io_num = MPU6050_SCL_PIN;
+    bus_config.sda_io_num = config.sda_pin;
+    bus_config.scl_io_num = config.scl_pin;
     bus_config.clk_source = I2C_CLK_SRC_DEFAULT;
     bus_config.glitch_ignore_cnt = 7;
     bus_config.flags.enable_internal_pullup = true;
@@ -259,18 +257,18 @@ void InitializeMpu6050() {
     const esp_err_t probe_68 = i2c_master_probe(bus, 0x68, 50);
     const esp_err_t probe_69 = i2c_master_probe(bus, 0x69, 50);
     IMU_LOGI("I2C probe: 0x68=%s, 0x69=%s", esp_err_to_name(probe_68), esp_err_to_name(probe_69));
-    if ((MPU6050_I2C_ADDRESS == 0x68 ? probe_68 : probe_69) != ESP_OK) {
+    if ((config.address == 0x68 ? probe_68 : probe_69) != ESP_OK) {
         IMU_LOGE(
             "No response at configured address 0x%02x; check 3V3, GND, SDA/SCL, "
             "pull-ups and AD0",
-            MPU6050_I2C_ADDRESS);
+            config.address);
         SetInitializationError("I2C address probe",
-                               MPU6050_I2C_ADDRESS == 0x68 ? probe_68 : probe_69);
+                               config.address == 0x68 ? probe_68 : probe_69);
         return;
     }
     i2c_device_config_t device_config = {};
     device_config.dev_addr_length = I2C_ADDR_BIT_LEN_7;
-    device_config.device_address = MPU6050_I2C_ADDRESS;
+    device_config.device_address = config.address;
     device_config.scl_speed_hz = 100000;
     error = i2c_master_bus_add_device(bus, &device_config, &device);
     if (error != ESP_OK) {
@@ -311,7 +309,7 @@ void InitializeMpu6050() {
     }
     IMU_LOGI("%s detected at I2C address 0x%02x; gyro sampling task started",
              identity == kMpu6500Identity ? "MPU-6500-compatible IMU" : "MPU-6050",
-             MPU6050_I2C_ADDRESS);
+             config.address);
 }
 
 Mpu6050Status GetMpu6050Status() {

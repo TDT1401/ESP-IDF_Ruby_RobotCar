@@ -1,8 +1,17 @@
 #pragma once
 
+#include <driver/gpio.h>
 #include <esp_err.h>
 
 #include <cstdint>
+
+struct ImuConfig {
+    gpio_num_t sda_pin;
+    gpio_num_t scl_pin;
+    uint8_t address;
+    double gyro_z_sign;
+    bool debug;
+};
 
 struct Mpu6050Status {
     bool ready = false;
@@ -17,6 +26,6 @@ struct Mpu6050Status {
 
 // Starts one board-lifetime I2C sampling task. Calibration needs a stationary car
 // for roughly two seconds after boot; sampling never runs in the motor timer.
-void InitializeMpu6050();
+void InitializeMpu6050(const ImuConfig& config);
 void SetMpu6050MotorActive(bool active);
 Mpu6050Status GetMpu6050Status();

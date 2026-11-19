@@ -1,4 +1,4 @@
-#include "hcsr04_sensor.h"
+#include "ultrasonic_sensor.h"
 
 #include <driver/gpio.h>
 #include <driver/ledc.h>
@@ -15,7 +15,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "../../config.h"
+#include <sdkconfig.h>
 
 namespace {
 
@@ -24,34 +24,28 @@ constexpr int kSamplePeriodMs = 60;  // HC-SR04 needs the previous acoustic burs
 constexpr int kEchoTimeoutMs = 35;
 constexpr int kMinEchoUs = 116;    // Approximately 2 cm.
 constexpr int kMaxEchoUs = 23200;  // Approximately 400 cm.
-constexpr auto kServoMode = LEDC_LOW_SPEED_MODE;
-constexpr auto kServoTimer = LEDC_TIMER_2;      // Backlight: 0; motors: 1.
-constexpr auto kServoChannel = LEDC_CHANNEL_3;  // Backlight: 0; front motors: 1/2; rear: 4/5.
 constexpr int kServoPeriodUs = 20000;
 constexpr int kServoSettleMs = 300;
 
-void StartServoCenterPwm() {
-    static_assert(HCSR04_SERVO_CENTER_PULSE_US > 0 &&
-                  HCSR04_SERVO_CENTER_PULSE_US < kServoPeriodUs);
-
+void StartServoCenterPwm(const UltrasonicSensorConfig& config) {
     ledc_timer_config_t timer = {};
-    timer.speed_mode = kServoMode;
-    timer.timer_num = kServoTimer;
+    timer.speed_mode = config.servo_mode;
+    timer.timer_num = config.servo_timer;
     timer.duty_resolution = LEDC_TIMER_14_BIT;
     timer.freq_hz = 50;
     timer.clk_cfg = LEDC_AUTO_CLK;
     ESP_ERROR_CHECK(ledc_timer_config(&timer));
 
     ledc_channel_config_t channel = {};
-    channel.gpio_num = HCSR04_SERVO_SIGNAL_PIN;
-    channel.speed_mode = kServoMode;
-    channel.channel = kServoChannel;
-    channel.timer_sel = kServoTimer;
+    channel.gpio_num = config.servo_pin;
+    channel.speed_mode = config.servo_mode;
+    channel.channel = config.servo_channel;
+    channel.timer_sel = config.servo_timer;
     channel.duty =
-        (HCSR04_SERVO_CENTER_PULSE_US * (1U << 14) + kServoPeriodUs / 2) / kServoPeriodUs;
+        (config.servo_center_pulse_us * (1U << 14) + kServoPeriodUs / 2) / kServoPeriodUs;
     ESP_ERROR_CHECK(ledc_channel_config(&channel));
-    ESP_LOGI(kTag, "Servo center PWM on GPIO%d: %d us at 50 Hz", HCSR04_SERVO_SIGNAL_PIN,
-             HCSR04_SERVO_CENTER_PULSE_US);
+    ESP_LOGI(kTag, "Servo center PWM on GPIO%d: %d us at 50 Hz", config.servo_pin,
+             config.servo_center_pulse_us);
 }
 
 class Hcsr04Sensor {
@@ -61,21 +55,22 @@ public:
         return sensor;
     }
 
-    void Start(Hcsr04ReadingCallback callback) {
+    void Start(const UltrasonicSensorConfig& config, Hcsr04ReadingCallback callback) {
         if (task_ != nullptr)
             return;
+        config_ = config;
         callback_ = callback;
-        StartServoCenterPwm();
+        StartServoCenterPwm(config_);
 
         gpio_config_t trigger = {};
-        trigger.pin_bit_mask = 1ULL << HCSR04_TRIGGER_PIN;
+        trigger.pin_bit_mask = 1ULL << config_.trigger_pin;
         trigger.mode = GPIO_MODE_OUTPUT;
         trigger.pull_down_en = GPIO_PULLDOWN_ENABLE;
         ESP_ERROR_CHECK(gpio_config(&trigger));
-        ESP_ERROR_CHECK(gpio_set_level(HCSR04_TRIGGER_PIN, 0));
+        ESP_ERROR_CHECK(gpio_set_level(config_.trigger_pin, 0));
 
         gpio_config_t echo = {};
-        echo.pin_bit_mask = 1ULL << HCSR04_ECHO_PIN;
+        echo.pin_bit_mask = 1ULL << config_.echo_pin;
         echo.mode = GPIO_MODE_INPUT;
         echo.pull_down_en = GPIO_PULLDOWN_ENABLE;
         echo.intr_type = GPIO_INTR_ANYEDGE;
@@ -85,7 +80,7 @@ public:
         if (isr_error != ESP_OK && isr_error != ESP_ERR_INVALID_STATE) {
             ESP_ERROR_CHECK(isr_error);
         }
-        ESP_ERROR_CHECK(gpio_isr_handler_add(HCSR04_ECHO_PIN, EchoIsr, this));
+        ESP_ERROR_CHECK(gpio_isr_handler_add(config_.echo_pin, EchoIsr, this));
 #ifdef CONFIG_PM_ENABLE
         ESP_ERROR_CHECK(esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "hcsr04", &sleep_lock_));
 #endif
@@ -95,7 +90,7 @@ public:
             &task_);
         if (task_result != pdPASS) {
             task_ = nullptr;
-            ESP_ERROR_CHECK(gpio_isr_handler_remove(HCSR04_ECHO_PIN));
+            ESP_ERROR_CHECK(gpio_isr_handler_remove(config_.echo_pin));
 #ifdef CONFIG_PM_ENABLE
             esp_pm_lock_delete(sleep_lock_);
             sleep_lock_ = nullptr;
@@ -107,6 +102,7 @@ public:
     }
 
 private:
+    UltrasonicSensorConfig config_ = {};
     TaskHandle_t task_ = nullptr;
     Hcsr04ReadingCallback callback_ = nullptr;
     portMUX_TYPE isr_lock_ = portMUX_INITIALIZER_UNLOCKED;
@@ -122,7 +118,7 @@ private:
 
     static void EchoIsr(void* arg) {
         auto* self = static_cast<Hcsr04Sensor*>(arg);
-        const int level = gpio_get_level(HCSR04_ECHO_PIN);
+        const int level = gpio_get_level(self->config_.echo_pin);
         const int64_t now = esp_timer_get_time();
         BaseType_t wake = pdFALSE;
 
@@ -152,9 +148,9 @@ private:
         waiting_for_echo_ = true;
         portEXIT_CRITICAL(&isr_lock_);
 
-        gpio_set_level(HCSR04_TRIGGER_PIN, 1);
+        gpio_set_level(config_.trigger_pin, 1);
         esp_rom_delay_us(10);
-        gpio_set_level(HCSR04_TRIGGER_PIN, 0);
+        gpio_set_level(config_.trigger_pin, 0);
     }
 
     int TakeEchoWidth() {
@@ -204,6 +200,6 @@ private:
 
 }  // namespace
 
-void InitializeHcsr04Sensor(Hcsr04ReadingCallback callback) {
-    Hcsr04Sensor::Instance().Start(callback);
+void InitializeHcsr04Sensor(const UltrasonicSensorConfig& config, Hcsr04ReadingCallback callback) {
+    Hcsr04Sensor::Instance().Start(config, callback);
 }

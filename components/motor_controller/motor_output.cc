@@ -1,6 +1,6 @@
 #include "controller_internal.h"
 
-#include "../sensors/mpu6050_imu.h"
+#include "imu.h"
 
 #include <array>
 
@@ -14,7 +14,7 @@ std::array<int, 4> WheelOutputs(int left, int right) {
 
 }  // namespace
 
-void L298nController::StopOutputsLocked() {
+void MotorController::StopOutputsLocked() {
     const int64_t now_us = esp_timer_get_time();
     last_motor_stop_us_ = now_us;
     SetMpu6050MotorActive(false);
@@ -49,7 +49,7 @@ void L298nController::StopOutputsLocked() {
 #endif
 }
 
-bool L298nController::ApplyMotorPwmLocked(int left_percent, int right_percent) {
+bool MotorController::ApplyMotorPwmLocked(int left_percent, int right_percent) {
     const auto outputs = WheelOutputs(left_percent, right_percent);
     for (unsigned i = 0; i < outputs.size(); ++i) {
         if (!Check(driver_.SetPwm(static_cast<Wheel>(i), outputs[i])))
@@ -60,7 +60,7 @@ bool L298nController::ApplyMotorPwmLocked(int left_percent, int right_percent) {
     return true;
 }
 
-bool L298nController::ApplyWheelDirectionsLocked(int left, int right) {
+bool MotorController::ApplyWheelDirectionsLocked(int left, int right) {
     const auto outputs = WheelOutputs(left, right);
     for (unsigned i = 0; i < outputs.size(); ++i) {
         const auto wheel = static_cast<Wheel>(i);
@@ -73,7 +73,7 @@ bool L298nController::ApplyWheelDirectionsLocked(int left, int right) {
     return true;
 }
 
-bool L298nController::ApplyWebDriveLocked(int left, int right) {
+bool MotorController::ApplyWebDriveLocked(int left, int right) {
     encoder_.Update(esp_timer_get_time());
     if (web_joystick_pending_) {
         web_left_output_percent_ = left;
@@ -106,7 +106,7 @@ bool L298nController::ApplyWebDriveLocked(int left, int right) {
     return ok;
 }
 
-bool L298nController::ApplyDirectionLocked() {
+bool MotorController::ApplyDirectionLocked() {
     const bool left_forward = motion_ == Motion::kForward || motion_ == Motion::kRight;
     const bool right_forward = motion_ == Motion::kForward || motion_ == Motion::kLeft;
     // Keep logical wheel signs before applying physical motor wiring inversion.

@@ -1,21 +1,19 @@
 #include "controller_internal.h"
 
-#include "../sensors/mpu6050_imu.h"
-#include "application.h"
-#include "../../config.h"
+#include "imu.h"
 
 #include <cmath>
 #include <numbers>
 
 namespace ruby_robot {
 
-void L298nController::StopLocked() {
+void MotorController::StopLocked() {
     web_joystick_active_ = false;
     command_interface_.StopMotion(esp_timer_get_time());
     StopOutputsLocked();
 }
 
-void L298nController::FinishCommandLocked(int64_t now_us, bool completed, const char* fault) {
+void MotorController::FinishCommandLocked(int64_t now_us, bool completed, const char* fault) {
     web_joystick_active_ = false;
     StopOutputsLocked();
     // Keep the mode until its result is recorded; StopMotion would turn it idle.
@@ -25,7 +23,7 @@ void L298nController::FinishCommandLocked(int64_t now_us, bool completed, const 
         command_interface_.Fail(now_us, fault_ == ESP_OK ? fault : "motor_error");
 }
 
-void L298nController::StopFailedMotionLocked(int64_t now_us, const char* fault) {
+void MotorController::StopFailedMotionLocked(int64_t now_us, const char* fault) {
     if (web_control_.active()) {
         EndWebControlLocked();
         return;
@@ -36,11 +34,11 @@ void L298nController::StopFailedMotionLocked(int64_t now_us, const char* fault) 
         StopLocked();
 }
 
-int L298nController::ActiveSpeedLocked() const {
+int MotorController::ActiveSpeedLocked() const {
     return command_interface_.Active() ? command_interface_.speed_percent() : web_speed_percent_;
 }
 
-bool L298nController::PrepareMotionLocked(Motion motion) {
+bool MotorController::PrepareMotionLocked(Motion motion) {
 #ifdef CONFIG_PM_ENABLE
     if (!Check(esp_pm_lock_acquire(sleep_lock_)))
         return false;
@@ -51,13 +49,11 @@ bool L298nController::PrepareMotionLocked(Motion motion) {
     return true;
 }
 
-bool L298nController::MotionAllowed() {
-    const auto state = Application::GetInstance().GetDeviceState();
-    return state != kDeviceStateUpgrading && state != kDeviceStateFatalError &&
-           state != kDeviceStateWifiConfiguring;
+bool MotorController::MotionAllowed() const {
+    return config_.motion_allowed();
 }
 
-void L298nController::Tick() {
+void MotorController::Tick() {
     std::lock_guard lock(mutex_);
     const int64_t now = esp_timer_get_time();
     UpdateOdometryLocked(now);
@@ -120,9 +116,8 @@ void L298nController::Tick() {
                     FinishCommandLocked(now, false, "motor_error");
                     return;
                 }
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03
-                start_at_us_ = now + FC03_COAST_MS * 1000LL;
-#endif
+                if (config_.encoder.enabled)
+                    start_at_us_ = now + config_.encoder.coast_ms * 1000LL;
                 heading_hold_active_ = true;
                 const auto imu = GetMpu6050Status();
                 heading_target_degrees_ = imu.heading_degrees +
@@ -164,7 +159,7 @@ void L298nController::Tick() {
     }
 }
 
-bool L298nController::ApplySpeedLocked() {
+bool MotorController::ApplySpeedLocked() {
     if (heading_hold_active_)
         return UpdateHeadingPdLocked(esp_timer_get_time());
     const int speed = ActiveSpeedLocked();
@@ -174,7 +169,7 @@ bool L298nController::ApplySpeedLocked() {
     return ApplyCommandLocked();
 }
 
-bool L298nController::ApplyCommandLocked() {
+bool MotorController::ApplyCommandLocked() {
     const auto wheels = command_interface_.wheels();
     return SetRequestedWheelsLocked(wheels.left_percent, wheels.right_percent);
 }
