@@ -85,6 +85,10 @@ No board argument, `--name`, or alternate configuration file is required.
 
 The script continues using `build/` and the existing SDK configuration pipeline.
 A source move does not require a new board identity or another build directory.
+The required build helpers are `scripts/build.py`, `scripts/gen_lang.py` and
+`scripts/build_default_assets.py`. The assets packer includes its own model and
+asset packing code; the removed legacy converter and SPIFFS tools are not imported.
+Only `partitions/v2/16m.csv` remains; see the [partition layout](../partitions/v2/README.md).
 A successful compile does not validate hardware: verify motor direction, stop,
 disconnect/timeout behavior, encoder feedback, IMU heading and ultrasonic readings
 on the actual robot after relevant changes.

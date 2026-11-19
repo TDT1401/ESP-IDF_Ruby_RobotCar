@@ -24,6 +24,8 @@ Use ESP-IDF v6.1 when possible. The minimum supported SDK is ESP-IDF v6.0.1. IDF
 - `main/Kconfig.projbuild`: board and feature configuration.
 - `main/CMakeLists.txt`: source, board, locale, font, and asset selection.
 - `scripts/build.py`: canonical single-project build entry point; no board or variant argument.
+- `scripts/gen_lang.py` and `scripts/build_default_assets.py`: required language and speech-model/assets generation helpers.
+- `partitions/v2/16m.csv`: the sole partition table; preserve its path, offsets and sizes.
 
 Read the closest existing implementation before adding a new one. Prefer the narrowest owning layer; do not put board-specific behavior into core modules.
 
