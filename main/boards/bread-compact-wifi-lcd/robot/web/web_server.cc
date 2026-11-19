@@ -253,7 +253,9 @@ esp_err_t Status(httpd_req_t* req) {
     const auto ip = wifi.GetIpAddress();
     using Json = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
     Json json(cJSON_CreateObject(), cJSON_Delete);
-    if (!json || !cJSON_AddBoolToObject(json.get(), "distance_valid", motor.distance_valid) ||
+    if (!json || !cJSON_AddNumberToObject(json.get(), "rear_left_pwm_percent", motor.rear_left_pwm_percent) ||
+        !cJSON_AddNumberToObject(json.get(), "rear_right_pwm_percent", motor.rear_right_pwm_percent) ||
+        !cJSON_AddBoolToObject(json.get(), "distance_valid", motor.distance_valid) ||
         !cJSON_AddStringToObject(json.get(), "command_mode", motor.command.mode) ||
         !cJSON_AddStringToObject(json.get(), "angle_turn_state", motor.command.angle_turn.state) ||
         !cJSON_AddStringToObject(json.get(), "angle_turn_owner", motor.command.angle_turn.owner) ||

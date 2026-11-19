@@ -217,6 +217,8 @@ L298nMotorStatus L298nController::Snapshot() {
     status.heading_fault = heading_fault_;
     status.left_pwm_percent = moving_ ? applied_left_pwm_percent_ : 0;
     status.right_pwm_percent = moving_ ? applied_right_pwm_percent_ : 0;
+    status.rear_left_pwm_percent = status.left_pwm_percent;
+    status.rear_right_pwm_percent = status.right_pwm_percent;
     status.control_owner = web_control_.active() ? "web" : status.command.owner;
     status.warning_sound_enabled = proximity_warning_enabled_;
     return status;

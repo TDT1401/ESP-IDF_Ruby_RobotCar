@@ -1,8 +1,12 @@
 #ifndef _BOARD_CONFIG_H_
 #define _BOARD_CONFIG_H_
 
-#include <sdkconfig.h>
 #include <driver/gpio.h>
+#include <sdkconfig.h>
+
+#if defined(CONFIG_BREAD_COMPACT_WIFI_LCD_L298N) && defined(CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY)
+#error "Dual L298N motor pins conflict with the ST7789 display"
+#endif
 
 #define AUDIO_INPUT_SAMPLE_RATE 16000
 #define AUDIO_OUTPUT_SAMPLE_RATE 24000
@@ -37,7 +41,7 @@
 #define DISPLAY_RST_PIN GPIO_NUM_45
 #define DISPLAY_CS_PIN GPIO_NUM_41
 #else
-// No display attached: leave all former TFT pins available for future sensors.
+// TFT pins are used by the right L298N when motor control is enabled.
 #define DISPLAY_BACKLIGHT_PIN GPIO_NUM_NC
 #define DISPLAY_MOSI_PIN GPIO_NUM_NC
 #define DISPLAY_CLK_PIN GPIO_NUM_NC
@@ -75,12 +79,20 @@
 // Flat module, component side up: a physical left turn must give positive gyro Z.
 // Set to -1.0 only if the module's Z axis points down.
 #define MPU6050_GYRO_Z_SIGN 1.0
-#define MOTOR_LEFT_EN_PIN GPIO_NUM_8
-#define MOTOR_LEFT_IN1_PIN GPIO_NUM_9
-#define MOTOR_LEFT_IN2_PIN GPIO_NUM_10
-#define MOTOR_RIGHT_IN1_PIN GPIO_NUM_11
-#define MOTOR_RIGHT_IN2_PIN GPIO_NUM_12
-#define MOTOR_RIGHT_EN_PIN GPIO_NUM_13
+// Left/right denote the front wheels, where the FC-03 encoders are mounted.
+#define MOTOR_LEFT_EN_PIN GPIO_NUM_13
+#define MOTOR_LEFT_IN1_PIN GPIO_NUM_11
+#define MOTOR_LEFT_IN2_PIN GPIO_NUM_12
+// GPIO45 is a boot strap: remove the ENA jumper and add a 10 kOhm pull-down.
+#define MOTOR_RIGHT_EN_PIN GPIO_NUM_45
+#define MOTOR_RIGHT_IN1_PIN GPIO_NUM_21
+#define MOTOR_RIGHT_IN2_PIN GPIO_NUM_40
+#define MOTOR_REAR_LEFT_EN_PIN GPIO_NUM_8
+#define MOTOR_REAR_LEFT_IN1_PIN GPIO_NUM_9
+#define MOTOR_REAR_LEFT_IN2_PIN GPIO_NUM_10
+#define MOTOR_REAR_RIGHT_EN_PIN GPIO_NUM_47
+#define MOTOR_REAR_RIGHT_IN1_PIN GPIO_NUM_41
+#define MOTOR_REAR_RIGHT_IN2_PIN GPIO_NUM_42
 
 // Phase 1: closed-loop wheel speed control.
 // Provisional Phase 1 reference: motor specification is about 175 RPM at 6 V
@@ -89,8 +101,8 @@
 // allow separate per-wheel calibration. The L298N voltage drop and actual load
 // can make the achievable wheel RPM lower than this estimate.
 #define SPEED_PI_REFERENCE_PWM_PERCENT 100
-#define SPEED_PI_LEFT_REFERENCE_RPM 175.0
-#define SPEED_PI_RIGHT_REFERENCE_RPM 175.0
+#define SPEED_PI_LEFT_REFERENCE_RPM 200.0
+#define SPEED_PI_RIGHT_REFERENCE_RPM 200.0
 // Initial gains in PWM-percent/RPM and PWM-percent/(RPM*s); tune on the car.
 #define SPEED_PI_LEFT_KP 0.25
 #define SPEED_PI_LEFT_KI 0.50

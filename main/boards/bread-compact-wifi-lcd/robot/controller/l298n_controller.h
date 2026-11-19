@@ -96,6 +96,8 @@ struct L298nMotorStatus {
     const char* speed_pi_fault;
     int left_pwm_percent;
     int right_pwm_percent;
+    int rear_left_pwm_percent;
+    int rear_right_pwm_percent;
     const char* control_owner;
     bool warning_sound_enabled;
 };

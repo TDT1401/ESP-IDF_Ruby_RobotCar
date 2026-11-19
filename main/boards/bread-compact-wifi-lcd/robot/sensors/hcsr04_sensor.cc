@@ -26,7 +26,7 @@ constexpr int kMinEchoUs = 116;    // Approximately 2 cm.
 constexpr int kMaxEchoUs = 23200;  // Approximately 400 cm.
 constexpr auto kServoMode = LEDC_LOW_SPEED_MODE;
 constexpr auto kServoTimer = LEDC_TIMER_2;      // Backlight: 0; motors: 1.
-constexpr auto kServoChannel = LEDC_CHANNEL_3;  // Backlight: 0; motors: 1 and 2.
+constexpr auto kServoChannel = LEDC_CHANNEL_3;  // Backlight: 0; front motors: 1/2; rear: 4/5.
 constexpr int kServoPeriodUs = 20000;
 constexpr int kServoSettleMs = 300;
 

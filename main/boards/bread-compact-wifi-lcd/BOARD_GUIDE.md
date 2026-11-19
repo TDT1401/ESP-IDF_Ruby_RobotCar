@@ -32,7 +32,7 @@ Connect the speaker to the amplifier's + and - outputs, not to GND.
 
 ## SPI TFT display (ST7789 240×240)
 
-The default build temporarily disables the display. The firmware does not initialize the SPI panel or backlight, and GPIO21, GPIO40, GPIO41, GPIO42, GPIO45, and GPIO47 are left unconfigured by the display code. The wiring below is kept for when the screen is reattached. Run `idf.py reconfigure` before a direct build so an older local `sdkconfig` picks up the new display option. To reattach the screen later, set `CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY=y` in `config.json` for the canonical build, or enable the option in `idf.py menuconfig`.
+The default build disables the display and does not initialize the SPI panel or backlight. The dual-L298N wiring below assigns GPIO21, GPIO40, GPIO41, GPIO42, GPIO45, and GPIO47 to the right L298N. Disconnect the TFT wires from these pins and keep `CONFIG_BREAD_COMPACT_WIFI_LCD_DISPLAY=n`. GPIO18 is now unused. A replacement display requiring fewer pins will be selected and assigned separately.
 
 | Display pin | Connect to |
 | ----------- | ---------- |
@@ -47,22 +47,39 @@ The default build temporarily disables the display. The firmware does not initia
 
 The display pins labeled SCL and SDA carry SPI clock and data.
 
-## L298N motor driver
+## Dual L298N conventional-wheel wiring — bread-compact-wifi-lcd build
 
-| L298N pin   | Connect to                                                                                    |
-| ----------- | --------------------------------------------------------------------------------------------- |
-| ENA         | GPIO8                                                                                         |
-| IN1         | GPIO9                                                                                         |
-| IN2         | GPIO10                                                                                        |
-| IN3         | GPIO11                                                                                        |
-| IN4         | GPIO12                                                                                        |
-| ENB         | GPIO13                                                                                        |
-| OUT1 / OUT2 | Both left motors, in parallel                                                                 |
-| OUT3 / OUT4 | Both right motors, in parallel                                                                |
-| VS / +12V   | Positive terminal of a separate motor supply, at a voltage suitable for the motors and driver |
-| GND         | Motor supply negative terminal and ESP32-S3 GND                                               |
+The car uses four conventional wheels with differential left/right steering. Front wheels are at the vehicle's front, and rear wheels are at its rear. Each L298N bridge drives one motor independently. Retain the HC-SR04 servo on GPIO6, audio, IMU, both encoders, and the current USB/UART pins.
 
-Remove the ENA and ENB jumpers. A 10 kΩ pull-down from each of ENA and ENB to GND is recommended. Do not power the motors from the ESP32-S3 3V3 or 5V rail.
+| Control pin | Left L298N | Right L298N |
+| ----------- | ---------- | ----------- |
+| ENA — PWM   | GPIO8      | GPIO45      |
+| IN1         | GPIO9      | GPIO21      |
+| IN2         | GPIO10     | GPIO40      |
+| IN3         | GPIO11     | GPIO41      |
+| IN4         | GPIO12     | GPIO42      |
+| ENB — PWM   | GPIO13     | GPIO47      |
+
+GPIO45, connected to right L298N ENA, is a strapping pin selecting VDD_SPI voltage at reset. Remove the ENA jumper and connect a 10 kΩ resistor from GPIO45/ENA to GND to hold it low during boot; do not pull it up to 5 V. This replaces the previous right ENA assignment on GPIO18.
+
+| Output                    | Left L298N       | Right L298N       |
+| ------------------------- | ---------------- | ----------------- |
+| OUT1 / OUT2 — bridge A     | Rear left wheel  | Front right wheel |
+| OUT3 / OUT4 — bridge B     | Front left wheel | Rear right wheel  |
+
+Remove all four ENA/ENB jumpers across both modules so the ESP32 supplies four independent PWM signals. A 10 kΩ pull-down on each ENA/ENB input is recommended. Connect the ESP32, both modules, and the separate motor supply to a common GND. Do not power the motors from the ESP32-S3 3V3 or 5V rail. Both FC-03 encoders are on the front wheels: left on GPIO38, right on GPIO48. The rear wheels do not have encoders.
+
+The single `bread-compact-wifi-lcd` build keeps its existing firmware/OTA identity and uses four conventional wheels with two L298N modules whenever `CONFIG_BREAD_COMPACT_WIFI_LCD_L298N=y`. The target remains ESP32-S3 with 16 MB flash and `partitions/v2/16m.csv` from the project defaults. Build manually in an ESP-IDF environment with:
+
+```sh
+python scripts/build.py bread-compact-wifi-lcd
+```
+
+The HUD joystick controls forward/backward motion, curved turns, and rotation in place using `left = y + x` and `right = y - x`, normalized together to the selected speed. Both wheels on each side receive the same logical direction and PWM. Speed PI uses the front encoder on each side; rear wheels follow front PWM without separate feedback. Motor LEDC channels are 1/2/4/5; the servo retains channel 3. Stop, network loss, and session expiry disable all four bridges; direction changes include a stop interval.
+
+Distance and angle commands retain front-encoder and IMU feedback. Odometry uses the left/right model for conventional wheels; joystick steering no longer invalidates pose due to lateral motion. Sensor errors, unknown-direction pulses, and sampling gaps can still require a stationary pose reset.
+
+The existing `CONFIG_BREAD_COMPACT_WIFI_LCD_L298N_INVERT_LEFT/RIGHT` options control front wheel inversion. Rear wheels use the default wiring direction without new build options. Verify each wheel's direction and recalibrate wheel diameter, CPR, and gains for the actual conventional wheels. This update has not been built, tested, or validated on hardware.
 
 ## HC-SR04 ultrasonic sensor
 

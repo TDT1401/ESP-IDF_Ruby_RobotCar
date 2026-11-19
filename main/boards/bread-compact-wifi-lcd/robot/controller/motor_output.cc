@@ -2,7 +2,17 @@
 
 #include "../sensors/mpu6050_imu.h"
 
+#include <array>
+
 namespace ruby_robot {
+namespace {
+
+// Order matches Wheel: front left/right, rear left/right.
+std::array<int, 4> WheelOutputs(int left, int right) {
+    return {left, right, left, right};
+}
+
+}  // namespace
 
 void L298nController::StopOutputsLocked() {
     const int64_t now_us = esp_timer_get_time();
@@ -40,13 +50,27 @@ void L298nController::StopOutputsLocked() {
 }
 
 bool L298nController::ApplyMotorPwmLocked(int left_percent, int right_percent) {
-    const bool ok = Check(driver_.SetPwm(Wheel::kLeft, left_percent)) &&
-                    Check(driver_.SetPwm(Wheel::kRight, right_percent));
-    if (ok) {
-        applied_left_pwm_percent_ = left_percent;
-        applied_right_pwm_percent_ = right_percent;
+    const auto outputs = WheelOutputs(left_percent, right_percent);
+    for (unsigned i = 0; i < outputs.size(); ++i) {
+        if (!Check(driver_.SetPwm(static_cast<Wheel>(i), outputs[i])))
+            return false;
     }
-    return ok;
+    applied_left_pwm_percent_ = left_percent;
+    applied_right_pwm_percent_ = right_percent;
+    return true;
+}
+
+bool L298nController::ApplyWheelDirectionsLocked(int left, int right) {
+    const auto outputs = WheelOutputs(left, right);
+    for (unsigned i = 0; i < outputs.size(); ++i) {
+        const auto wheel = static_cast<Wheel>(i);
+        // Disable a stopped wheel before clearing its direction pins.
+        if (outputs[i] == 0 && !Check(driver_.SetPwm(wheel, 0)))
+            return false;
+        if (!Check(driver_.SetDirection(wheel, outputs[i])))
+            return false;
+    }
+    return true;
 }
 
 bool L298nController::ApplyWebDriveLocked(int left, int right) {
@@ -69,16 +93,10 @@ bool L298nController::ApplyWebDriveLocked(int left, int right) {
         return true;
     }
 
-    bool ok = true;
-    // Zero PWM before changing direction; SetRequestedWheelsLocked restarts it.
-    if (left == 0)
-        ok = Check(driver_.SetPwm(Wheel::kLeft, 0)) && ok;
-    if (right == 0)
-        ok = Check(driver_.SetPwm(Wheel::kRight, 0)) && ok;
-    ok = Check(driver_.SetDirection(Wheel::kLeft, left)) && ok;
-    ok = Check(driver_.SetDirection(Wheel::kRight, right)) && ok;
-    if (ok)
-        ok = command_interface_.SubmitManual({left, right}) && ApplyCommandLocked();
+    // Each front encoder provides speed feedback for its side.
+    const bool ok = ApplyWheelDirectionsLocked(left, right) &&
+                    command_interface_.SubmitManual({left, right}) &&
+                    ApplyCommandLocked();
     if (ok) {
         web_left_output_percent_ = left;
         web_right_output_percent_ = right;
@@ -95,8 +113,7 @@ bool L298nController::ApplyDirectionLocked() {
     const int encoder_left = left_forward ? 1 : -1;
     const int encoder_right = right_forward ? 1 : -1;
     encoder_.Update(esp_timer_get_time());
-    const bool ok = Check(driver_.SetDirection(Wheel::kLeft, encoder_left)) &&
-                    Check(driver_.SetDirection(Wheel::kRight, encoder_right));
+    const bool ok = ApplyWheelDirectionsLocked(encoder_left, encoder_right);
     if (ok)
         encoder_.SetDrive(encoder_left, encoder_right, esp_timer_get_time());
     return ok;

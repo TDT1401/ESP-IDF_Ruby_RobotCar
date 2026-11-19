@@ -116,6 +116,7 @@ private:
     bool ApplyCommandLocked();
     void StopOutputsLocked();
     bool ApplyMotorPwmLocked(int left_percent, int right_percent);
+    bool ApplyWheelDirectionsLocked(int left, int right);
     bool SetRequestedWheelsLocked(int left_percent, int right_percent);
     bool UpdateSpeedPiLocked(int64_t now_us);
     bool UpdateHeadingPdLocked(int64_t now_us);
