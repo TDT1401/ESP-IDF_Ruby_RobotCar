@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900" role="img" aria-labelledby="title desc">
+  <title id="title">Ruby RobotCar — tổng quan runtime</title>
+  <desc id="desc">Server hội thoại nối Application qua Protocol. Web và MCP gửi lệnh tới MotorController. Board cung cấp cấu hình và callback. Audio và motor có các đường dữ liệu riêng.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#475569"/></marker>
+    <style>
+      text{font-family:'Segoe UI',Arial,sans-serif;fill:#172b4d} .title{font-size:30px;font-weight:700} .h{font-size:21px;font-weight:700} .t{font-size:17px} .small{font-size:15px;fill:#475569} .box{stroke-width:1.5;rx:14} .flow{fill:none;stroke:#475569;stroke-width:2;marker-end:url(#arrow)} .both{marker-start:url(#arrow)} .dashed{stroke-dasharray:7 5}
+    </style>
+  </defs>
+  <rect width="1200" height="900" fill="#f8fafc"/>
+  <text x="40" y="51" class="title">Ruby RobotCar · Các khối cùng vận hành trên ESP32-S3</text>
+  <text x="40" y="80" class="small">Mũi tên: luồng dữ liệu / lời gọi chính. Nét đứt: cấu hình và callback tích hợp.</text>
+
+  <rect x="40" y="110" width="350" height="95" class="box" fill="#f1f5f9" stroke="#94a3b8"/>
+  <text x="62" y="145" class="h">Server hội thoại</text>
+  <text x="62" y="176" class="t">STT / LLM / TTS · ngoài repository</text>
+  <rect x="435" y="110" width="330" height="95" class="box" fill="#eff6ff" stroke="#60a5fa"/>
+  <text x="457" y="145" class="h">Protocol</text>
+  <text x="457" y="176" class="t">WebSocket hoặc MQTT + UDP</text>
+  <path d="M390 157H435" class="flow both"/>
+  <rect x="810" y="110" width="350" height="95" class="box" fill="#f0fdf4" stroke="#4ade80"/>
+  <text x="832" y="145" class="h">Trình duyệt trong LAN</text>
+  <text x="832" y="176" class="t">Trang lái xe · HTTP :8080</text>
+
+  <rect x="40" y="270" width="725" height="300" rx="18" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="62" y="307" class="h">Ứng dụng và giọng nói</text>
+  <rect x="435" y="330" width="300" height="102" class="box" fill="#fff" stroke="#60a5fa"/>
+  <text x="455" y="365" class="h">Application</text>
+  <text x="455" y="394" class="t">Event loop · DeviceState</text>
+  <text x="455" y="417" class="small">Schedule() / event bits</text>
+  <path d="M600 205V330" class="flow both"/>
+  <text x="610" y="247" class="small">JSON + Opus</text>
+  <rect x="70" y="330" width="310" height="102" class="box" fill="#fff" stroke="#60a5fa"/>
+  <text x="90" y="365" class="h">AudioService</text>
+  <text x="90" y="394" class="t">AFE · wake word · Opus</text>
+  <text x="90" y="417" class="small">Input / output / codec tasks</text>
+  <path d="M380 380H435" class="flow both"/>
+  <rect x="70" y="478" width="310" height="62" class="box" fill="#dbeafe" stroke="#60a5fa"/>
+  <text x="90" y="515" class="t">AudioCodec · microphone / loa</text>
+  <path d="M225 432V478" class="flow both"/>
+  <rect x="435" y="478" width="300" height="62" class="box" fill="#f5f3ff" stroke="#a78bfa"/>
+  <text x="455" y="515" class="t">McpServer → robot MCP tools</text>
+  <path d="M585 432V478" class="flow"/>
+
+  <rect x="810" y="270" width="350" height="130" class="box" fill="#f0fdf4" stroke="#4ade80"/>
+  <text x="832" y="308" class="h">Web server + input adapter</text>
+  <text x="832" y="339" class="t">Claim · manual · motion goals</text>
+  <text x="832" y="370" class="small">Kiểm tra request, trả JSON snapshot</text>
+  <path d="M985 205V270" class="flow both"/>
+
+  <rect x="810" y="478" width="350" height="92" class="box" fill="#fff7ed" stroke="#fb923c"/>
+  <text x="832" y="514" class="h">MotorController</text>
+  <text x="832" y="544" class="t">Commands · PI/PD · pose · safety</text>
+  <path d="M985 400V478" class="flow both"/>
+  <text x="997" y="442" class="small">Lệnh / snapshot</text>
+  <path d="M735 509H810" class="flow both"/>
+
+  <rect x="810" y="642" width="350" height="110" class="box" fill="#fff7ed" stroke="#fb923c"/>
+  <text x="832" y="679" class="h">Drivers và phần cứng</text>
+  <text x="832" y="711" class="t">L298N / 4 motor · FC-03</text>
+  <text x="832" y="738" class="t">MPU6050 · HC-SR04 / servo</text>
+  <path d="M985 570V642" class="flow both"/>
+  <text x="997" y="610" class="small">PWM / feedback</text>
+
+  <rect x="40" y="642" width="695" height="110" class="box" fill="#f5f3ff" stroke="#a78bfa"/>
+  <text x="62" y="679" class="h">RobotCarBoard + InitializeRobotBoard()</text>
+  <text x="62" y="711" class="t">config/ → struct cấu hình + callback → các component</text>
+  <text x="62" y="738" class="small">Board factory duy nhất · audio I2S · Wi-Fi · BOOT · NoDisplay</text>
+  <path d="M400 642V596H790V550H810" class="flow dashed"/>
+  <path d="M225 642V570" class="flow dashed"/>
+
+  <rect x="40" y="792" width="1120" height="67" rx="12" fill="#e2e8f0"/>
+  <text x="60" y="819" class="t">Hỗ trợ: NVS / Settings · Assets / OTA · Telegram chỉ gửi HTTPS qua queue</text>
+  <text x="60" y="844" class="small">DeviceState của hội thoại và mode chuyển động là hai trạng thái độc lập.</text>
+</svg>

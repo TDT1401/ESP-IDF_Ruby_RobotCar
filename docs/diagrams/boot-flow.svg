@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="850" viewBox="0 0 1200 850" role="img" aria-labelledby="title desc">
+  <title id="title">Luồng khởi động Ruby RobotCar</title>
+  <desc id="desc">app_main khởi tạo NVS, Application tạo board và robot, khởi tạo audio, bắt đầu Wi-Fi. Khi Wi-Fi kết nối, Web và Telegram nhận mạng, ứng dụng chạy activation rồi vào idle. Phần dưới là các chuyển trạng thái hội thoại thường gặp.</desc>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#475569"/></marker>
+    <style>text{font-family:'Segoe UI',Arial,sans-serif;fill:#172b4d}.title{font-size:30px;font-weight:700}.h{font-size:21px;font-weight:700}.t{font-size:17px}.s{font-size:15px;fill:#475569}.b{rx:14;stroke-width:1.5}.f{fill:none;stroke:#475569;stroke-width:2;marker-end:url(#a)}</style>
+  </defs>
+  <rect width="1200" height="850" fill="#f8fafc"/>
+  <text x="40" y="51" class="title">Khởi động · phần cứng trước, hội thoại sẵn sàng sau</text>
+  <text x="40" y="80" class="s">Luồng thường gặp; các nhánh lỗi, upgrade và reset được lược bớt để dễ đọc.</text>
+
+  <rect x="40" y="115" width="315" height="102" class="b" fill="#eff6ff" stroke="#60a5fa"/>
+  <text x="60" y="151" class="h">1 · app_main()</text>
+  <text x="60" y="181" class="t">Khởi tạo NVS</text>
+  <text x="60" y="204" class="s">Gọi Application::Initialize()</text>
+  <rect x="435" y="115" width="330" height="102" class="b" fill="#f5f3ff" stroke="#a78bfa"/>
+  <text x="455" y="151" class="h">2 · Board::GetInstance()</text>
+  <text x="455" y="181" class="t">Tạo RobotCarBoard</text>
+  <text x="455" y="204" class="s">Robot / sensor / Web config / MCP</text>
+  <rect x="845" y="115" width="315" height="102" class="b" fill="#eff6ff" stroke="#60a5fa"/>
+  <text x="865" y="151" class="h">3 · State: starting</text>
+  <text x="865" y="181" class="t">AudioService::Start()</text>
+  <text x="865" y="204" class="s">Callbacks · timer · StartNetwork()</text>
+  <path d="M355 166H435" class="f"/><path d="M765 166H845" class="f"/>
+
+  <rect x="845" y="285" width="315" height="96" class="b" fill="#f0fdf4" stroke="#4ade80"/>
+  <text x="865" y="322" class="h">4 · Wi-Fi Connected</text>
+  <text x="865" y="352" class="t">Event → Application::Run()</text>
+  <path d="M1000 217V285" class="f"/>
+  <text x="1012" y="255" class="s">Kết nối thành công</text>
+  <rect x="435" y="285" width="330" height="96" class="b" fill="#fff7ed" stroke="#fb923c"/>
+  <text x="455" y="322" class="h">Nhánh cấu hình Wi-Fi</text>
+  <text x="455" y="352" class="t">Chưa có SSID / connect timeout</text>
+  <path d="M900 217V249H600V285" class="f"/>
+  <path d="M765 333H845" class="f"/>
+  <text x="777" y="320" class="s">Kết nối</text>
+  <rect x="40" y="285" width="315" height="96" class="b" fill="#f0fdf4" stroke="#4ade80"/>
+  <text x="60" y="322" class="h">Web :8080 + Telegram</text>
+  <text x="60" y="352" class="t">Nhận network status từ board</text>
+  <path d="M1000 381V412H197V381" class="f"/>
+
+  <rect x="845" y="460" width="315" height="100" class="b" fill="#eff6ff" stroke="#60a5fa"/>
+  <text x="865" y="496" class="h">5 · activating</text>
+  <text x="865" y="526" class="t">ActivationTask: assets / OTA</text>
+  <text x="865" y="549" class="s">Kiểm tra phiên bản / activation</text>
+  <path d="M1000 412V460" class="f"/>
+  <rect x="435" y="460" width="330" height="100" class="b" fill="#eff6ff" stroke="#60a5fa"/>
+  <text x="455" y="496" class="h">6 · InitializeProtocol()</text>
+  <text x="455" y="526" class="t">Chọn transport và Start()</text>
+  <text x="455" y="549" class="s">MQTT/UDP hoặc WebSocket</text>
+  <path d="M845 510H765" class="f"/>
+  <rect x="40" y="460" width="315" height="100" class="b" fill="#f0fdf4" stroke="#4ade80"/>
+  <text x="60" y="496" class="h">7 · idle</text>
+  <text x="60" y="526" class="t">Event ACTIVATION_DONE</text>
+  <text x="60" y="549" class="s">Chờ wake word / nút / Web wake</text>
+  <path d="M435 510H355" class="f"/>
+
+  <rect x="40" y="604" width="1120" height="206" rx="18" fill="#fff" stroke="#cbd5e1"/>
+  <text x="60" y="638" class="h">Vòng hội thoại chính · sơ đồ rút gọn</text>
+  <rect x="70" y="674" width="165" height="58" class="b" fill="#f0fdf4" stroke="#4ade80"/>
+  <rect x="345" y="674" width="195" height="58" class="b" fill="#eff6ff" stroke="#60a5fa"/>
+  <rect x="650" y="674" width="180" height="58" class="b" fill="#eff6ff" stroke="#60a5fa"/>
+  <rect x="950" y="674" width="180" height="58" class="b" fill="#f5f3ff" stroke="#a78bfa"/>
+  <text x="127" y="711" class="h">idle</text><text x="390" y="711" class="h">connecting</text>
+  <text x="692" y="711" class="h">listening</text><text x="993" y="711" class="h">speaking</text>
+  <path d="M235 703H345" class="f"/><path d="M540 703H650" class="f"/><path d="M830 703H950" class="f"/>
+  <text x="247" y="665" class="s">Wake / mở kênh</text><text x="548" y="665" class="s">Kênh sẵn sàng</text>
+  <text x="848" y="665" class="s">tts/start</text>
+  <path d="M1040 732V763H740V732" class="f"/>
+  <text x="800" y="787" class="s">tts/stop → listening (auto) hoặc idle (manual)</text>
+</svg>

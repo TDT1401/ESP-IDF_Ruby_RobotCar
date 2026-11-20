@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="930" viewBox="0 0 1200 930" role="img" aria-labelledby="title desc">
+  <title id="title">Vòng điều khiển chuyển động Ruby RobotCar</title>
+  <desc id="desc">Web manual và goals được kiểm tra trước khi controller thực thi. Goal tạo mục tiêu hướng và tốc độ; Heading PD điều chỉnh RPM, Speed PI điều chỉnh PWM. Encoder và IMU trả feedback. HC-SR04 chỉ tự dừng navigation, manual dùng âm cảnh báo.</desc>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#475569"/></marker>
+    <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#15803d"/></marker>
+    <style>text{font-family:'Segoe UI',Arial,sans-serif;fill:#172b4d}.title{font-size:30px;font-weight:700}.h{font-size:21px;font-weight:700}.t{font-size:17px}.s{font-size:15px;fill:#475569}.b{rx:14;stroke-width:1.5}.f{fill:none;stroke:#475569;stroke-width:2;marker-end:url(#a)}.feedback{fill:none;stroke:#15803d;stroke-width:2;stroke-dasharray:7 5;marker-end:url(#g)}</style>
+  </defs>
+  <rect width="1200" height="930" fill="#f8fafc"/>
+  <text x="40" y="51" class="title">Chuyển động · mục tiêu → feedback → PWM</text>
+  <text x="40" y="80" class="s">Mũi tên liền: lệnh / đầu ra. Nét đứt xanh: feedback. Chu kỳ ghi dưới đây là cấu hình trong code.</text>
+
+  <rect x="50" y="115" width="480" height="86" class="b" fill="#f0fdf4" stroke="#4ade80"/>
+  <text x="70" y="150" class="h">Web manual / joystick</text>
+  <text x="70" y="180" class="t">Claim → session + sequence → heartbeat</text>
+  <rect x="670" y="115" width="480" height="86" class="b" fill="#f5f3ff" stroke="#a78bfa"/>
+  <text x="690" y="150" class="h">Web action / MCP tool</text>
+  <text x="690" y="180" class="t">DistanceDrive / AngleTurn / Navigate request</text>
+  <rect x="285" y="244" width="630" height="90" class="b" fill="#fff7ed" stroke="#fb923c"/>
+  <text x="305" y="279" class="h">MotorController · kiểm tra và thực thi</text>
+  <text x="305" y="310" class="t">Quyền lái · state · Wi-Fi · feedback · timeout · lỗi</text>
+  <path d="M290 201V224H440V244" class="f"/><path d="M910 201V224H760V244" class="f"/>
+
+  <rect x="50" y="380" width="300" height="112" class="b" fill="#fff7ed" stroke="#fb923c"/>
+  <text x="70" y="415" class="h">Goal / profile</text>
+  <text x="70" y="445" class="t">Khoảng cách / góc / tọa độ</text>
+  <text x="70" y="474" class="s">Tick: 10 ms · cập nhật pose</text>
+  <rect x="450" y="380" width="300" height="112" class="b" fill="#eff6ff" stroke="#60a5fa"/>
+  <text x="470" y="415" class="h">Heading PD</text>
+  <text x="470" y="445" class="t">Góc đích − góc đo / gyro Z</text>
+  <text x="470" y="474" class="s">~50 ms · dùng khi goal giữ hướng</text>
+  <rect x="850" y="380" width="300" height="112" class="b" fill="#eff6ff" stroke="#60a5fa"/>
+  <text x="870" y="415" class="h">Speed PI trái / phải</text>
+  <text x="870" y="445" class="t">RPM đích − RPM encoder</text>
+  <text x="870" y="474" class="s">~100 ms · điều chỉnh PWM</text>
+  <path d="M450 334H200V380" class="f"/>
+  <path d="M350 436H450" class="f"/><text x="364" y="422" class="s">Heading</text>
+  <path d="M750 436H850" class="f"/><text x="769" y="422" class="s">RPM L/R</text>
+  <path d="M750 334V353H1000V380" class="f"/>
+  <text x="796" y="345" class="s">Manual → mục tiêu bánh trực tiếp</text>
+
+  <rect x="850" y="558" width="300" height="102" class="b" fill="#fff7ed" stroke="#fb923c"/>
+  <text x="870" y="594" class="h">Motor driver → L298N</text>
+  <text x="870" y="624" class="t">GPIO chiều quay + LEDC PWM</text>
+  <text x="870" y="648" class="s">4 motor · 2 đầu ra logic trái / phải</text>
+  <path d="M1000 492V558" class="f"/><text x="1012" y="530" class="s">PWM</text>
+  <rect x="450" y="558" width="300" height="102" class="b" fill="#f0fdf4" stroke="#4ade80"/>
+  <text x="470" y="594" class="h">Encoder + IMU</text>
+  <text x="470" y="624" class="t">FC-03: RPM / quãng đường</text>
+  <text x="470" y="648" class="s">MPU6050: heading / gyro Z</text>
+  <path d="M850 609H750" class="f"/>
+  <text x="762" y="593" class="s">Xe di chuyển</text>
+  <path d="M600 558V492" class="feedback"/>
+  <text x="610" y="532" class="s">Heading</text>
+  <path d="M750 641H800V514H1090V492" class="feedback"/>
+  <text x="810" y="538" class="s">RPM hai bánh trước</text>
+  <rect x="50" y="558" width="300" height="102" class="b" fill="#f0fdf4" stroke="#4ade80"/>
+  <text x="70" y="594" class="h">Odometry / Pose EKF</text>
+  <text x="70" y="624" class="t">Pose tương đối: x, y, theta</text>
+  <text x="70" y="648" class="s">Hiện navigation dùng odometry</text>
+  <path d="M450 609H350" class="feedback"/>
+  <path d="M200 558V492" class="feedback"/><text x="210" y="532" class="s">Pose / tiến độ</text>
+
+  <rect x="50" y="712" width="1100" height="96" class="b" fill="#fff" stroke="#94a3b8"/>
+  <text x="70" y="747" class="h">Snapshot → HTTP /api/status hoặc MCP get_state</text>
+  <text x="70" y="778" class="t">Mode · owner · goal/progress/fault · PWM/RPM · heading · odometry · EKF · khoảng cách</text>
+  <path d="M200 660V712" class="f"/><path d="M600 660V712" class="f"/><path d="M1000 660V712" class="f"/>
+
+  <rect x="50" y="838" width="1100" height="59" rx="12" fill="#ffedd5"/>
+  <text x="70" y="863" class="t">HC-SR04: navigation dừng khi thấy vật cản với mẫu hợp lệ, mới; Web manual dùng âm cảnh báo.</text>
+  <text x="70" y="885" class="s">Distance drive / quay góc không dùng nhánh tự dừng siêu âm dành cho navigation.</text>
+</svg>
