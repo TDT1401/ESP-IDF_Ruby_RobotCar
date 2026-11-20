@@ -33,7 +33,7 @@
   <circle cx="84" cy="273" r="19" fill="#218c9a"/>
   <text x="84" y="274" class="badge">1</text>
   <text x="118" y="266" class="name">Presentation Layer</text>
-  <text x="118" y="294" class="path">robot/web · robot/telegram · robot/mcp · robot/serialization</text>
+  <text x="118" y="294" class="path">robot/web · components/telegram · robot/mcp · robot/serialization</text>
   <text x="118" y="319" class="detail">Validate external input, call the controller API, render read-only status.</text>
 
   <path d="M 560 341 L 560 374" stroke="#37516f" stroke-width="3" fill="none" marker-end="url(#arrow)"/>

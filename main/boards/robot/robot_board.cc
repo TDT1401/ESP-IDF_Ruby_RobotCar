@@ -17,7 +17,8 @@
 
 #include "mcp/mcp_tools.h"
 #include "motor_controller.h"
-#include "telegram/telegram.h"
+#include "telegram.h"
+#include "telegram_config.local.h"
 #include "web/web_server.h"
 
 namespace {
@@ -280,10 +281,18 @@ void InitializeRobotBoard() {
     StartFc03Monitor();
 #endif
     RegisterL298nMcpTools();
-    InitializeL298nTelegram();
+    ruby_robot::TelegramConfig telegram_config;
+    telegram_config.bot_token = L298N_TELEGRAM_BOT_TOKEN;
+    telegram_config.chat_id = L298N_TELEGRAM_CHAT_ID;
+    telegram_config.can_send = []() {
+        const auto state = Application::GetInstance().GetDeviceState();
+        return state != kDeviceStateUpgrading && state != kDeviceStateFatalError;
+    };
+    if (InitializeTelegram(telegram_config))
+        RegisterTelegramMcpTools();
 }
 
 void UpdateRobotNetwork(bool connected) {
     UpdateL298nWebNetwork(connected);
-    UpdateL298nTelegramNetwork(connected);
+    UpdateTelegramNetwork(connected);
 }

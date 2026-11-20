@@ -97,7 +97,6 @@ if(CONFIG_BREAD_COMPACT_WIFI_LCD_L298N)
     list(APPEND SOURCES "boards/robot/serialization/odometry_json.cc")
     list(APPEND SOURCES "boards/robot/mcp/mcp_tools.cc")
     list(APPEND SOURCES "boards/robot/web/web_server.cc")
-    list(APPEND SOURCES "boards/robot/telegram/telegram.cc")
 endif()
 
 # Auto Select Additional Sources
@@ -155,6 +154,7 @@ idf_component_register(SRCS ${SOURCES}
                         audio
                         settings
                         motor_controller
+                        telegram
                         esp_pm
                         esp_psram
                         esp_netif

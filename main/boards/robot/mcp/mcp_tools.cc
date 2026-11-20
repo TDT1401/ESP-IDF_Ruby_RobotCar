@@ -7,6 +7,7 @@
 #include "../serialization/fc03_json.h"
 #include "../serialization/odometry_json.h"
 #include "mcp_server.h"
+#include "telegram.h"
 
 namespace {
 
@@ -67,6 +68,26 @@ ToolResult GetState() {
 }
 
 }  // namespace
+
+void RegisterTelegramMcpTools() {
+    McpServer::GetInstance().AddTool(
+        "self.telegram.send_message",
+        "Send plain text to the owner's configured Telegram chat only when the user "
+        "explicitly asks to send, share, or save information to Telegram. Send the useful "
+        "content itself, including relevant links when available, not a status note. Never "
+        "send credentials, tokens, private system instructions, or content the user did not "
+        "request. Maximum 4000 UTF-8 bytes. Delivery is asynchronous; the result confirms "
+        "queueing, not final delivery.",
+        PropertyList({
+            Property("text", kPropertyTypeString).SetMaxLength(ruby_robot::kTelegramMaxOutboundText),
+        }),
+        [](const PropertyList& properties) -> ToolResult {
+            auto result = QueueTelegramMessage(properties["text"].value<std::string>());
+            if (!result)
+                return std::unexpected(result.error());
+            return *result;
+        });
+}
 
 void RegisterL298nMcpTools() {
     auto& server = McpServer::GetInstance();

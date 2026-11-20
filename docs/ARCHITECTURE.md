@@ -78,6 +78,12 @@ components/
 │   ├── CMakeLists.txt
 │   ├── include/ultrasonic_sensor.h
 │   └── ultrasonic_sensor.cc
+├── telegram/
+│   ├── CMakeLists.txt
+│   ├── idf_component.yml
+│   ├── include/telegram.h
+│   ├── telegram.cc
+│   └── telegram_text.h
 └── motor_controller/
     ├── CMakeLists.txt
     ├── include/
@@ -99,6 +105,7 @@ components/
 | `motor_controller` | Command, safety, phiên điều khiển, PI/PD, odometry/EKF và snapshot |
 | `settings` | Đọc/ghi NVS, giữ nguyên namespace, key và API `Settings` |
 | `audio` | Codec, capture/playback, Opus, AFE, wake word và queue âm thanh |
+| `telegram` | Gửi thông báo khởi động và nội dung qua HTTPS, queue có giới hạn và retry |
 
 `components/settings/` có `settings.cc` và `include/settings.h`.
 `components/audio/` chứa implementation âm thanh, public header trong `include/`
@@ -118,8 +125,19 @@ Board khởi tạo tại `main/boards/robot/robot_board.cc`:
   Task monitor encoder, heading và odometry thuộc phía board; sensor driver không
   đọc ngược snapshot từ controller.
 
-Web, MCP, Telegram và serialization hiện vẫn ở board và dùng API công khai của
-`motor_controller`. Các tên hàm/struct `L298n*`, `Fc03*`, `Mpu6050*` được giữ để
+Web, MCP và serialization hiện vẫn ở board và dùng API công khai của
+`motor_controller`. Telegram nằm trong `components/telegram/`, chỉ gửi thông báo
+khởi động và nội dung qua MCP tool `self.telegram.send_message`; không polling,
+nhận lệnh, đánh thức Ruby, xem trạng thái, theo dõi IP hay cung cấp menu/trợ giúp.
+Board truyền bản sao credentials từ `config/telegram_config.local.h` và callback
+kiểm tra trạng thái OTA/fatal error vào `InitializeTelegram()`. Component không
+include `Application`, `McpServer`, `WifiManager` hoặc header trong `config/`.
+Adapter MCP tại `main/boards/robot/mcp/mcp_tools.cc` gọi `QueueTelegramMessage()`;
+kết quả thành công chỉ xác nhận đã vào queue, chưa xác nhận gửi thành công.
+Telegram luôn được tích hợp và khởi tạo trong firmware duy nhất, không có cờ
+bật/tắt riêng. File credentials và TLS certificate bundle là bắt buộc.
+
+Các tên hàm/struct điều khiển `L298n*`, `Fc03*`, `Mpu6050*` được giữ để
 không đổi contract hiện tại. `InitializeL298nController()` nhận thêm cấu hình và
 phải được gọi trước các API runtime. Các struct snapshot và dữ liệu JSON giữ nguyên.
 
@@ -142,7 +160,9 @@ config/
 ├── board_config.h
 ├── audio_config.h
 ├── robot_hardware_config.h
-└── motion_control_config.h
+├── motion_control_config.h
+├── telegram_config.example.h
+└── telegram_config.local.h     # Credentials bắt buộc, được Git bỏ qua
 ```
 
 | File | Nội dung |
@@ -152,6 +172,7 @@ config/
 | `audio_config.h` | Sample rate, chân I2S và microphone debug |
 | `robot_hardware_config.h` | Pin motor, IMU, ultrasonic/servo; pin, calibration và filter/coast của encoder |
 | `motion_control_config.h` | Speed PI, heading PD, distance drive, odometry/EKF và debug điều khiển |
+| `telegram_config.example.h` / `telegram_config.local.h` | Mẫu và credentials Telegram riêng; board đọc rồi truyền vào component |
 
 Code khởi tạo board include `board_config.h`. CMake chỉ cung cấp đường dẫn
 `config/` qua `PRIV_INCLUDE_DIRS` của `main`; các component tiếp tục nhận

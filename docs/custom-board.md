@@ -9,14 +9,18 @@ paths are independent of the identity reported to Xiaozhi/OTA.
 main/boards/
 ├── common/                   # Board interfaces and shared hardware/network helpers
 ├── robot_car_board.cc        # RobotCarBoard, the single DECLARE_BOARD factory
-└── robot/                    # Initialization, web, MCP, Telegram, serialization
+└── robot/                    # Initialization, web, MCP, serialization
+
+components/telegram/          # Send-only HTTPS task, outbound queue and retry
 
 config/
 ├── build_config.json         # Single build and existing OTA identity
 ├── board_config.h            # Aggregated board configuration
 ├── audio_config.h
 ├── robot_hardware_config.h
-└── motion_control_config.h
+├── motion_control_config.h
+├── telegram_config.example.h
+└── telegram_config.local.h    # Required private credentials, ignored by Git
 ```
 
 CMake explicitly registers `main/boards/robot_car_board.cc`. There is no board
@@ -65,10 +69,20 @@ framework code remains available to the application.
 Preserve LEDC allocations: motors timer 1 and channels 1/2/4/5, servo timer/channel
 2/3. Removing the screen does not reassign any motor or sensor pin.
 
-Telegram's optional private settings remain in
-`main/boards/robot/telegram/telegram_config.local.h`, ignored by Git. Copy the
-example header in that directory when configuring it; never put credentials in
-tracked files.
+Telegram is always included and initialized in the single firmware build. Its
+required private settings are in
+`config/telegram_config.local.h`, ignored by Git. Copy the example header in that
+directory and fill in the bot token and chat ID before building; never put
+credentials in tracked files. The TLS certificate bundle
+must be enabled; missing settings or a disabled bundle cause a build error.
+
+`components/telegram/` owns the HTTPS task, boot notification, bounded outbound
+queue and retry. It does not poll or handle incoming Telegram commands. The board
+passes copied credentials and a callback that pauses sending during OTA or a fatal
+error to `InitializeTelegram()`, and forwards connectivity to
+`UpdateTelegramNetwork()`. MCP registration remains in
+`main/boards/robot/mcp/mcp_tools.cc`; the tool calls `QueueTelegramMessage()`.
+The component has no dependency on `main` or project configuration headers.
 
 ## Build and flash
 
