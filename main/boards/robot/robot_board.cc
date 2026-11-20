@@ -58,8 +58,6 @@ static_assert(DISTANCE_DRIVE_TOLERANCE_MM > 0 &&
               DISTANCE_DRIVE_TOLERANCE_MM < ruby_robot::MotionGoalCommand::kMinDistanceCm * 10);
 static_assert(DISTANCE_DRIVE_SETTLE_RPM >= 0 && DISTANCE_DRIVE_SETTLE_MS > 0);
 
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03
-constexpr char kTag[] = "FC03";
 static_assert(FC03_LEFT_GPIO != FC03_RIGHT_GPIO);
 static_assert(FC03_GLITCH_FILTER_NS > 0 && FC03_GLITCH_FILTER_NS <= 12000);
 static_assert(FC03_COAST_MS >= 0 && FC03_COAST_MS <= 2000);
@@ -67,7 +65,6 @@ static_assert(FC03_LEFT_PULSES_PER_REV >= 0 && FC03_LEFT_PULSES_PER_REV <= 10000
               FC03_RIGHT_PULSES_PER_REV >= 0 && FC03_RIGHT_PULSES_PER_REV <= 1000000);
 static_assert(FC03_LEFT_WHEEL_DIAMETER_MM >= 0 && FC03_LEFT_WHEEL_DIAMETER_MM <= 1000 &&
               FC03_RIGHT_WHEEL_DIAMETER_MM >= 0 && FC03_RIGHT_WHEEL_DIAMETER_MM <= 1000);
-#endif
 
 MotorDriverConfig MakeMotorDriverConfig() {
     MotorDriverConfig config = {};
@@ -96,14 +93,12 @@ MotorDriverConfig MakeMotorDriverConfig() {
 ruby_robot::MotorControllerConfig MakeMotorControllerConfig() {
     ruby_robot::MotorControllerConfig config = {};
     config.motor = MakeMotorDriverConfig();
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03
     config.encoder.enabled = true;
     config.encoder.gpio = {FC03_LEFT_GPIO, FC03_RIGHT_GPIO};
     config.encoder.pulses_per_rev = {FC03_LEFT_PULSES_PER_REV, FC03_RIGHT_PULSES_PER_REV};
     config.encoder.wheel_diameter_mm = {FC03_LEFT_WHEEL_DIAMETER_MM, FC03_RIGHT_WHEEL_DIAMETER_MM};
     config.encoder.glitch_filter_ns = FC03_GLITCH_FILTER_NS;
     config.encoder.coast_ms = FC03_COAST_MS;
-#endif
     config.imu = {MPU6050_SDA_PIN, MPU6050_SCL_PIN, MPU6050_I2C_ADDRESS, MPU6050_GYRO_Z_SIGN,
                   MPU6050_DEBUG != 0};
     config.ultrasonic = {HCSR04_TRIGGER_PIN, HCSR04_ECHO_PIN, HCSR04_SERVO_SIGNAL_PIN,
@@ -208,27 +203,25 @@ void ControlMonitorTask(void*) {
 
 #endif
 
-void StartFc03Monitor(Fc03EncoderStatus (*snapshot)()) {
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03
-    static Fc03EncoderStatus (*read_status)() = snapshot;
+#if FC03_DEBUG
+constexpr char kTag[] = "FC03";
+
+void StartFc03Monitor() {
     static TaskHandle_t task = nullptr;
     if (task != nullptr)
         return;
     const auto result = xTaskCreate(
         [](void*) {
-#if FC03_DEBUG
             uint64_t previous_left = 0, previous_right = 0;
             int64_t previous_at = esp_timer_get_time();
-#endif
             while (true) {
                 vTaskDelay(pdMS_TO_TICKS(2000));
-                const auto status = read_status();  // Locks only while copying a snapshot.
+                const auto status = GetL298nMotorStatus().encoder;
                 if (!status.ready) {
                     ESP_LOGE(kTag, "Encoder unavailable: %s", esp_err_to_name(status.error));
                     vTaskDelete(nullptr);
                     return;
                 }
-#if FC03_DEBUG
                 const int64_t now = esp_timer_get_time();
                 ESP_LOGI(kTag,
                          "dt=%.2fs D0 L/R=%d/%d cmd=%d/%d total=%" PRIu64 "/%" PRIu64
@@ -265,7 +258,6 @@ void StartFc03Monitor(Fc03EncoderStatus (*snapshot)()) {
                 previous_left = status.left.pulses;
                 previous_right = status.right.pulses;
                 previous_at = now;
-#endif
             }
         },
         "fc03_monitor", 3072, nullptr, 1, &task);
@@ -273,10 +265,8 @@ void StartFc03Monitor(Fc03EncoderStatus (*snapshot)()) {
         task = nullptr;
         ESP_LOGE(kTag, "Could not start monitor logging task; telemetry still available over HTTP");
     }
-#else
-    (void)snapshot;
-#endif
 }
+#endif
 
 }  // namespace
 
@@ -286,7 +276,9 @@ void InitializeRobotBoard() {
     if (xTaskCreate(ControlMonitorTask, "control_monitor", 4096, nullptr, 2, nullptr) != pdPASS)
         ESP_LOGW("MotorControl", "Could not start control monitor");
 #endif
-    StartFc03Monitor([]() { return GetL298nMotorStatus().encoder; });
+#if FC03_DEBUG
+    StartFc03Monitor();
+#endif
     RegisterL298nMcpTools();
     InitializeL298nTelegram();
 }

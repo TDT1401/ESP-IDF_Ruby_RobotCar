@@ -5,17 +5,11 @@
 #include "button.h"
 #include "codecs/no_audio_codec.h"
 #include "board_config.h"
-#include "led/single_led.h"
-#include "mcp_server.h"
-#include "system_reset.h"
 #include "wifi_board.h"
 #include "wifi_manager.h"
 
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N
 #include "robot/robot_board.h"
-#endif
 
-#include <driver/i2c_master.h>
 #include <esp_err.h>
 #include <esp_log.h>
 #include <esp_system.h>
@@ -24,14 +18,13 @@
 #include <ssid_manager.h>
 #include <cstdint>
 #include <utility>
-#include <vector>
 
 #define TAG "RobotCarBoard"
 
-// Log the I2S samples before they enter AFE/Opus, only for this board.
-class MicDiagnosticCodec : public NoAudioCodecSimplex {
+// Board-specific I2S-to-PCM conversion with optional microphone diagnostics.
+class RobotCarAudioCodec : public NoAudioCodecSimplex {
 public:
-    MicDiagnosticCodec(int input_rate, int output_rate, gpio_num_t spk_bclk, gpio_num_t spk_ws,
+    RobotCarAudioCodec(int input_rate, int output_rate, gpio_num_t spk_bclk, gpio_num_t spk_ws,
                        gpio_num_t spk_dout, gpio_num_t mic_sck, gpio_num_t mic_ws,
                        gpio_num_t mic_din)
         : NoAudioCodecSimplex(input_rate, output_rate, spk_bclk, spk_ws, spk_dout, mic_sck, mic_ws,
@@ -159,33 +152,23 @@ private:
 public:
     RobotCarBoard() : boot_button_(BOOT_BUTTON_GPIO, false, 3000) {
         InitializeButtons();
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N
         InitializeRobotBoard();
-#endif
     }
 
-    virtual Led* GetLed() override {
-        static SingleLed led(BUILTIN_LED_GPIO);
-        return &led;
-    }
-
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N
     void SetPowerSaveLevel(PowerSaveLevel level) override {
         (void)level;
         // The local driving page must respond even while the assistant is idle.
         WifiBoard::SetPowerSaveLevel(PowerSaveLevel::PERFORMANCE);
     }
-#endif
 
     virtual AudioCodec* GetAudioCodec() override {
-        static MicDiagnosticCodec audio_codec(AUDIO_INPUT_SAMPLE_RATE, AUDIO_OUTPUT_SAMPLE_RATE,
+        static RobotCarAudioCodec audio_codec(AUDIO_INPUT_SAMPLE_RATE, AUDIO_OUTPUT_SAMPLE_RATE,
                                               AUDIO_I2S_SPK_GPIO_BCLK, AUDIO_I2S_SPK_GPIO_LRCK,
                                               AUDIO_I2S_SPK_GPIO_DOUT, AUDIO_I2S_MIC_GPIO_SCK,
                                               AUDIO_I2S_MIC_GPIO_WS, AUDIO_I2S_MIC_GPIO_DIN);
         return &audio_codec;
     }
 
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N
     void SetNetworkEventCallback(NetworkEventCallback callback) override {
         WifiBoard::SetNetworkEventCallback(
             [this, callback = std::move(callback)](NetworkEvent event, const std::string& data) {
@@ -200,11 +183,9 @@ public:
                     callback(event, data);
             });
     }
-#endif
 
     virtual void StartNetwork() override {
-        ESP_LOGI(TAG, "BOOT DIAGNOSTIC: display disabled");
-        xTaskCreate(
+        const auto result = xTaskCreate(
             [](void*) {
                 // The audio service is initialized shortly before networking.  Waiting here
                 // lets the amplifier settle, while keeping the greeting independent of Wi-Fi.
@@ -216,6 +197,9 @@ public:
                 vTaskDelete(nullptr);
             },
             "boot_greeting", 3072, nullptr, 2, nullptr);
+        if (result != pdPASS) {
+            ESP_LOGW(TAG, "Could not start boot greeting task");
+        }
         WifiBoard::StartNetwork();
     }
 };
