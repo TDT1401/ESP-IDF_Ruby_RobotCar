@@ -129,14 +129,6 @@ esp_err_t MotorController::WebCommand(const L298nWebDriveRequest& request, Motio
     return fault_;
 }
 
-void MotorController::UpdateEmotion(const char* emotion, bool speaking) {
-    std::lock_guard lock(mutex_);
-    if (speaking && IsSleepEmotion(emotion)) {
-        if (!web_control_.active())
-            StopLocked();
-    }
-}
-
 void MotorController::EndWebControlLocked() {
     web_control_.Revoke();
 #ifdef CONFIG_PM_ENABLE

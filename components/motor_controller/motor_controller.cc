@@ -223,10 +223,6 @@ void InitializeL298nController(const ruby_robot::MotorControllerConfig& config) 
     ESP_ERROR_CHECK(esp_register_shutdown_handler([]() { MotorController::Instance().Stop(); }));
 }
 
-void UpdateL298nEmotion(const char* emotion, bool speaking) {
-    MotorController::Instance().UpdateEmotion(emotion, speaking);
-}
-
 esp_err_t BeginL298nWebControl(uint32_t* session) {
     return MotorController::Instance().BeginWebControl(session);
 }

@@ -61,9 +61,6 @@ struct MotorControllerConfig {
 // Board-lifetime controller; initialize before calling the runtime API below.
 void InitializeL298nController(const ruby_robot::MotorControllerConfig& config);
 
-// Legacy board callback; an active browser drive keeps its own safety deadline.
-void UpdateL298nEmotion(const char* emotion, bool speaking);
-
 struct L298nWebDriveRequest {
     uint32_t session;
     uint32_t sequence;

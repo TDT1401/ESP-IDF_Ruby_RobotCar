@@ -45,7 +45,6 @@ public:
     esp_err_t BeginWebControl(uint32_t* session);
     esp_err_t WebCommand(const L298nWebDriveRequest& request, Motion motion);
     esp_err_t ReleaseWebControl(const L298nWebDriveRequest& request);
-    void UpdateEmotion(const char* emotion, bool speaking);
 
 private:
     MotorControllerConfig config_;

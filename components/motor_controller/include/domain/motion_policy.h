@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
-#include <cstring>
 
 namespace ruby_robot {
 
@@ -42,10 +41,6 @@ inline WheelSpeeds MixJoystick(int x, int y, int speed_percent) {
 inline int ScaleDistanceForSpeed(int distance_cm, int speed_percent) {
     const int scaled_speed = std::max(speed_percent, kReferenceSpeedPercent);
     return (distance_cm * scaled_speed + kReferenceSpeedPercent - 1) / kReferenceSpeedPercent;
-}
-
-inline bool IsSleepEmotion(const char* emotion) {
-    return emotion != nullptr && (strcmp(emotion, "sleep") == 0 || strcmp(emotion, "sleepy") == 0);
 }
 
 inline const char* MotionName(Motion motion) {
