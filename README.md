@@ -2,55 +2,45 @@
 
 **English** | [Tiếng Việt](README.vi.md)
 
-An ESP32 mobile robotics learning project. Ruby RobotCar combines the XiaoZhi voice assistant firmware with a four-wheel car chassis so you can explore how embedded software connects hardware, reads sensors, and responds to control commands.
+ESP32-S3 robot firmware customized from [XiaoZhi ESP32](https://github.com/78/xiaozhi-esp32).
 
-![Ruby RobotCar four-wheel ESP32-S3 robot](docs/ruby_car.png)
+![Ruby RobotCar](docs/ruby_car.png)
 
-The source is configured for one hardware setup: an ESP32-S3-N16R8, L298N motor driver, HC-SR04 ultrasonic sensor, and two FC-03 wheel encoders. This firmware runs without a display. The firmware locales are Vietnamese, English, and Simplified Chinese. For pin connections, see the [board wiring guide](docs/robot/BOARD_GUIDE.md).
+## Development direction
 
-## Where to start
+1. **Stage 1: Differential Drive Robot** — complete the ESP32-S3 low-level controller: speed, heading, distance, odometry and safety.
+2. **Stage 2: AI Autonomous Robot** — use a Samsung Z Flip 5 as the main computer for AI, conversation and autonomous behavior, with control over model selection and deployment.
 
-| If you want to… | Read… |
-| --- | --- |
-| Connect the board and modules | [Board wiring guide](docs/robot/BOARD_GUIDE.md) |
-| Build and flash the firmware | [Build and flash](#build-and-flash) |
-| Learn how the hardware and single firmware build are configured | [Board integration guide](docs/custom-board.md) |
-| Understand MCP communication between the assistant and device | [MCP protocol documentation](docs/xiaozhi/mcp-protocol.md) |
-| Learn about the server communication transports | [WebSocket](docs/xiaozhi/websocket.md) · [MQTT + UDP](docs/xiaozhi/mqtt-udp.md) |
+The ESP32 keeps motion control and safety; the phone will send goals and receive telemetry. The planned AI layer may use a model on the phone or a self-managed server; XiaoZhi integration is optional.
+
+## Hardware
+
+1. **ESP32-S3-N16R8** — controller board.
+2. **4 DC motors** — drive the four wheels.
+3. **2 L298N modules** — motor drivers.
+4. **2 FC-03 encoders** — measure front-wheel motion.
+5. **MPU6050 IMU** — provides motion and heading data.
+6. **HC-SR04** — measures forward distance.
+7. **Servo** — holds the HC-SR04 facing forward.
+8. **I2S microphone** — captures audio.
+9. **MAX98357A** — amplifies audio for the speaker.
+
+No physical display.
 
 ## Build and flash
 
-Use ESP-IDF v6.1 when possible (minimum v6.0.1). From the repository root:
+Use ESP-IDF v6.1 when possible (minimum v6.0.1; IDF 5.x unsupported). Initialize the IDF environment and prepare the required [Telegram settings](docs/custom-board.md) first.
 
 ```sh
-python scripts/build.py --language vi-VN --wake-word wn9_hiesp
+python scripts/build.py
 idf.py -p <SERIAL_PORT> flash monitor
 ```
 
-Omit the optional language and wake-word flags to use the project defaults:
-`python scripts/build.py`. The sole build is defined in `config/build_config.json`;
-its existing Xiaozhi OTA type/name are preserved.
+## Documentation
 
-## Hands-on learning path
+- [Requirements and progress](docs/robot/ROBOT_4WD_REQUIREMENTS.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Wiring](docs/robot/BOARD_GUIDE.md) · [Board configuration](docs/custom-board.md)
+- [Audio](components/audio/README.md) · [WebSocket](docs/xiaozhi/websocket.md) · [MQTT/UDP](docs/xiaozhi/mqtt-udp.md) · [MCP](docs/xiaozhi/mcp-protocol.md)
 
-1. Review the pin tables in the wiring guide.
-2. Assemble the hardware and check the power supply, common ground, and signal voltage levels before powering it on.
-3. Install ESP-IDF, then build and flash the firmware with the commands above.
-4. Connect the robot to Wi-Fi and try the control page.
-5. Explore `main/robot/` to see how the car control features are connected to the firmware.
-
-## What you can learn
-
-- Integrating a motor driver, distance sensor, and wheel encoders with an ESP32.
-- Building a motion controller that uses sensor feedback.
-- Connecting a web interface and MCP tools to device firmware.
-- Keeping board-specific hardware features separate from shared modules.
-- Extending voice-assistant firmware and communicating with an AI server.
-
-This is a learning and experimentation project. Travel distance depends on encoder calibration and the driving surface; the HC-SR04 in this setup measures forward only. Start motion tests at low speed on a clear, flat surface.
-
-## Origin and license
-
-The voice-assistant firmware is based on the open-source [XiaoZhi ESP32](https://github.com/78/xiaozhi-esp32) project. This repository is released under the [MIT License](LICENSE). Retain the copyright and license notices when using or redistributing the code.
-
-When reporting an issue, include the board, ESP-IDF version, and relevant logs. Do not post Wi-Fi passwords, Telegram tokens, or personal account details in the repository.
+[MIT License](LICENSE). Preserve the original copyright and license notices.

@@ -2,55 +2,45 @@
 
 [English](README.md) | **Tiếng Việt**
 
-Dự án học tập về robot di động và firmware ESP32. Ruby RobotCar kết hợp firmware trợ lý giọng nói XiaoZhi với khung xe 4 bánh, giúp bạn tìm hiểu cách phần mềm nhúng kết nối phần cứng, đọc cảm biến và nhận lệnh điều khiển.
+Firmware robot ESP32-S3 tùy biến từ [XiaoZhi ESP32](https://github.com/78/xiaozhi-esp32).
 
-![Robot Ruby RobotCar bốn bánh dùng ESP32-S3](docs/ruby_car.png)
+![Ruby RobotCar](docs/ruby_car.png)
 
-Source hiện được cấu hình cho một bộ phần cứng cụ thể: ESP32-S3-N16R8, driver motor L298N, cảm biến siêu âm HC-SR04 và hai encoder bánh xe FC-03. Firmware không dùng màn hình. Xem [hướng dẫn nối dây của board](docs/robot/BOARD_GUIDE.vi.md) để biết các chân kết nối.
+## Định hướng
 
-## Bắt đầu từ đâu?
+1. **Giai đoạn 1: Differential Drive Robot** — hoàn thiện low-level controller trên ESP32-S3: tốc độ, hướng, quãng đường, odometry và safety.
+2. **Giai đoạn 2: AI Autonomous Robot** — dùng Samsung Z Flip 5 làm bộ não chính cho AI, hội thoại và hành vi tự hành; chủ động lựa chọn model và nơi triển khai.
 
-| Bạn muốn… | Tài liệu |
-| --- | --- |
-| Nối dây giữa board và các module | [Hướng dẫn nối dây](docs/robot/BOARD_GUIDE.vi.md) |
-| Build và nạp firmware | [Build và nạp](#build-và-nạp) |
-| Tìm hiểu cấu hình phần cứng và bản build duy nhất | [Hướng dẫn tích hợp board](docs/custom-board.md) |
-| Tìm hiểu giao tiếp MCP giữa trợ lý và thiết bị | [Tài liệu giao thức MCP](docs/xiaozhi/mcp-protocol.md) |
-| Tìm hiểu các giao thức kết nối với máy chủ | [WebSocket](docs/xiaozhi/websocket.md) · [MQTT + UDP](docs/xiaozhi/mqtt-udp.md) |
+ESP32 giữ điều khiển chuyển động và safety; điện thoại sẽ gửi mục tiêu và nhận telemetry. Tầng AI dự kiến có thể dùng model trên điện thoại hoặc máy chủ tự quản lý; tích hợp Xiaozhi là tùy chọn.
+
+## Phần cứng
+
+1. **ESP32-S3-N16R8** — board điều khiển.
+2. **4 motor DC** — truyền động cho bốn bánh xe.
+3. **2 module L298N** — driver điều khiển motor.
+4. **2 encoder FC-03** — đo chuyển động hai bánh trước.
+5. **IMU MPU6050** — cung cấp dữ liệu chuyển động và hướng.
+6. **HC-SR04** — đo khoảng cách phía trước.
+7. **Servo** — giữ HC-SR04 hướng giữa.
+8. **Microphone I2S** — thu âm.
+9. **MAX98357A** — khuếch đại âm thanh cho loa.
+
+Không dùng màn hình vật lý.
 
 ## Build và nạp
 
-Nên dùng ESP-IDF v6.1 (tối thiểu v6.0.1). Chạy từ thư mục gốc của dự án:
+Ưu tiên ESP-IDF v6.1 (tối thiểu v6.0.1; không hỗ trợ IDF 5.x). Khởi tạo môi trường IDF và chuẩn bị [cấu hình Telegram](docs/custom-board.md) bắt buộc trước.
 
 ```sh
-python scripts/build.py --language vi-VN --wake-word wn9_hiesp
+python scripts/build.py
 idf.py -p <SERIAL_PORT> flash monitor
 ```
 
-Có thể bỏ các tùy chọn ngôn ngữ và wake word để dùng cấu hình mặc định:
-`python scripts/build.py`. Bản build duy nhất được khai báo trong
-`config/build_config.json`; type/name gửi lên Xiaozhi OTA được giữ nguyên.
+## Tài liệu
 
-## Lộ trình thực hành
+- [Yêu cầu và tiến độ](docs/robot/ROBOT_4WD_REQUIREMENTS.md)
+- [Kiến trúc](docs/ARCHITECTURE.md)
+- [Nối dây](docs/robot/BOARD_GUIDE.vi.md) · [Cấu hình board](docs/custom-board.md)
+- [Audio](components/audio/README.md) · [WebSocket](docs/xiaozhi/websocket.md) · [MQTT/UDP](docs/xiaozhi/mqtt-udp.md) · [MCP](docs/xiaozhi/mcp-protocol.md)
 
-1. Xem bảng chân trong hướng dẫn nối dây.
-2. Lắp phần cứng và kiểm tra nguồn, GND chung cùng mức điện áp tín hiệu trước khi cấp điện.
-3. Cài ESP-IDF, sau đó build và nạp firmware bằng các lệnh trên.
-4. Kết nối robot với Wi-Fi và thử trang điều khiển.
-5. Khám phá `main/robot/` để tìm hiểu cách các tính năng điều khiển xe được nối vào firmware.
-
-## Những gì bạn có thể học
-
-- Tích hợp driver động cơ, cảm biến khoảng cách và encoder bánh xe với ESP32.
-- Xây dựng bộ điều khiển chuyển động sử dụng phản hồi từ cảm biến.
-- Kết nối giao diện web và công cụ MCP với firmware thiết bị.
-- Tách các tính năng phần cứng riêng của board khỏi những module dùng chung.
-- Mở rộng firmware trợ lý giọng nói và giao tiếp với máy chủ AI.
-
-Đây là dự án học tập và thử nghiệm. Quãng đường di chuyển phụ thuộc vào hiệu chuẩn encoder và mặt sàn; HC-SR04 trong cấu hình này chỉ đo phía trước. Hãy bắt đầu thử chuyển động ở tốc độ thấp, trên mặt phẳng trống.
-
-## Nguồn gốc và giấy phép
-
-Firmware trợ lý giọng nói dựa trên dự án mã nguồn mở [XiaoZhi ESP32](https://github.com/78/xiaozhi-esp32). Repository này được phát hành theo [giấy phép MIT](LICENSE). Hãy giữ thông báo bản quyền và giấy phép khi sử dụng hoặc phân phối lại mã nguồn.
-
-Khi báo lỗi, hãy cung cấp board đang dùng, phiên bản ESP-IDF và log liên quan. Không đăng mật khẩu Wi-Fi, token Telegram hoặc thông tin tài khoản cá nhân lên repository.
+[Giấy phép MIT](LICENSE). Giữ thông báo bản quyền và giấy phép gốc.
