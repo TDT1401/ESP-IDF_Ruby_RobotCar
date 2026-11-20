@@ -1,9 +1,7 @@
 # Define source files
 set(SOURCES "notify/notify_player.cc"
-            "led/single_led.cc"
             "display/display.cc"
             "display/text_glyph.cc"
-            "display/lcd_display.cc"
             "display/lvgl_display/lvgl_display.cc"
             "display/lvgl_display/emoji_collection.cc"
             "display/lvgl_display/lvgl_theme.cc"
