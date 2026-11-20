@@ -388,7 +388,11 @@ def _wake_word_sdkconfig_options(
 # project build configuration
 ################################################################################
 
-_BOARDS_DIR = Path("main/boards")
+_BOARD_SOURCE_PATHS = (
+    Path("main/common"),
+    Path("main/robot"),
+    Path("main/robot_car_board.cc"),
+)
 _BUILD_CONFIG = Path("config/build_config.json")
 _PROJECT_BOARD = "robotcar"
 _BOARD_CONFIG_SYMBOL = "CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI_LCD"
@@ -497,11 +501,12 @@ def _kconfig_config_board_dependencies(
 
 
 def _board_source_text() -> str:
-    board_dir = _BOARDS_DIR
     parts: list[str] = []
-    for path in sorted(board_dir.rglob("*")):
-        if path.suffix in {".c", ".cc", ".cpp", ".h", ".hpp"}:
-            parts.append(path.read_text(encoding="utf-8", errors="replace"))
+    for source_path in _BOARD_SOURCE_PATHS:
+        paths = source_path.rglob("*") if source_path.is_dir() else (source_path,)
+        for path in sorted(paths):
+            if path.suffix in {".c", ".cc", ".cpp", ".h", ".hpp"}:
+                parts.append(path.read_text(encoding="utf-8", errors="replace"))
     return "\n".join(parts)
 
 

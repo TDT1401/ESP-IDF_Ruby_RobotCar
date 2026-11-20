@@ -6,7 +6,7 @@ paths are independent of the identity reported to Xiaozhi/OTA.
 ## Source layout
 
 ```text
-main/boards/
+main/
 ├── common/                   # Board interfaces and shared hardware/network helpers
 ├── robot_car_board.cc        # RobotCarBoard, the single DECLARE_BOARD factory
 └── robot/                    # Initialization, MCP, shared serialization
@@ -24,7 +24,7 @@ config/
 └── telegram_config.local.h    # Required private credentials, ignored by Git
 ```
 
-CMake explicitly registers `main/boards/robot_car_board.cc`. There is no board
+CMake explicitly registers `main/robot_car_board.cc`. There is no board
 directory selector or automatic board discovery. Keep exactly one
 `DECLARE_BOARD(RobotCarBoard)`.
 
@@ -82,7 +82,7 @@ queue and retry. It does not poll or handle incoming Telegram commands. The boar
 passes copied credentials and a callback that pauses sending during OTA or a fatal
 error to `InitializeTelegram()`, and forwards connectivity to
 `UpdateTelegramNetwork()`. MCP registration remains in
-`main/boards/robot/mcp/mcp_tools.cc`; the tool calls `QueueTelegramMessage()`.
+`main/robot/mcp/mcp_tools.cc`; the tool calls `QueueTelegramMessage()`.
 The component has no dependency on `main` or project configuration headers.
 
 `components/web_server/` owns the local HTTP API and dashboard. Its public header

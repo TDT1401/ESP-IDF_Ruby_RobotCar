@@ -37,7 +37,7 @@ its existing Xiaozhi OTA type/name are preserved.
 2. Assemble the hardware and check the power supply, common ground, and signal voltage levels before powering it on.
 3. Install ESP-IDF, then build and flash the firmware with the commands above.
 4. Connect the robot to Wi-Fi and try the control page.
-5. Explore `main/boards/robot/` to see how the car control features are connected to the firmware.
+5. Explore `main/robot/` to see how the car control features are connected to the firmware.
 
 ## What you can learn
 

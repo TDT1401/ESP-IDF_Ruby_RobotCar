@@ -37,7 +37,7 @@ Có thể bỏ các tùy chọn ngôn ngữ và wake word để dùng cấu hìn
 2. Lắp phần cứng và kiểm tra nguồn, GND chung cùng mức điện áp tín hiệu trước khi cấp điện.
 3. Cài ESP-IDF, sau đó build và nạp firmware bằng các lệnh trên.
 4. Kết nối robot với Wi-Fi và thử trang điều khiển.
-5. Khám phá `main/boards/robot/` để tìm hiểu cách các tính năng điều khiển xe được nối vào firmware.
+5. Khám phá `main/robot/` để tìm hiểu cách các tính năng điều khiển xe được nối vào firmware.
 
 ## Những gì bạn có thể học
 

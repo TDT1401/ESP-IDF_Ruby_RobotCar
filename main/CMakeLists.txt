@@ -31,13 +31,13 @@ set(INCLUDE_DIRS "." "display" "display/lvgl_display" "display/lvgl_display/jpg"
 
 # Add board common files
 list(APPEND SOURCES
-    "boards/common/board.cc"
-    "boards/common/wifi_board.cc"
-    "boards/common/backlight.cc"
-    "boards/common/button.cc"
-    "boards/common/system_reset.cc"
+    "common/board.cc"
+    "common/wifi_board.cc"
+    "common/backlight.cc"
+    "common/button.cc"
+    "common/system_reset.cc"
 )
-list(APPEND INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/boards/common)
+list(APPEND INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/common)
 
 
 idf_build_get_property(build_components BUILD_COMPONENTS)
@@ -89,18 +89,18 @@ if(NOT CMAKE_BUILD_EARLY_EXPANSION AND NOT BOARD_TYPE MATCHES "^[a-z0-9.-]+$")
     )
 endif()
 
-list(APPEND SOURCES "boards/robot_car_board.cc")
+list(APPEND SOURCES "robot_car_board.cc")
 
 if(CONFIG_BREAD_COMPACT_WIFI_LCD_L298N)
-    list(APPEND SOURCES "boards/robot/robot_board.cc")
-    list(APPEND SOURCES "boards/robot/serialization/fc03_json.cc")
-    list(APPEND SOURCES "boards/robot/serialization/odometry_json.cc")
-    list(APPEND SOURCES "boards/robot/mcp/mcp_tools.cc")
+    list(APPEND SOURCES "robot/robot_board.cc")
+    list(APPEND SOURCES "robot/serialization/fc03_json.cc")
+    list(APPEND SOURCES "robot/serialization/odometry_json.cc")
+    list(APPEND SOURCES "robot/mcp/mcp_tools.cc")
 endif()
 
 # Auto Select Additional Sources
 if (CONFIG_USE_ESP_BLUFI_WIFI_PROVISIONING)
-    list(APPEND SOURCES "boards/common/blufi.cpp")
+    list(APPEND SOURCES "common/blufi.cpp")
 endif ()
 # Select language directory according to Kconfig
 set(LANG_DIR "vi-VN")

@@ -125,7 +125,7 @@ component audio không include `Board`, `Application`, `Assets` hay `Protocol`.
 `AudioStreamPacket` được khai báo tại `components/audio/include/audio_types.h`
 để audio và hai transport dùng chung. Xem [thiết kế audio](../components/audio/README.md).
 
-Board khởi tạo tại `main/boards/robot/robot_board.cc`:
+Board khởi tạo tại `main/robot/robot_board.cc`:
 
 - Đọc pin, calibration và tuning từ `config/board_config.h`/Kconfig hiện có, giữ các kiểm tra
   `static_assert`, rồi truyền bản sao cấu hình vào các component.
@@ -140,7 +140,7 @@ MCP và serialization dùng chung vẫn ở board và dùng API công khai của
 controller để điều khiển và đọc snapshot. Board truyền callback đánh thức Ruby,
 đọc thông tin mạng và bổ sung JSON encoder/odometry vào `InitializeWebServer()`.
 Callback wake schedule lên main task và kiểm tra lại state trước khi đánh thức;
-callback serialization dùng lại các hàm trong `main/boards/robot/serialization/`
+callback serialization dùng lại các hàm trong `main/robot/serialization/`
 mà không chuyển ownership của JSON cha. Component không include `Application`,
 `WifiManager`, board config hoặc source trong `main`.
 
@@ -157,7 +157,7 @@ nhận lệnh, đánh thức Ruby, xem trạng thái, theo dõi IP hay cung cấ
 Board truyền bản sao credentials từ `config/telegram_config.local.h` và callback
 kiểm tra trạng thái OTA/fatal error vào `InitializeTelegram()`. Component không
 include `Application`, `McpServer`, `WifiManager` hoặc header trong `config/`.
-Adapter MCP tại `main/boards/robot/mcp/mcp_tools.cc` gọi `QueueTelegramMessage()`;
+Adapter MCP tại `main/robot/mcp/mcp_tools.cc` gọi `QueueTelegramMessage()`;
 kết quả thành công chỉ xác nhận đã vào queue, chưa xác nhận gửi thành công.
 Telegram luôn được tích hợp và khởi tạo trong firmware duy nhất, không có cờ
 bật/tắt riêng. File credentials và TLS certificate bundle là bắt buộc.
@@ -211,7 +211,7 @@ build script. `sdkconfig` tiếp tục do ESP-IDF quản lý.
 ## 6. Một board và một bản build
 
 ```text
-main/boards/
+main/
 ├── common/
 ├── robot_car_board.cc
 └── robot/

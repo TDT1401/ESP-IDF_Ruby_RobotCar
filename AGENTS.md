@@ -2,7 +2,7 @@
 
 ## Project
 
-Ruby RobotCar is an ESP-IDF C/C++ voice-assistant robot firmware for one ESP32-S3 board, one build configuration, and no physical display. Its source is under `main/boards/`, with exactly one board factory.
+Ruby RobotCar is an ESP-IDF C/C++ voice-assistant robot firmware for one ESP32-S3 board, one build configuration, and no physical display. Its board interfaces and integration are under `main/common/`, `main/robot/`, and `main/robot_car_board.cc`, with exactly one board factory.
 
 Use ESP-IDF v6.1 when possible. The minimum supported SDK is ESP-IDF v6.0.1. IDF 5.x is not supported.
 
@@ -10,9 +10,9 @@ Use ESP-IDF v6.1 when possible. The minimum supported SDK is ESP-IDF v6.0.1. IDF
 
 - `main/application.*`: main event loop, protocol lifecycle, and high-level behavior.
 - `main/device_state_machine.*`: legal runtime state transitions.
-- `main/boards/common/`: board interfaces and reusable hardware/network helpers.
-- `main/boards/robot_car_board.cc`: the sole `RobotCarBoard` factory.
-- `main/boards/robot/`: robot integration, input adapters, and serialization.
+- `main/common/`: board interfaces and reusable hardware/network helpers.
+- `main/robot_car_board.cc`: the sole `RobotCarBoard` factory.
+- `main/robot/`: robot integration, input adapters, and serialization.
 - `config/`: project-owned hardware settings, motion tuning, and `build_config.json` for the single firmware build.
 - `components/motor_driver/`: project-owned L298N GPIO/LEDC driver; hardware configuration is supplied by the board.
 - `components/wheel_encoder/`, `components/imu/`, `components/ultrasonic_sensor/`: project-owned sensor drivers configured by the board.
@@ -52,7 +52,7 @@ Read the closest existing implementation before adding a new one. Prefer the nar
 
 Project configuration is a coupled chain:
 
-`config/build_config.json` -> `scripts/build.py` -> `main/Kconfig.projbuild` -> `main/CMakeLists.txt` -> `main/boards/robot_car_board.cc` and `config/board_config.h`.
+`config/build_config.json` -> `scripts/build.py` -> `main/Kconfig.projbuild` -> `main/CMakeLists.txt` -> `main/robot_car_board.cc` and `config/board_config.h`.
 
 `config/build_config.json` has exactly one build entry for ESP32-S3. Preserve its `type` and `builds[0].name` values (`bread-compact-wifi-lcd`): these are `BOARD_TYPE`/`BOARD_NAME` reported to Xiaozhi/OTA, independent of source paths.
 
