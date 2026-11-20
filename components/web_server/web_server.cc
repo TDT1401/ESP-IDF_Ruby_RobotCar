@@ -2,26 +2,29 @@
 
 #include <esp_http_server.h>
 #include <esp_log.h>
-#include <esp_netif.h>
 #include <esp_system.h>
 #include <esp_timer.h>
 #include <cJSON.h>
 
+#include <cassert>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <memory>
 
 #include "motor_controller.h"
-#include "../serialization/fc03_json.h"
-#include "../serialization/odometry_json.h"
-#include "application.h"
-#include "web_page.h"
-#include "wifi_manager.h"
 
 namespace {
-constexpr const char* kTag = "L298nWeb";
+constexpr const char* kTag = "WebServer";
 httpd_handle_t server = nullptr;
+ruby_robot::WebServerConfig callbacks;
+
+extern const uint8_t index_html_start[] asm("_binary_index_html_start");
+extern const uint8_t index_html_end[] asm("_binary_index_html_end");
+extern const uint8_t style_css_start[] asm("_binary_style_css_start");
+extern const uint8_t style_css_end[] asm("_binary_style_css_end");
+extern const uint8_t app_js_start[] asm("_binary_app_js_start");
+extern const uint8_t app_js_end[] asm("_binary_app_js_end");
 
 esp_err_t Reply(httpd_req_t* req, const char* status, const char* body) {
     httpd_resp_set_status(req, status);
@@ -50,11 +53,24 @@ size_t ReceiveBody(httpd_req_t* req, char* body) {
     return received;
 }
 
-esp_err_t Root(httpd_req_t* req) {
-    httpd_resp_set_type(req, "text/html; charset=utf-8");
+esp_err_t SendAsset(httpd_req_t* req, const char* content_type, const uint8_t* start,
+                    const uint8_t* end) {
+    httpd_resp_set_type(req, content_type);
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
     httpd_resp_set_hdr(req, "X-Frame-Options", "DENY");
-    return httpd_resp_send(req, kL298nWebPage, sizeof(kL298nWebPage) - 1);
+    return httpd_resp_send(req, reinterpret_cast<const char*>(start), end - start);
+}
+
+esp_err_t Root(httpd_req_t* req) {
+    return SendAsset(req, "text/html; charset=utf-8", index_html_start, index_html_end);
+}
+
+esp_err_t Style(httpd_req_t* req) {
+    return SendAsset(req, "text/css; charset=utf-8", style_css_start, style_css_end);
+}
+
+esp_err_t Script(httpd_req_t* req) {
+    return SendAsset(req, "application/javascript; charset=utf-8", app_js_start, app_js_end);
 }
 
 esp_err_t Claim(httpd_req_t* req) {
@@ -179,16 +195,11 @@ esp_err_t Action(httpd_req_t* req) {
         return Reply(req, "200 OK", "{\"ok\":true}");
     }
     if (strcmp(action->valuestring, "wake") == 0 && cJSON_GetArraySize(json.get()) == 1) {
-        auto& app = Application::GetInstance();
-        if (app.GetDeviceState() == kDeviceStateListening)
+        const auto result = callbacks.request_wake();
+        if (result == ruby_robot::WebWakeResult::AlreadyListening)
             return Reply(req, "200 OK", "{\"ok\":true,\"already_listening\":true}");
-        if (app.GetDeviceState() != kDeviceStateIdle)
+        if (result == ruby_robot::WebWakeResult::Unavailable)
             return Reply(req, "409 Conflict", "{\"error\":\"Ruby unavailable\"}");
-        app.Schedule([]() {
-            auto& app = Application::GetInstance();
-            if (app.GetDeviceState() == kDeviceStateIdle)
-                app.WakeWordInvoke("Hi ESP");
-        });
         return Reply(req, "200 OK", "{\"ok\":true}");
     }
 
@@ -249,8 +260,7 @@ esp_err_t Status(httpd_req_t* req) {
     if (req->content_len != 0)
         return Reply(req, "400 Bad Request", "{\"error\":\"Invalid request\"}");
     const auto motor = GetL298nMotorStatus();
-    auto& wifi = WifiManager::GetInstance();
-    const auto ip = wifi.GetIpAddress();
+    const auto network = callbacks.read_network();
     using Json = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
     Json json(cJSON_CreateObject(), cJSON_Delete);
     if (!json || !cJSON_AddNumberToObject(json.get(), "rear_left_pwm_percent", motor.rear_left_pwm_percent) ||
@@ -279,9 +289,9 @@ esp_err_t Status(httpd_req_t* req) {
         !cJSON_AddStringToObject(json.get(), "motion", motor.motion) ||
         !cJSON_AddNumberToObject(json.get(), "speed_percent", motor.active_speed_percent) ||
         !cJSON_AddNumberToObject(json.get(), "uptime_seconds", esp_timer_get_time() / 1000000) ||
-        !cJSON_AddBoolToObject(json.get(), "wifi_connected", wifi.IsConnected()) ||
-        !cJSON_AddNumberToObject(json.get(), "wifi_rssi", wifi.GetRssi()) ||
-        !cJSON_AddStringToObject(json.get(), "ip_address", ip.c_str()) ||
+        !cJSON_AddBoolToObject(json.get(), "wifi_connected", network.connected) ||
+        !cJSON_AddNumberToObject(json.get(), "wifi_rssi", network.rssi) ||
+        !cJSON_AddStringToObject(json.get(), "ip_address", network.ip_address.c_str()) ||
         !cJSON_AddNumberToObject(json.get(), "free_heap_kb", esp_get_free_heap_size() / 1024) ||
         !cJSON_AddBoolToObject(json.get(), "speed_pi_calibrated", motor.speed_pi_calibrated) ||
         !cJSON_AddBoolToObject(json.get(), "speed_pi_active", motor.speed_pi_active) ||
@@ -316,9 +326,7 @@ esp_err_t Status(httpd_req_t* req) {
                                  motor.heading_correction_rpm) ||
         !cJSON_AddStringToObject(json.get(), "heading_fault", motor.heading_fault) ||
         !cJSON_AddBoolToObject(json.get(), "turn_uses_imu", motor.turn_uses_imu) ||
-        !AddFc03EncoderJson(json.get(), motor.encoder) ||
-        !AddOdometryJson(json.get(), motor.odometry, motor.ekf,
-                         motor.command.distance_drive, motor.command.navigate))
+        !callbacks.append_telemetry(json.get(), motor))
         return Reply(req, "500 Internal Server Error", "{\"error\":\"Status unavailable\"}");
     std::unique_ptr<char, decltype(&cJSON_free)> body(cJSON_PrintUnformatted(json.get()),
                                                       cJSON_free);
@@ -333,7 +341,7 @@ esp_err_t StartServer() {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.server_port = 8080;  // Wi-Fi provisioning keeps port 80.
     config.ctrl_port = 32769;
-    config.max_uri_handlers = 5;
+    config.max_uri_handlers = 7;
     config.max_open_sockets = 2;
     config.lru_purge_enable = true;
     config.stack_size = 6144;
@@ -346,6 +354,8 @@ esp_err_t StartServer() {
     }
     const httpd_uri_t routes[] = {
         {.uri = "/", .method = HTTP_GET, .handler = Root, .user_ctx = nullptr},
+        {.uri = "/css/style.css", .method = HTTP_GET, .handler = Style, .user_ctx = nullptr},
+        {.uri = "/js/app.js", .method = HTTP_GET, .handler = Script, .user_ctx = nullptr},
         {.uri = "/api/claim", .method = HTTP_POST, .handler = Claim, .user_ctx = nullptr},
         {.uri = "/api/command", .method = HTTP_POST, .handler = Command, .user_ctx = nullptr},
         {.uri = "/api/action", .method = HTTP_POST, .handler = Action, .user_ctx = nullptr},
@@ -363,7 +373,14 @@ esp_err_t StartServer() {
 }
 }  // namespace
 
-void UpdateL298nWebNetwork(bool connected) {
+void InitializeWebServer(const ruby_robot::WebServerConfig& config) {
+    assert(server == nullptr);
+    assert(config.read_network != nullptr && config.request_wake != nullptr &&
+           config.append_telemetry != nullptr);
+    callbacks = config;
+}
+
+void UpdateWebServerNetwork(bool connected) {
     SetL298nWebConnected(connected);
     if (!connected)
         return;
@@ -372,8 +389,7 @@ void UpdateL298nWebNetwork(bool connected) {
         ESP_LOGE(kTag, "Cannot start web controller: %s", esp_err_to_name(error));
         return;
     }
-    auto* station = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
-    esp_netif_ip_info_t ip = {};
-    if (station != nullptr && esp_netif_get_ip_info(station, &ip) == ESP_OK)
-        ESP_LOGI(kTag, "Motor control: http://" IPSTR ":8080", IP2STR(&ip.ip));
+    const auto network = callbacks.read_network();
+    if (!network.ip_address.empty())
+        ESP_LOGI(kTag, "Motor control: http://%s:8080", network.ip_address.c_str());
 }

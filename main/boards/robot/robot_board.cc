@@ -17,9 +17,12 @@
 
 #include "mcp/mcp_tools.h"
 #include "motor_controller.h"
+#include "serialization/fc03_json.h"
+#include "serialization/odometry_json.h"
 #include "telegram.h"
 #include "telegram_config.local.h"
-#include "web/web_server.h"
+#include "web_server.h"
+#include "wifi_manager.h"
 
 namespace {
 
@@ -273,6 +276,30 @@ void StartFc03Monitor() {
 
 void InitializeRobotBoard() {
     InitializeL298nController(MakeMotorControllerConfig());
+    ruby_robot::WebServerConfig web_config;
+    web_config.read_network = []() {
+        auto& wifi = WifiManager::GetInstance();
+        return ruby_robot::WebNetworkStatus{wifi.IsConnected(), wifi.GetRssi(), wifi.GetIpAddress()};
+    };
+    web_config.request_wake = []() {
+        auto& app = Application::GetInstance();
+        if (app.GetDeviceState() == kDeviceStateListening)
+            return ruby_robot::WebWakeResult::AlreadyListening;
+        if (app.GetDeviceState() != kDeviceStateIdle)
+            return ruby_robot::WebWakeResult::Unavailable;
+        app.Schedule([]() {
+            auto& app = Application::GetInstance();
+            if (app.GetDeviceState() == kDeviceStateIdle)
+                app.WakeWordInvoke("Hi ESP");
+        });
+        return ruby_robot::WebWakeResult::Requested;
+    };
+    web_config.append_telemetry = [](cJSON* parent, const L298nMotorStatus& motor) {
+        return AddFc03EncoderJson(parent, motor.encoder) &&
+               AddOdometryJson(parent, motor.odometry, motor.ekf,
+                               motor.command.distance_drive, motor.command.navigate);
+    };
+    InitializeWebServer(web_config);
 #if HEADING_PD_DEBUG || ODOMETRY_DEBUG
     if (xTaskCreate(ControlMonitorTask, "control_monitor", 4096, nullptr, 2, nullptr) != pdPASS)
         ESP_LOGW("MotorControl", "Could not start control monitor");
@@ -293,6 +320,6 @@ void InitializeRobotBoard() {
 }
 
 void UpdateRobotNetwork(bool connected) {
-    UpdateL298nWebNetwork(connected);
+    UpdateWebServerNetwork(connected);
     UpdateTelegramNetwork(connected);
 }

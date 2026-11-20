@@ -1,13 +1,4 @@
 tmp/
-/components/*
-!/components/motor_driver/
-!/components/wheel_encoder/
-!/components/imu/
-!/components/ultrasonic_sensor/
-!/components/motor_controller/
-!/components/settings/
-!/components/audio/
-!/components/telegram/
 managed_components/
 build/
 dist/

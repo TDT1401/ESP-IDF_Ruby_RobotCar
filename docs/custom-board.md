@@ -9,9 +9,10 @@ paths are independent of the identity reported to Xiaozhi/OTA.
 main/boards/
 ├── common/                   # Board interfaces and shared hardware/network helpers
 ├── robot_car_board.cc        # RobotCarBoard, the single DECLARE_BOARD factory
-└── robot/                    # Initialization, web, MCP, serialization
+└── robot/                    # Initialization, MCP, shared serialization
 
 components/telegram/          # Send-only HTTPS task, outbound queue and retry
+components/web_server/        # HTTP API and embedded web/index.html, css/, js/
 
 config/
 ├── build_config.json         # Single build and existing OTA identity
@@ -83,6 +84,21 @@ error to `InitializeTelegram()`, and forwards connectivity to
 `UpdateTelegramNetwork()`. MCP registration remains in
 `main/boards/robot/mcp/mcp_tools.cc`; the tool calls `QueueTelegramMessage()`.
 The component has no dependency on `main` or project configuration headers.
+
+`components/web_server/` owns the local HTTP API and dashboard. Its public header
+is `include/web_server.h`; HTML, CSS and JavaScript live in `web/index.html`,
+`web/css/style.css` and `web/js/app.js`, embedded directly with CMake `EMBED_FILES`.
+No filesystem, asset generation script, CDN or partition change is needed.
+
+After initializing the motor controller, the board calls `InitializeWebServer()`
+with callbacks for network status, main-task wake scheduling, and shared
+encoder/odometry JSON serialization. The component calls only the public motor
+controller API and never includes `Application`, `WifiManager` or board source.
+The board forwards serialized network events to `UpdateWebServerNetwork()`;
+disconnect revokes control through the motor controller before returning.
+The server still starts on connection at port 8080, with the same `/api/*`
+contracts, motion limits, session/sequence checks and watchdog. It is always
+included in the single firmware build.
 
 ## Build and flash
 

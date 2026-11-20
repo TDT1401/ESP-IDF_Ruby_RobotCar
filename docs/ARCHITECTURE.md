@@ -78,6 +78,15 @@ components/
 │   ├── CMakeLists.txt
 │   ├── include/ultrasonic_sensor.h
 │   └── ultrasonic_sensor.cc
+├── web_server/
+│   ├── include/web_server.h
+│   ├── web/
+│   │   ├── css/style.css
+│   │   ├── js/app.js
+│   │   └── index.html
+│   ├── CMakeLists.txt
+│   ├── idf_component.yml
+│   └── web_server.cc
 ├── telegram/
 │   ├── CMakeLists.txt
 │   ├── idf_component.yml
@@ -106,6 +115,7 @@ components/
 | `settings` | Đọc/ghi NVS, giữ nguyên namespace, key và API `Settings` |
 | `audio` | Codec, capture/playback, Opus, AFE, wake word và queue âm thanh |
 | `telegram` | Gửi thông báo khởi động và nội dung qua HTTPS, queue có giới hạn và retry |
+| `web_server` | HTTP API điều khiển xe, telemetry và dashboard HTML/CSS/JS nhúng trong firmware |
 
 `components/settings/` có `settings.cc` và `include/settings.h`.
 `components/audio/` chứa implementation âm thanh, public header trong `include/`
@@ -125,8 +135,23 @@ Board khởi tạo tại `main/boards/robot/robot_board.cc`:
   Task monitor encoder, heading và odometry thuộc phía board; sensor driver không
   đọc ngược snapshot từ controller.
 
-Web, MCP và serialization hiện vẫn ở board và dùng API công khai của
-`motor_controller`. Telegram nằm trong `components/telegram/`, chỉ gửi thông báo
+MCP và serialization dùng chung vẫn ở board và dùng API công khai của
+`motor_controller`. Web nằm trong `components/web_server/`, gọi API công khai của
+controller để điều khiển và đọc snapshot. Board truyền callback đánh thức Ruby,
+đọc thông tin mạng và bổ sung JSON encoder/odometry vào `InitializeWebServer()`.
+Callback wake schedule lên main task và kiểm tra lại state trước khi đánh thức;
+callback serialization dùng lại các hàm trong `main/boards/robot/serialization/`
+mà không chuyển ownership của JSON cha. Component không include `Application`,
+`WifiManager`, board config hoặc source trong `main`.
+
+`web/index.html`, `web/css/style.css` và `web/js/app.js` được CMake nhúng bằng
+`EMBED_FILES`, phục vụ tại `/`, `/css/style.css` và `/js/app.js`; không dùng CDN,
+filesystem hoặc partition mới. Server giữ port 8080 và các endpoint `/api/claim`,
+`/api/command`, `/api/action`, `/api/status`. Session, sequence, watchdog và xử lý
+mất kết nối tiếp tục thuộc `motor_controller`; board chuyển tiếp network events
+qua `UpdateWebServerNetwork()`. Web luôn được tích hợp trong firmware duy nhất.
+
+Telegram nằm trong `components/telegram/`, chỉ gửi thông báo
 khởi động và nội dung qua MCP tool `self.telegram.send_message`; không polling,
 nhận lệnh, đánh thức Ruby, xem trạng thái, theo dõi IP hay cung cấp menu/trợ giúp.
 Board truyền bản sao credentials từ `config/telegram_config.local.h` và callback

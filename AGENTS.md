@@ -20,6 +20,7 @@ Use ESP-IDF v6.1 when possible. The minimum supported SDK is ESP-IDF v6.0.1. IDF
 - `components/settings/`: project-owned NVS settings wrapper; preserve existing namespaces and keys.
 - `components/audio/`: codecs, audio tasks, engines, wake words, and queues; application supplies the codec and asset reader.
 - `components/telegram/`: send-only Telegram HTTPS task and bounded outbound queue; the board supplies credentials and an application readiness callback, while MCP registration stays in `main`.
+- `components/web_server/`: local HTTP control API and embedded HTML/CSS/JS; uses `motor_controller`, with wake, network status and shared JSON serialization callbacks supplied by the board.
 - `main/protocols/`: transport-neutral API plus WebSocket and MQTT/UDP.
 - `main/display/` and `main/led/`: shared framework display/LED interfaces; this board uses the inherited `NoDisplay` and no backlight.
 - `main/mcp_server.*`: common device-side MCP tools and dispatch.
@@ -44,7 +45,7 @@ Read the closest existing implementation before adding a new one. Prefer the nar
 - Keep shared message semantics in `Protocol`; verify both transports when changing its contract.
 - Validate network input and preserve `cJSON` ownership. NVS keys are persistent API and require migration when changed.
 - Guard target-specific features with Kconfig/component rules. Do not assume every target has PSRAM or S3/P4 resources.
-- Do not manually edit generated/vendor output: `build/`, `releases/`, `managed_components/`, `components/` (except project-owned `motor_driver`, `wheel_encoder`, `imu`, `ultrasonic_sensor`, `motor_controller`, `settings`, `audio` and `telegram`), `sdkconfig*`, `main/assets/lang_config.h`, or generated mmap headers.
+- Do not manually edit generated/vendor output: `build/`, `releases/`, `managed_components/`, `components/` (except project-owned `motor_driver`, `wheel_encoder`, `imu`, `ultrasonic_sensor`, `motor_controller`, `settings`, `audio`, `telegram` and `web_server`), `sdkconfig*`, `main/assets/lang_config.h`, or generated mmap headers.
 - Format only touched C/C++ files with the repository `.clang-format`; avoid unrelated mass formatting.
 
 ## Boards and Configuration
