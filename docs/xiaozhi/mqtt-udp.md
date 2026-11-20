@@ -99,8 +99,7 @@ The device connects to the broker using:
 ```
 
 `features.mcp` is always set; `features.aec` is set when `CONFIG_USE_SERVER_AEC` is enabled.
-`features.glyph_push` and `text_font` advertise the shared dynamic text-glyph extension described in
-[Dynamic Text Glyph Push Extension](glyph-push.md).
+`features.glyph_push` and `text_font` advertise the shared dynamic text-glyph extension.
 
 #### 3.2.2 Server -> Device
 

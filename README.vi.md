@@ -6,17 +6,17 @@ Dự án học tập về robot di động và firmware ESP32. Ruby RobotCar k�
 
 ![Robot Ruby RobotCar bốn bánh dùng ESP32-S3](docs/ruby_car.png)
 
-Source hiện được cấu hình cho một bộ phần cứng cụ thể: ESP32-S3-N16R8, driver motor L298N, cảm biến siêu âm HC-SR04 và hai encoder bánh xe FC-03. Firmware không dùng màn hình. Xem [hướng dẫn nối dây của board](docs/BOARD_GUIDE.vi.md) để biết các chân kết nối.
+Source hiện được cấu hình cho một bộ phần cứng cụ thể: ESP32-S3-N16R8, driver motor L298N, cảm biến siêu âm HC-SR04 và hai encoder bánh xe FC-03. Firmware không dùng màn hình. Xem [hướng dẫn nối dây của board](docs/robot/BOARD_GUIDE.vi.md) để biết các chân kết nối.
 
 ## Bắt đầu từ đâu?
 
 | Bạn muốn… | Tài liệu |
 | --- | --- |
-| Nối dây giữa board và các module | [Hướng dẫn nối dây](docs/BOARD_GUIDE.vi.md) |
+| Nối dây giữa board và các module | [Hướng dẫn nối dây](docs/robot/BOARD_GUIDE.vi.md) |
 | Build và nạp firmware | [Build và nạp](#build-và-nạp) |
 | Tìm hiểu cấu hình phần cứng và bản build duy nhất | [Hướng dẫn tích hợp board](docs/custom-board.md) |
-| Tìm hiểu giao tiếp MCP giữa trợ lý và thiết bị | [Tài liệu giao thức MCP](docs/mcp-protocol.md) |
-| Tìm hiểu các giao thức kết nối với máy chủ | [WebSocket](docs/websocket.md) · [MQTT + UDP](docs/mqtt-udp.md) |
+| Tìm hiểu giao tiếp MCP giữa trợ lý và thiết bị | [Tài liệu giao thức MCP](docs/xiaozhi/mcp-protocol.md) |
+| Tìm hiểu các giao thức kết nối với máy chủ | [WebSocket](docs/xiaozhi/websocket.md) · [MQTT + UDP](docs/xiaozhi/mqtt-udp.md) |
 
 ## Build và nạp
 

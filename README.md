@@ -6,17 +6,17 @@ An ESP32 mobile robotics learning project. Ruby RobotCar combines the XiaoZhi vo
 
 ![Ruby RobotCar four-wheel ESP32-S3 robot](docs/ruby_car.png)
 
-The source is configured for one hardware setup: an ESP32-S3-N16R8, L298N motor driver, HC-SR04 ultrasonic sensor, and two FC-03 wheel encoders. This firmware runs without a display. The firmware locales are Vietnamese, English, and Simplified Chinese. For pin connections, see the [board wiring guide](docs/BOARD_GUIDE.md).
+The source is configured for one hardware setup: an ESP32-S3-N16R8, L298N motor driver, HC-SR04 ultrasonic sensor, and two FC-03 wheel encoders. This firmware runs without a display. The firmware locales are Vietnamese, English, and Simplified Chinese. For pin connections, see the [board wiring guide](docs/robot/BOARD_GUIDE.md).
 
 ## Where to start
 
 | If you want to… | Read… |
 | --- | --- |
-| Connect the board and modules | [Board wiring guide](docs/BOARD_GUIDE.md) |
+| Connect the board and modules | [Board wiring guide](docs/robot/BOARD_GUIDE.md) |
 | Build and flash the firmware | [Build and flash](#build-and-flash) |
 | Learn how the hardware and single firmware build are configured | [Board integration guide](docs/custom-board.md) |
-| Understand MCP communication between the assistant and device | [MCP protocol documentation](docs/mcp-protocol.md) |
-| Learn about the server communication transports | [WebSocket](docs/websocket.md) · [MQTT + UDP](docs/mqtt-udp.md) |
+| Understand MCP communication between the assistant and device | [MCP protocol documentation](docs/xiaozhi/mcp-protocol.md) |
+| Learn about the server communication transports | [WebSocket](docs/xiaozhi/websocket.md) · [MQTT + UDP](docs/xiaozhi/mqtt-udp.md) |
 
 ## Build and flash
 

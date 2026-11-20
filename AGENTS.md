@@ -92,9 +92,9 @@ The build script changes local `sdkconfig` and build state. It reuses `build/`; 
 ## Authoritative Documentation
 
 - Overview and SDK policy: `README.md`
-- Board integration: `docs/custom-board.md`; wiring: `docs/BOARD_GUIDE.md`, `docs/BOARD_GUIDE.vi.md`
+- Board integration: `docs/custom-board.md`; wiring: `docs/robot/BOARD_GUIDE.md`, `docs/robot/BOARD_GUIDE.vi.md`
 - Audio design: `main/audio/README.md`
 - Code style: `docs/code_style.md`
-- Protocols: `docs/websocket.md`, `docs/mqtt-udp.md`, `docs/mcp-protocol.md`
+- Protocols: `docs/xiaozhi/websocket.md`, `docs/xiaozhi/mqtt-udp.md`, `docs/xiaozhi/mcp-protocol.md`
 
 Keep detailed or fast-changing information in those files, not here. Add a nested `AGENTS.md` only when a subsystem needs specialized instructions.

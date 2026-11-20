@@ -46,7 +46,7 @@ This document describes the WebSocket communication protocol between the device 
    }
    ```
    - `features` is optional and generated from compile-time configuration. For example, `"mcp": true` means the device supports MCP, and `"aec": true` is emitted when `CONFIG_USE_SERVER_AEC` is enabled.
-   - `"glyph_push": true` and `text_font` advertise the optional dynamic text-glyph extension. See [Dynamic Text Glyph Push Extension](glyph-push.md).
+   - `"glyph_push": true` and `text_font` advertise the optional dynamic text-glyph extension.
    - `frame_duration` matches `OPUS_FRAME_DURATION_MS` (typically 60 ms).
 
 4. **Server replies with "hello"**
@@ -332,7 +332,7 @@ WebSocket text frames carry JSON. The most common `"type"` values and their sema
 
 ### 6.1 Main states
 
-The device state machine is defined in [`main/device_state.h`](../main/device_state.h) and includes:
+The device state machine is defined in [`main/device_state.h`](../../main/device_state.h) and includes:
 
 - `kDeviceStateUnknown`
 - `kDeviceStateStarting`

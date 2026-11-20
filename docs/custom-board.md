@@ -38,8 +38,8 @@ board through hidden Kconfig defaults; they are not user-selectable features.
 ESP32-S3; it is not a board selector.
 
 Keep ESP32-S3, 16 MB flash, `partitions/v2/16m.csv`, existing pins, and OTA identity
-during structural refactoring. See [English wiring](BOARD_GUIDE.md) or
-[Hướng dẫn nối dây](BOARD_GUIDE.vi.md) for hardware details.
+during structural refactoring. See [English wiring](robot/BOARD_GUIDE.md) or
+[Hướng dẫn nối dây](robot/BOARD_GUIDE.vi.md) for hardware details.
 
 ## Hardware configuration
 
