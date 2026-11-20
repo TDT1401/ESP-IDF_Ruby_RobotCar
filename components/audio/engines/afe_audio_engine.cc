@@ -49,7 +49,7 @@ AfeAudioEngine::~AfeAudioEngine() {
 }
 
 bool AfeAudioEngine::Initialize(AudioCodec* codec, int frame_duration_ms,
-                                srmodel_list_t* models_list) {
+                                srmodel_list_t* models_list, const AudioAssetReader& asset_reader) {
     if (afe_data_ != nullptr || (codec_ != nullptr && !kUseAfeForVoiceProcessing &&
                                  wake_detector_ == WakeDetector::kNone)) {
         return true;
@@ -91,7 +91,7 @@ bool AfeAudioEngine::Initialize(AudioCodec* codec, int frame_duration_ms,
                 wake_word_detected_callback_(wake_word);
             }
         });
-        if (!custom_wake_word_->Initialize(codec_, models_)) {
+        if (!custom_wake_word_->Initialize(codec_, models_, asset_reader)) {
             ESP_LOGE(TAG, "Failed to initialize MultiNet wake-word detector");
             custom_wake_word_.reset();
             wake_detector_ = WakeDetector::kNone;

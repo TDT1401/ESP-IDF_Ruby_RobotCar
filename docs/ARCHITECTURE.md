@@ -97,6 +97,16 @@ components/
 | `imu` | MPU6050/MPU6500 tương thích, hiệu chỉnh gyro Z và tích phân heading |
 | `ultrasonic_sensor` | HC-SR04, lọc khoảng cách và giữ servo ở vị trí giữa |
 | `motor_controller` | Command, safety, phiên điều khiển, PI/PD, odometry/EKF và snapshot |
+| `settings` | Đọc/ghi NVS, giữ nguyên namespace, key và API `Settings` |
+| `audio` | Codec, capture/playback, Opus, AFE, wake word và queue âm thanh |
+
+`components/settings/` có `settings.cc` và `include/settings.h`.
+`components/audio/` chứa implementation âm thanh, public header trong `include/`
+và dependency audio được khai báo trong `CMakeLists.txt`/`idf_component.yml` riêng.
+`Application` truyền codec và callback đọc asset vào `AudioService::Initialize()`;
+component audio không include `Board`, `Application`, `Assets` hay `Protocol`.
+`AudioStreamPacket` được khai báo tại `components/audio/include/audio_types.h`
+để audio và hai transport dùng chung. Xem [thiết kế audio](../components/audio/README.md).
 
 Board khởi tạo tại `main/boards/robot/robot_board.cc`:
 

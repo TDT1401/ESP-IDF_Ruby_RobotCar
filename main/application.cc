@@ -69,7 +69,9 @@ void Application::Initialize() {
 
     // Setup the audio service
     auto codec = board.GetAudioCodec();
-    audio_service_.Initialize(codec);
+    audio_service_.Initialize(codec, [](const std::string& name, void*& data, size_t& size) {
+        return Assets::GetInstance().GetAssetData(name, data, size);
+    });
     audio_service_.Start();
     ESP_LOGI(TAG, "After board/audio init");
     SystemInfo::PrintHeapStats();

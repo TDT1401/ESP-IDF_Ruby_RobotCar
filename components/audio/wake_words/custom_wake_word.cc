@@ -1,9 +1,11 @@
 #include "custom_wake_word.h"
 #include "audio_service.h"
-#include "system_info.h"
-#include "assets.h"
+
+#include <cassert>
 
 #include <esp_log.h>
+#include <esp_heap_caps.h>
+#include <esp_timer.h>
 #include <esp_mn_iface.h>
 #include <esp_mn_models.h>
 #include <esp_mn_speech_commands.h>
@@ -34,12 +36,11 @@ CustomWakeWord::~CustomWakeWord() {
     }
 }
 
-void CustomWakeWord::ParseWakenetModelConfig() {
+void CustomWakeWord::ParseWakenetModelConfig(const AudioAssetReader& asset_reader) {
     // Read index.json
-    auto& assets = Assets::GetInstance();
     void* ptr = nullptr;
     size_t size = 0;
-    if (!assets.GetAssetData("index.json", ptr, size)) {
+    if (!asset_reader || !asset_reader("index.json", ptr, size)) {
         ESP_LOGE(TAG, "Failed to read index.json");
         return;
     }
@@ -82,7 +83,8 @@ void CustomWakeWord::ParseWakenetModelConfig() {
 }
 
 
-bool CustomWakeWord::Initialize(AudioCodec* codec, srmodel_list_t* models_list) {
+bool CustomWakeWord::Initialize(AudioCodec* codec, srmodel_list_t* models_list,
+                                const AudioAssetReader& asset_reader) {
     codec_ = codec;
     commands_.clear();
 
@@ -96,7 +98,7 @@ bool CustomWakeWord::Initialize(AudioCodec* codec, srmodel_list_t* models_list) 
 #endif
     } else {
         models_ = models_list;
-        ParseWakenetModelConfig();
+        ParseWakenetModelConfig(asset_reader);
     }
 
     if (models_ == nullptr || models_->num == -1) {

@@ -17,7 +17,8 @@ Use ESP-IDF v6.1 when possible. The minimum supported SDK is ESP-IDF v6.0.1. IDF
 - `components/motor_driver/`: project-owned L298N GPIO/LEDC driver; hardware configuration is supplied by the board.
 - `components/wheel_encoder/`, `components/imu/`, `components/ultrasonic_sensor/`: project-owned sensor drivers configured by the board.
 - `components/motor_controller/`: motion control, commands, safety, odometry and read-only snapshots; application integration uses callbacks supplied by the board.
-- `main/audio/`: codecs, audio tasks, engines, wake words, and queues.
+- `components/settings/`: project-owned NVS settings wrapper; preserve existing namespaces and keys.
+- `components/audio/`: codecs, audio tasks, engines, wake words, and queues; application supplies the codec and asset reader.
 - `main/protocols/`: transport-neutral API plus WebSocket and MQTT/UDP.
 - `main/display/` and `main/led/`: shared framework display/LED interfaces; this board uses the inherited `NoDisplay` and no backlight.
 - `main/mcp_server.*`: common device-side MCP tools and dispatch.
@@ -42,7 +43,7 @@ Read the closest existing implementation before adding a new one. Prefer the nar
 - Keep shared message semantics in `Protocol`; verify both transports when changing its contract.
 - Validate network input and preserve `cJSON` ownership. NVS keys are persistent API and require migration when changed.
 - Guard target-specific features with Kconfig/component rules. Do not assume every target has PSRAM or S3/P4 resources.
-- Do not manually edit generated/vendor output: `build/`, `releases/`, `managed_components/`, `components/` (except project-owned `motor_driver`, `wheel_encoder`, `imu`, `ultrasonic_sensor` and `motor_controller`), `sdkconfig*`, `main/assets/lang_config.h`, or generated mmap headers.
+- Do not manually edit generated/vendor output: `build/`, `releases/`, `managed_components/`, `components/` (except project-owned `motor_driver`, `wheel_encoder`, `imu`, `ultrasonic_sensor`, `motor_controller`, `settings` and `audio`), `sdkconfig*`, `main/assets/lang_config.h`, or generated mmap headers.
 - Format only touched C/C++ files with the repository `.clang-format`; avoid unrelated mass formatting.
 
 ## Boards and Configuration
@@ -93,7 +94,7 @@ The build script changes local `sdkconfig` and build state. It reuses `build/`; 
 
 - Overview and SDK policy: `README.md`
 - Board integration: `docs/custom-board.md`; wiring: `docs/robot/BOARD_GUIDE.md`, `docs/robot/BOARD_GUIDE.vi.md`
-- Audio design: `main/audio/README.md`
+- Audio design: `components/audio/README.md`
 - Code style: `docs/code_style.md`
 - Protocols: `docs/xiaozhi/websocket.md`, `docs/xiaozhi/mqtt-udp.md`, `docs/xiaozhi/mcp-protocol.md`
 

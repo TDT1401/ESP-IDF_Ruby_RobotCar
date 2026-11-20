@@ -4,17 +4,11 @@
 #include <cJSON.h>
 #include <chrono>
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
-struct AudioStreamPacket {
-    int sample_rate = 0;
-    int frame_duration = 0;
-    uint32_t timestamp = 0;
-    uint32_t playback_id = 0;
-    uint32_t media_position_ms = 0;
-    std::vector<uint8_t> payload;
-};
+#include "audio_types.h"
 
 struct BinaryProtocol2 {
     uint16_t version;

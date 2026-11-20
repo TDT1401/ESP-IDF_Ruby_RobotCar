@@ -21,9 +21,9 @@
 #include "audio_codec.h"
 #include "audio_debugger.h"
 #include "audio_engine.h"
+#include "audio_types.h"
 #include "fixed_queue.h"
 #include "ogg_demuxer.h"
-#include "protocol.h"
 
 /*
  * There are two types of audio data flow:
@@ -116,7 +116,7 @@ public:
     AudioService();
     ~AudioService();
 
-    void Initialize(AudioCodec* codec);
+    void Initialize(AudioCodec* codec, AudioAssetReader asset_reader = {});
     void Start();
     void Stop();
     void EncodeWakeWord();
@@ -149,6 +149,7 @@ public:
 
 private:
     AudioCodec* codec_ = nullptr;
+    AudioAssetReader asset_reader_;
     AudioServiceCallbacks callbacks_;
     std::unique_ptr<AudioEngine> audio_engine_;
     std::unique_ptr<AudioDebugger> audio_debugger_;

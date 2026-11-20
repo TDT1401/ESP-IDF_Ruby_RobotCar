@@ -52,6 +52,11 @@ Reusable components must not depend on board source, project configuration
 headers, `Application`, or generated assets. The board supplies callbacks for
 application state, main-task scheduling, and sounds.
 
+NVS settings and audio live in `components/settings/` and `components/audio/`.
+`Application` passes the board's codec and an asset-reader callback to
+`AudioService::Initialize()`. Audio does not depend on `main`; its public headers
+are in `components/audio/include/`. See the [audio design](../components/audio/README.md).
+
 Motors and encoders keep their existing internal Kconfig guards. This firmware has
 no display: `RobotCarBoard` inherits `Board::GetDisplay()` (`NoDisplay`) and the
 null backlight. `InitializeRobotBoard()` takes no display parameter. Shared display

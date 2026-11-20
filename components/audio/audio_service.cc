@@ -1,6 +1,7 @@
 #include "audio_service.h"
 #include <esp_log.h>
 #include <cstring>
+#include <utility>
 
 #define RATE_CVT_CFG(_src_rate, _dest_rate, _channel)                                        \
     (esp_ae_rate_cvt_cfg_t) {                                                                \
@@ -41,8 +42,9 @@ AudioService::~AudioService() {
     }
 }
 
-void AudioService::Initialize(AudioCodec* codec) {
+void AudioService::Initialize(AudioCodec* codec, AudioAssetReader asset_reader) {
     codec_ = codec;
+    asset_reader_ = std::move(asset_reader);
     codec_->Start();
 
     esp_opus_dec_cfg_t opus_dec_cfg =
@@ -541,7 +543,7 @@ void AudioService::SetDecodeSampleRate(int sample_rate, int frame_duration) {
     decoder_duration_ms_ = frame_duration;
     decoder_frame_size_ = decoder_sample_rate_ / 1000 * frame_duration;
 
-    auto codec = Board::GetInstance().GetAudioCodec();
+    auto codec = codec_;
     if (decoder_sample_rate_ != codec->output_sample_rate()) {
         ESP_LOGI(TAG, "Resampling audio from %d to %d", decoder_sample_rate_,
                  codec->output_sample_rate());
@@ -842,7 +844,7 @@ bool AudioService::InitializeAudioEngine() {
     if (audio_engine_initialized_) {
         return true;
     }
-    if (!audio_engine_->Initialize(codec_, OPUS_FRAME_DURATION_MS, models_list_)) {
+    if (!audio_engine_->Initialize(codec_, OPUS_FRAME_DURATION_MS, models_list_, asset_reader_)) {
         ESP_LOGE(TAG, "Failed to initialize audio engine");
         return false;
     }

@@ -25,7 +25,8 @@ public:
     CustomWakeWord();
     ~CustomWakeWord();
 
-    bool Initialize(AudioCodec* codec, srmodel_list_t* models_list);
+    bool Initialize(AudioCodec* codec, srmodel_list_t* models_list,
+                    const AudioAssetReader& asset_reader = {}) override;
     void Feed(const std::vector<int16_t>& data);
     void FeedMono(const int16_t* data, size_t samples);
     void OnWakeWordDetected(std::function<void(const std::string& wake_word)> callback);
@@ -70,7 +71,7 @@ private:
     std::condition_variable wake_word_cv_;
 
     void FeedSamples(const int16_t* data, size_t samples, bool mono);
-    void ParseWakenetModelConfig();
+    void ParseWakenetModelConfig(const AudioAssetReader& asset_reader);
 };
 
 #endif

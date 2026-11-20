@@ -5,6 +5,8 @@ tmp/
 !/components/imu/
 !/components/ultrasonic_sensor/
 !/components/motor_controller/
+!/components/settings/
+!/components/audio/
 managed_components/
 build/
 dist/

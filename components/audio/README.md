@@ -3,6 +3,18 @@
 `AudioService` owns one input engine and keeps codec I/O, Opus encoding/decoding,
 and network queues independent from the chip-specific speech pipeline.
 
+## Component boundary
+
+Public headers are in `include/`; codec, engine, wake-word and demuxer implementations
+belong to this component. Its CMake and manifest declare the ESP-IDF and managed audio
+dependencies. Volume persistence uses the project-owned `settings` component.
+
+`Application` supplies the board's `AudioCodec` and an `AudioAssetReader` callback to
+`AudioService::Initialize()`. The callback provides borrowed asset data when MultiNet
+configuration is loaded; the application retains ownership of that data. Audio does
+not include `Board`, `Application`, `Assets`, or `Protocol`. `AudioStreamPacket` lives
+in `include/audio_types.h` and is shared with both transports.
+
 ## Input engines
 
 The old `AudioProcessor + WakeWord` combinations have been replaced by a single
@@ -11,13 +23,12 @@ engine.
 
 | Target | Engine | Wake word | Uplink processing |
 | --- | --- | --- | --- |
-| ESP32-S3 / ESP32-P4 / ESP32-S31 | `AfeAudioEngine` | WakeNet inside AFE, or MultiNet fed from AFE output | FD AEC + VAD when audio processing is enabled |
-| ESP32 / ESP32-C3 / ESP32-C5 / ESP32-C6 | `LiteAudioEngine` | Standalone WakeNet when configured | Raw mono PCM |
+| ESP32-S3 | `AfeAudioEngine` | WakeNet inside AFE, or MultiNet fed from AFE output | FD AEC + VAD when audio processing is enabled |
 
 `AfeAudioEngine` owns a single FD AFE instance. WakeNet and voice uplink share
 that instance, so enabling both no longer creates two AFE pipelines. For custom
 MultiNet wake words, AFE fetch output is passed to `CustomWakeWord`; MultiNet is
-not created on the smaller targets.
+used when its model is available. This project's component targets ESP32-S3 only.
 
 The AFE configuration currently uses `FD_LOW_COST` AEC with
 `AEC_NLP_LEVEL_VERYAGGR`. WebRTC/NSNet noise suppression is intentionally
@@ -45,7 +56,7 @@ flowchart LR
 ```
 
 Wake-word detection and voice processing are independent runtime states on the
-same engine. On AFE targets, AEC stays active while wake-word detection is active
+same engine. AEC stays active while wake-word detection is active
 so playback reference remains available for wake-up during device playback. It
 also stays active during voice processing when device AEC is requested.
 
@@ -66,7 +77,7 @@ flowchart LR
 - `AudioInputTask` reads codec input and feeds the selected engine.
 - `AudioOutputTask` drains decoded PCM to the codec output.
 - `OpusCodecTask` encodes uplink PCM and decodes downlink packets.
-- `AfeAudioEngine` has its own AFE fetch task on S3/P4/S31.
+- `AfeAudioEngine` has its own AFE fetch task.
 
 The audio power timer still enables and disables codec ADC/DAC channels based on
 activity; the engine refactor does not change that policy.

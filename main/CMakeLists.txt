@@ -1,10 +1,5 @@
 # Define source files
-set(SOURCES "audio/audio_codec.cc"
-            "audio/audio_debugger.cc"
-            "audio/audio_service.cc"
-            "audio/demuxer/ogg_demuxer.cc"
-            "notify/notify_player.cc"
-            "audio/codecs/no_audio_codec.cc"
+set(SOURCES "notify/notify_player.cc"
             "led/single_led.cc"
             "display/display.cc"
             "display/text_glyph.cc"
@@ -27,13 +22,12 @@ set(SOURCES "audio/audio_codec.cc"
             "system_info.cc"
             "application.cc"
             "ota.cc"
-            "settings.cc"
             "device_state_machine.cc"
             "assets.cc"
             "main.cc"
             )
 
-set(INCLUDE_DIRS "." "display" "display/lvgl_display" "display/lvgl_display/jpg" "audio" "audio/demuxer" "protocols")
+set(INCLUDE_DIRS "." "display" "display/lvgl_display" "display/lvgl_display/jpg" "protocols")
 
 # Add board common files
 list(APPEND SOURCES
@@ -106,12 +100,6 @@ if(CONFIG_BREAD_COMPACT_WIFI_LCD_L298N)
     list(APPEND SOURCES "boards/robot/telegram/telegram.cc")
 endif()
 
-list(APPEND SOURCES
-    "audio/engines/afe_audio_engine.cc"
-    "audio/wake_words/custom_wake_word.cc"
-    "audio/wake_words/wake_word_audio_cache.cc"
-)
-
 # Auto Select Additional Sources
 if (CONFIG_USE_ESP_BLUFI_WIFI_PROVISIONING)
     list(APPEND SOURCES "boards/common/blufi.cpp")
@@ -164,6 +152,8 @@ idf_component_register(SRCS ${SOURCES}
                     PRIV_INCLUDE_DIRS "${PROJECT_DIR}/config"
                     WHOLE_ARCHIVE
                     PRIV_REQUIRES
+                        audio
+                        settings
                         motor_controller
                         esp_pm
                         esp_psram

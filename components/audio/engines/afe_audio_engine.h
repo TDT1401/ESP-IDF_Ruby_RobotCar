@@ -25,7 +25,8 @@ public:
     AfeAudioEngine();
     ~AfeAudioEngine() override;
 
-    bool Initialize(AudioCodec* codec, int frame_duration_ms, srmodel_list_t* models_list) override;
+    bool Initialize(AudioCodec* codec, int frame_duration_ms, srmodel_list_t* models_list,
+                    const AudioAssetReader& asset_reader = {}) override;
     void Feed(std::vector<int16_t>&& data) override;
 
     void EnableWakeWordDetection(bool enable) override;
