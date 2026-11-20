@@ -2,13 +2,7 @@
 
 #include <sdkconfig.h>
 
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N
 // Phase 1: closed-loop wheel speed control.
-// Provisional Phase 1 reference: motor specification is about 175 RPM at 6 V
-// under load (90 RPM at 3 V, 200 RPM at 6 V unloaded). Assume 6 V motor supply
-// and use the loaded figure for both wheels at full PWM until FC-03 readings
-// allow separate per-wheel calibration. The L298N voltage drop and actual load
-// can make the achievable wheel RPM lower than this estimate.
 #define SPEED_PI_REFERENCE_PWM_PERCENT 100
 #define SPEED_PI_LEFT_REFERENCE_RPM 200.0
 #define SPEED_PI_RIGHT_REFERENCE_RPM 200.0
@@ -19,8 +13,6 @@
 #define SPEED_PI_RIGHT_KI 0.50
 
 // Phase 2: heading control and angle turns.
-// Initial straight-heading PD gains in RPM/degree and RPM/(degree/s); tune on the car.
-// The correction is also limited to half the base wheel RPM to preserve direction.
 #define HEADING_PD_KP_RPM_PER_DEG 0.8
 #define HEADING_PD_KD_RPM_PER_DPS 0.15
 #define HEADING_PD_MAX_CORRECTION_RPM 35.0
@@ -42,9 +34,6 @@
 #define HEADING_PD_DEBUG 0
 
 // Phase 3: distance and pose control.
-// Effective skid-steer track width, not necessarily the physical wheel spacing.
-// Calibrate in mm: 1000 * (right_m - left_m) / independent turn angle (radians).
-// Zero keeps encoder-only heading unavailable; gyro-based pose/distance still work.
 #define ODOMETRY_TRACK_WIDTH_MM 0.0
 // Enable only after a measured B_eff and independent EKF/odometry trials show
 // lower, stable pose error. Zero keeps navigation on the established odometry.
@@ -65,4 +54,3 @@
 #define DISTANCE_DRIVE_TOLERANCE_MM 20.0
 #define DISTANCE_DRIVE_SETTLE_RPM 3.0
 #define DISTANCE_DRIVE_SETTLE_MS 300
-#endif

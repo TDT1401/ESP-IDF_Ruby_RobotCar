@@ -45,7 +45,7 @@ config BOARD_TYPE_BREAD_COMPACT_WIFI_LCD
     default y
 
 config BREAD_COMPACT_WIFI_LCD_L298N
-    bool "L298N motors with HC-SR04"
+    bool
     depends on BOARD_TYPE_BREAD_COMPACT_WIFI_LCD
     default y
 
@@ -55,7 +55,7 @@ config BREAD_COMPACT_WIFI_LCD_L298N_INVERT_LEFT
     default n
 
 config BREAD_COMPACT_WIFI_LCD_FC03
-    bool "Two FC-03 wheel encoders"
+    bool
     depends on BREAD_COMPACT_WIFI_LCD_L298N
     default y
 

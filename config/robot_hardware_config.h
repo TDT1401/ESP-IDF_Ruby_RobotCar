@@ -3,7 +3,6 @@
 #include <driver/gpio.h>
 #include <sdkconfig.h>
 
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_L298N
 // GPIO4/5 are free with the simplex I2S configuration in audio_config.h.
 #define MPU6050_SDA_PIN GPIO_NUM_4
 #define MPU6050_SCL_PIN GPIO_NUM_5
@@ -35,9 +34,7 @@
 // Keep the HC-SR04 aimed forward until servo scanning is added in Phase 7.
 #define HCSR04_SERVO_SIGNAL_PIN GPIO_NUM_6
 #define HCSR04_SERVO_CENTER_PULSE_US 1500
-#endif
 
-#ifdef CONFIG_BREAD_COMPACT_WIFI_LCD_FC03
 // Phase 3: FC-03 encoder inputs and wheel-odometry calibration.
 // Keep GPIO19/20 available for native USB. board_config.h disables GPIO48's LED driver.
 #define FC03_LEFT_GPIO GPIO_NUM_38
@@ -57,5 +54,3 @@
 #define FC03_COAST_MS 500
 // Log both counters every 2 seconds in monitor; set to 0 after calibration.
 #define FC03_DEBUG 0
-
-#endif

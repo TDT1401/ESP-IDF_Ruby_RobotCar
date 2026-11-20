@@ -32,6 +32,8 @@ Xiaozhi/OTA. Do not derive either identity from source directory names.
 
 The remaining `CONFIG_BREAD_COMPACT_WIFI_LCD_*` keys are retained for saved
 configuration compatibility. The unused display option has been removed.
+L298N motors with HC-SR04 and both FC-03 encoders are always enabled for this
+board through hidden Kconfig defaults; they are not user-selectable features.
 `BOARD_TYPE_BREAD_COMPACT_WIFI_LCD` is hidden in Kconfig and defaults on for
 ESP32-S3; it is not a board selector.
 
@@ -50,7 +52,7 @@ Reusable components must not depend on board source, project configuration
 headers, `Application`, or generated assets. The board supplies callbacks for
 application state, main-task scheduling, and sounds.
 
-Motors and encoders keep their existing Kconfig feature guards. This firmware has
+Motors and encoders keep their existing internal Kconfig guards. This firmware has
 no display: `RobotCarBoard` inherits `Board::GetDisplay()` (`NoDisplay`) and the
 null backlight. `InitializeRobotBoard()` takes no display parameter. Shared display
 framework code remains available to the application.
