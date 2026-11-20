@@ -61,7 +61,7 @@ public:
         heading_error_rad_ = BearingError(pose);
         state_ = std::abs(heading_error_rad_) > kHeadingToleranceRad ? NavigateState::kTurning
                                                                      : NavigateState::kDriving;
-        speed_percent_ = state_ == NavigateState::kTurning ? kTurnSpeedPercent : kMinSpeedPercent;
+        speed_percent_ = state_ == NavigateState::kTurning ? 0 : kMinSpeedPercent;
         fault_ = "none";
         return true;
     }
@@ -174,7 +174,6 @@ private:
     static constexpr double kDecelerationMps2 = 0.3;
     static constexpr double kSettleRpm = 3;
     static constexpr int64_t kSettleUs = 300000;
-    static constexpr int kTurnSpeedPercent = 40;
     static constexpr int kMinSpeedPercent = 18;
     static bool ValidPose(const OdometrySnapshot& pose) {
         return pose.valid && std::isfinite(pose.x_m) && std::isfinite(pose.y_m) &&

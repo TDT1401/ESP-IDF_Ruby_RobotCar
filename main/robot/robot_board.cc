@@ -32,17 +32,18 @@ using ruby_robot::Wheel;
 static_assert(MPU6050_SDA_PIN != MPU6050_SCL_PIN);
 static_assert(MPU6050_SDA_PIN != LAMP_GPIO && MPU6050_SCL_PIN != LAMP_GPIO);
 static_assert(HCSR04_SERVO_CENTER_PULSE_US > 0 && HCSR04_SERVO_CENTER_PULSE_US < 20000);
-static_assert(HEADING_TURN_AUTO_SPEED_PERCENT >= ruby_robot::MotionGoalCommand::kMinTurnSpeedPercent &&
-              HEADING_TURN_AUTO_SPEED_PERCENT <= 100);
 static_assert(SPEED_PI_REFERENCE_PWM_PERCENT > 0 && SPEED_PI_REFERENCE_PWM_PERCENT <= 100);
 static_assert(SPEED_PI_LEFT_REFERENCE_RPM >= 0 && SPEED_PI_RIGHT_REFERENCE_RPM >= 0);
 static_assert(SPEED_PI_LEFT_KP >= 0 && SPEED_PI_LEFT_KI >= 0);
 static_assert(SPEED_PI_RIGHT_KP >= 0 && SPEED_PI_RIGHT_KI >= 0);
 static_assert(HEADING_PD_KP_RPM_PER_DEG >= 0 && HEADING_PD_KD_RPM_PER_DPS >= 0);
 static_assert(HEADING_PD_MAX_CORRECTION_RPM >= 0);
-static_assert(HEADING_TURN_SLOWDOWN_DEGREES > HEADING_TURN_TOLERANCE_DEGREES);
+static_assert(HEADING_TURN_MAX_RPM >= HEADING_TURN_MIN_RPM);
+static_assert(HEADING_TURN_KP_RPM_PER_DEG > 0);
+static_assert(HEADING_TURN_ACCELERATION_RPM_PER_S > 0 && HEADING_TURN_DECELERATION_RPM_PER_S > 0);
 static_assert(HEADING_TURN_TOLERANCE_DEGREES > 0);
 static_assert(HEADING_TURN_SETTLE_RATE_DPS > 0);
+static_assert(HEADING_TURN_SETTLE_RPM >= 0);
 static_assert(HEADING_TURN_MIN_RPM > 0);
 static_assert(HEADING_TURN_LEFT_FRICTION_PWM_PERCENT >= 0 &&
               HEADING_TURN_LEFT_FRICTION_PWM_PERCENT < 100);
@@ -118,11 +119,14 @@ ruby_robot::MotorControllerConfig MakeMotorControllerConfig() {
     config.heading_pd_kp_rpm_per_deg = HEADING_PD_KP_RPM_PER_DEG;
     config.heading_pd_kd_rpm_per_dps = HEADING_PD_KD_RPM_PER_DPS;
     config.heading_pd_max_correction_rpm = HEADING_PD_MAX_CORRECTION_RPM;
-    config.heading_turn_auto_speed_percent = HEADING_TURN_AUTO_SPEED_PERCENT;
-    config.heading_turn_slowdown_degrees = HEADING_TURN_SLOWDOWN_DEGREES;
+    config.heading_turn_max_rpm = HEADING_TURN_MAX_RPM;
+    config.heading_turn_kp_rpm_per_deg = HEADING_TURN_KP_RPM_PER_DEG;
+    config.heading_turn_acceleration_rpm_per_s = HEADING_TURN_ACCELERATION_RPM_PER_S;
+    config.heading_turn_deceleration_rpm_per_s = HEADING_TURN_DECELERATION_RPM_PER_S;
     config.heading_turn_min_rpm = HEADING_TURN_MIN_RPM;
     config.heading_turn_tolerance_degrees = HEADING_TURN_TOLERANCE_DEGREES;
     config.heading_turn_settle_rate_dps = HEADING_TURN_SETTLE_RATE_DPS;
+    config.heading_turn_settle_rpm = HEADING_TURN_SETTLE_RPM;
     config.heading_turn_left_friction_pwm_percent = HEADING_TURN_LEFT_FRICTION_PWM_PERCENT;
     config.heading_turn_right_friction_pwm_percent = HEADING_TURN_RIGHT_FRICTION_PWM_PERCENT;
     config.odometry_track_width_mm = ODOMETRY_TRACK_WIDTH_MM;

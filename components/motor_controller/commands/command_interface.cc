@@ -80,7 +80,7 @@ int CommandInterface::speed_percent() const {
         return navigator_.speed_percent();
     if (mode_ == CommandMode::kDistanceDrive)
         return goal_.speed_percent();
-    return mode_ == CommandMode::kAngleTurn ? goal_.turn_speed_percent() : 0;
+    return 0;  // The controller computes angle-turn speed from IMU feedback.
 }
 
 bool CommandInterface::IsAngleTurn() const { return mode_ == CommandMode::kAngleTurn; }
@@ -156,12 +156,10 @@ void CommandInterface::StopMotion(int64_t now_us) {
 }
 
 WheelCommand CommandInterface::wheels() const {
-    if (mode_ == CommandMode::kNavigate)
+    if (mode_ == CommandMode::kNavigate || mode_ == CommandMode::kAngleTurn)
         return {};
     if (mode_ == CommandMode::kManual)
         return manual_wheels_;
-    if (mode_ == CommandMode::kAngleTurn)
-        return goal_.turn_wheels();
     if (mode_ == CommandMode::kDistanceDrive)
         return goal_.wheels();
     return {};

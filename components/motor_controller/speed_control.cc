@@ -29,10 +29,17 @@ double FeedforwardPercent(int requested_percent, double friction_pwm_percent) {
 }
 
 double FrictionPwmPercent(CommandMode mode, bool heading_turn, bool left,
-                         const MotorControllerConfig& config) {
-    if (heading_turn)
-        return left ? config.heading_turn_left_friction_pwm_percent
-                    : config.heading_turn_right_friction_pwm_percent;
+                         int requested_percent, const MotorControllerConfig& config) {
+    if (heading_turn) {
+        const double friction = left ? config.heading_turn_left_friction_pwm_percent
+                                     : config.heading_turn_right_friction_pwm_percent;
+        const double reference_rpm = left ? config.speed_pi_left_reference_rpm
+                                         : config.speed_pi_right_reference_rpm;
+        const double target_rpm =
+            TargetRpm(requested_percent, reference_rpm, config.speed_pi_reference_pwm_percent);
+        // Ramp friction compensation with the RPM target during startup.
+        return friction * std::min(1.0, target_rpm / config.heading_turn_min_rpm);
+    }
     if (mode == CommandMode::kDistanceDrive || mode == CommandMode::kNavigate)
         return left ? config.distance_drive_left_friction_pwm_percent
                     : config.distance_drive_right_friction_pwm_percent;
@@ -66,9 +73,11 @@ bool MotorController::SetRequestedWheelsLocked(int left_percent, int right_perce
         (right_percent < 0) != (requested_right_percent_ < 0))
         right_speed_pi_.Reset();
     const double left_friction =
-        FrictionPwmPercent(command_interface_.mode(), heading_turn_active_, true, config_);
+        FrictionPwmPercent(command_interface_.mode(), heading_turn_active_, true, left_percent,
+                           config_);
     const double right_friction =
-        FrictionPwmPercent(command_interface_.mode(), heading_turn_active_, false, config_);
+        FrictionPwmPercent(command_interface_.mode(), heading_turn_active_, false, right_percent,
+                           config_);
     int left_output =
         static_cast<int>(std::lround(FeedforwardPercent(left_percent, left_friction)));
     int right_output =
@@ -86,6 +95,85 @@ bool MotorController::SetRequestedWheelsLocked(int left_percent, int right_perce
     if (last_speed_pi_us_ == 0)
         last_speed_pi_us_ = esp_timer_get_time();
     speed_pi_fault_ = "none";
+    return true;
+}
+
+bool MotorController::UpdateTurnTargetsLocked(const Mpu6050Status& imu, int64_t now_us,
+                                              HeadingPdTargets& targets) {
+    const double error = heading_target_degrees_ - imu.heading_degrees;
+    turn_progress_degrees_ = imu.heading_degrees - heading_turn_start_degrees_;
+    const auto encoder = encoder_.Snapshot();
+    const bool stationary = encoder.left.rpm <= config_.heading_turn_settle_rpm &&
+                            encoder.right.rpm <= config_.heading_turn_settle_rpm &&
+                            std::abs(imu.gyro_z_dps) <= config_.heading_turn_settle_rate_dps;
+    const bool at_target = std::abs(error) <= config_.heading_turn_tolerance_degrees;
+    heading_turn_complete_ = false;
+    if (at_target && stationary) {
+        if (turn_settled_since_us_ == 0)
+            turn_settled_since_us_ = now_us;
+        heading_turn_complete_ = now_us - turn_settled_since_us_ >= kTurnSettleUs;
+    } else {
+        turn_settled_since_us_ = 0;
+    }
+    if (at_target)
+        return true;
+
+    const int turn_sign = error > 0 ? 1 : -1;
+    const int current_sign = motion_ == Motion::kLeft ? 1 : -1;
+    if (turn_sign != current_sign || turn_reverse_until_us_ != 0) {
+        if (turn_reverse_until_us_ == 0) {
+            // Cut PWM before changing direction; keep coast pulses on the old sign.
+            if (!SetRequestedWheelsLocked(0, 0))
+                return false;
+            encoder_.SetDrive(0, 0, now_us);
+            if (!ApplyWheelDirectionsLocked(0, 0))
+                return false;
+            turn_reverse_until_us_ =
+                now_us + std::max(kDirectionDelayUs, config_.encoder.coast_ms * int64_t{1000});
+            turn_reverse_settled_since_us_ = 0;
+        }
+        if (!stationary) {
+            turn_reverse_settled_since_us_ = 0;
+            return true;
+        }
+        if (turn_reverse_settled_since_us_ == 0)
+            turn_reverse_settled_since_us_ = now_us;
+        if (now_us < turn_reverse_until_us_ ||
+            now_us - turn_reverse_settled_since_us_ < kTurnSettleUs)
+            return true;
+        if (!ApplyWheelDirectionsLocked(-turn_sign, turn_sign))
+            return false;
+        motion_ = turn_sign > 0 ? Motion::kLeft : Motion::kRight;
+        turn_reverse_until_us_ = 0;
+        turn_reverse_settled_since_us_ = 0;
+        // Restart the profile from zero after the direction pins have been set.
+        return true;
+    }
+
+    const double reference_rpm =
+        std::min(config_.speed_pi_left_reference_rpm, config_.speed_pi_right_reference_rpm);
+    const double maximum_rpm =
+        std::min(config_.heading_turn_max_rpm,
+                 reference_rpm * 100.0 / config_.speed_pi_reference_pwm_percent);
+    const auto turn = HeadingPd::Update(0, heading_target_degrees_, imu.heading_degrees,
+                                        imu.gyro_z_dps, config_.heading_turn_kp_rpm_per_deg,
+                                        config_.heading_pd_kd_rpm_per_dps, maximum_rpm);
+    const double forward_rpm = turn_sign * turn.correction_rpm;
+    const double desired_rpm =
+        forward_rpm > 0
+            ? std::clamp(forward_rpm, std::min(config_.heading_turn_min_rpm, maximum_rpm),
+                         maximum_rpm)
+            : 0;
+    const double dt_s = last_heading_pd_us_ == 0
+                            ? kHeadingPdPeriodUs / 1000000.0
+                            : std::clamp((now_us - last_heading_pd_us_) / 1000000.0, 0.0, 0.1);
+    const double previous_rpm = std::abs(heading_correction_rpm_);
+    const double rpm = previous_rpm +
+        std::clamp(desired_rpm - previous_rpm, -config_.heading_turn_deceleration_rpm_per_s * dt_s,
+                   config_.heading_turn_acceleration_rpm_per_s * dt_s);
+    targets.correction_rpm = turn_sign * rpm;
+    targets.left_rpm = -targets.correction_rpm;
+    targets.right_rpm = targets.correction_rpm;
     return true;
 }
 
@@ -110,32 +198,9 @@ bool MotorController::UpdateHeadingPdLocked(int64_t now_us) {
     const double error = heading_target_degrees_ - imu.heading_degrees;
     HeadingPdTargets targets{};
     if (heading_turn_active_) {
-        turn_progress_degrees_ = imu.heading_degrees - heading_turn_start_degrees_;
-        const bool at_target = std::abs(error) <= config_.heading_turn_tolerance_degrees;
-        if (at_target && std::abs(imu.gyro_z_dps) <= config_.heading_turn_settle_rate_dps) {
-            if (turn_settled_since_us_ == 0)
-                turn_settled_since_us_ = now_us;
-            heading_turn_complete_ = now_us - turn_settled_since_us_ >= kTurnSettleUs;
-        } else {
-            turn_settled_since_us_ = 0;
-        }
-        if (!at_target) {
-            const int turn_sign = motion_ == Motion::kLeft ? 1 : -1;
-            // Scale the turn P gain by the requested speed: use the RPM ceiling
-            // far from the goal, then slow down inside the configured angle.
-            const double turn_kp = base_rpm / config_.heading_turn_slowdown_degrees;
-            const auto turn =
-                HeadingPd::Update(0, heading_target_degrees_, imu.heading_degrees, imu.gyro_z_dps,
-                                  turn_kp, config_.heading_pd_kd_rpm_per_dps, base_rpm);
-            // Do not reverse wheel directions in a running command.
-            const double forward_correction = turn_sign * turn.correction_rpm;
-            if (forward_correction > 0) {
-                targets.correction_rpm =
-                    turn_sign * std::clamp(forward_correction,
-                                           std::min(config_.heading_turn_min_rpm, base_rpm), base_rpm);
-            }
-            targets.left_rpm = -targets.correction_rpm;
-            targets.right_rpm = targets.correction_rpm;
+        if (!UpdateTurnTargetsLocked(imu, now_us, targets)) {
+            heading_fault_ = fault_ != ESP_OK ? "motor_error" : speed_pi_fault_;
+            return false;
         }
     } else {
         const double signed_rpm = motion_ == Motion::kBackward ? -base_rpm : base_rpm;
@@ -149,8 +214,10 @@ bool MotorController::UpdateHeadingPdLocked(int64_t now_us) {
                                           config_.speed_pi_reference_pwm_percent);
     const int right_percent = PercentForRpm(targets.right_rpm, config_.speed_pi_right_reference_rpm,
                                            config_.speed_pi_reference_pwm_percent);
-    if (!SetRequestedWheelsLocked(left_percent, right_percent))
+    if (!SetRequestedWheelsLocked(left_percent, right_percent)) {
+        heading_fault_ = fault_ != ESP_OK ? "motor_error" : speed_pi_fault_;
         return false;
+    }
     encoder_.SetDrive((left_percent > 0) - (left_percent < 0),
                       (right_percent > 0) - (right_percent < 0), now_us);
     heading_error_degrees_ = error;
@@ -190,10 +257,12 @@ bool MotorController::UpdateSpeedPiLocked(int64_t now_us) {
                   config_.speed_pi_reference_pwm_percent);
     const double left_feedforward = FeedforwardPercent(
         requested_left_percent_,
-        FrictionPwmPercent(command_interface_.mode(), heading_turn_active_, true, config_));
+        FrictionPwmPercent(command_interface_.mode(), heading_turn_active_, true,
+                           requested_left_percent_, config_));
     const double right_feedforward = FeedforwardPercent(
         requested_right_percent_,
-        FrictionPwmPercent(command_interface_.mode(), heading_turn_active_, false, config_));
+        FrictionPwmPercent(command_interface_.mode(), heading_turn_active_, false,
+                           requested_right_percent_, config_));
     const int left =
         requested_left_percent_ == 0
             ? 0

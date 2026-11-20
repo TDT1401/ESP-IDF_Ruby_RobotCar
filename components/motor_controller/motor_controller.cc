@@ -34,13 +34,9 @@ void MotorController::Stop() {
 }
 
 esp_err_t MotorController::StartCommand(const CommandRequest& request) {
-    auto resolved_request = request;
-    if (auto* turn = std::get_if<AngleTurnRequest>(&resolved_request);
-        turn && turn->speed_percent == 0)
-        turn->speed_percent = config_.heading_turn_auto_speed_percent;
-    if (!CommandInterface::Valid(resolved_request))
+    if (!CommandInterface::Valid(request))
         return ESP_ERR_INVALID_ARG;
-    const auto requirements = CommandInterface::Requirements(resolved_request);
+    const auto requirements = CommandInterface::Requirements(request);
     std::lock_guard lock(mutex_);
     if (!MotionAllowed() || (requirements.wifi && !web_control_.connected()) ||
         web_control_.active() || command_interface_.mode() != CommandMode::kIdle)
@@ -68,10 +64,10 @@ esp_err_t MotorController::StartCommand(const CommandRequest& request) {
     speed_pi_fault_ = "none";
     heading_fault_ = "none";
     const int64_t now = esp_timer_get_time();
-    const auto goal_pose = std::holds_alternative<NavigateRequest>(resolved_request)
+    const auto goal_pose = std::holds_alternative<NavigateRequest>(request)
                                ? NavigationPoseLocked()
                                : odometry_.Snapshot();
-    if (!command_interface_.Start(resolved_request, now, goal_pose, DistanceLimits()))
+    if (!command_interface_.Start(request, now, goal_pose, DistanceLimits()))
         return ESP_ERR_INVALID_STATE;
     if (!PrepareMotionLocked(command_interface_.direction())) {
         FinishCommandLocked(esp_timer_get_time(), false, "motor_error");
@@ -111,6 +107,10 @@ L298nMotorStatus MotorController::Snapshot() {
     status.motion = MotionName(motion_);
     status.speed_percent = web_speed_percent_;
     status.active_speed_percent = moving_ ? ActiveSpeedLocked() : 0;
+    if (command_interface_.IsAngleTurn())
+        status.command.angle_turn.speed_percent = status.active_speed_percent;
+    if (command_interface_.IsNavigationTurn())
+        status.command.navigate.speed_percent = status.active_speed_percent;
     status.moving = moving_;
     status.pending = motion_ != Motion::kStop && !moving_;
     status.web_manual = web_control_.active();
@@ -252,8 +252,6 @@ esp_err_t StartLinearMotion(const L298nLinearRequest& request, ruby_robot::Motio
         return ESP_ERR_INVALID_ARG;
     if (motion == ruby_robot::Motion::kBackward)
         goal.distance_cm = -goal.distance_cm;
-    if (goal.speed_percent == 0)
-        goal.speed_percent = MotorController::Instance().DefaultDistanceSpeed();
     return StartL298nCommand(goal);
 }
 

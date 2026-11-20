@@ -15,7 +15,6 @@ enum class AngleTurnState { kIdle, kRunning, kCompleted, kInterrupted, kFault };
 
 struct AngleTurnRequest {
     int angle_degrees = 0;  // Positive left, negative right.
-    int speed_percent = 0;  // Controller fills this from board configuration.
     AngleTurnOwner owner = AngleTurnOwner::kWeb;
 };
 
@@ -24,12 +23,11 @@ struct AngleTurnSnapshot {
     const char* owner;
     const char* direction;
     int angle_degrees;
-    int speed_percent;
+    int speed_percent;  // Filled from the controller's automatic turn profile.
 };
 
 struct DistanceDriveRequest {
     int distance_cm = 0;  // Positive forward, negative backward.
-    int speed_percent = 70;
     int timeout_seconds = 60;
     DistanceDriveOwner owner = DistanceDriveOwner::kWeb;
 };
@@ -40,6 +38,7 @@ struct DistanceDriveLimits {
     double deceleration_mps2 = 0;
     double tolerance_m = 0;
     int min_speed_percent = 0;
+    int max_speed_percent = 0;
     double settle_rpm = 0;
     int64_t settle_us = 0;
 };
@@ -48,7 +47,7 @@ struct DistanceDriveSnapshot {
     const char* state;
     const char* owner;
     const char* fault;
-    int speed_percent;
+    int speed_percent;  // Current automatic profile target, not applied PWM.
     int timeout_seconds;
     int elapsed_ms;
     int remaining_ms;
@@ -66,7 +65,6 @@ public:
     static constexpr int kMaxTimeoutSeconds = 120;
     static constexpr int kMinAngleDegrees = 5;
     static constexpr int kMaxAngleDegrees = 180;
-    static constexpr int kMinTurnSpeedPercent = 10;
     static constexpr int64_t kTurnTimeoutUs = 5000000;
 
     static bool Valid(const DistanceDriveRequest& request);
@@ -80,14 +78,12 @@ public:
     void Finish(DistanceDriveState state, int64_t now_us, const char* fault = "none");
     void Finish(AngleTurnState state);
     int speed_percent() const;
-    int turn_speed_percent() const { return turn_request_.speed_percent; }
     int angle_degrees() const { return turn_request_.angle_degrees; }
     Motion direction() const {
         return request_.distance_cm < 0 ? Motion::kBackward : Motion::kForward;
     }
     Motion turn_direction() const;
     WheelCommand wheels() const;
-    WheelCommand turn_wheels() const;
     DistanceDriveSnapshot Snapshot(int64_t now_us) const;
     AngleTurnSnapshot TurnSnapshot() const;
     const char* fault() const { return fault_; }

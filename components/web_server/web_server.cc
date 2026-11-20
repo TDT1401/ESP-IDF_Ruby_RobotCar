@@ -235,7 +235,7 @@ esp_err_t Action(httpd_req_t* req) {
             !ReadInteger(json.get(), "angle_degrees", 5, 180, &angle_degrees))
             return Reply(req, "400 Bad Request", "{\"error\":\"Invalid angle\"}");
         const L298nTurnRequest request{ruby_robot::AngleTurnRequest{
-            static_cast<int>(angle_degrees), 0, ruby_robot::AngleTurnOwner::kWeb}};
+            static_cast<int>(angle_degrees), ruby_robot::AngleTurnOwner::kWeb}};
         const auto error = turn_left ? TurnL298nLeft(request) : TurnL298nRight(request);
         if (error != ESP_OK)
             return Reply(req, "409 Conflict", "{\"error\":\"Controller unavailable\"}");
@@ -249,7 +249,7 @@ esp_err_t Action(httpd_req_t* req) {
         !ReadInteger(json.get(), "distance_cm", 5, 1000, &value))
         return Reply(req, "400 Bad Request", "{\"error\":\"Invalid action\"}");
     const L298nLinearRequest request{ruby_robot::DistanceDriveRequest{
-        static_cast<int>(value), 0, 60, ruby_robot::DistanceDriveOwner::kWeb}};
+        static_cast<int>(value), 60, ruby_robot::DistanceDriveOwner::kWeb}};
     const auto error = forward ? MoveL298nForward(request) : MoveL298nBackward(request);
     if (error != ESP_OK)
         return Reply(req, "409 Conflict", "{\"error\":\"Controller unavailable\"}");

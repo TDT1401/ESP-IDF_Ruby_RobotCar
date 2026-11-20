@@ -2,6 +2,7 @@
 
 #include "imu.h"
 
+#include <algorithm>
 #include <cmath>
 #include <numbers>
 
@@ -35,6 +36,15 @@ void MotorController::StopFailedMotionLocked(int64_t now_us, const char* fault) 
 }
 
 int MotorController::ActiveSpeedLocked() const {
+    if (heading_turn_active_) {
+        const double reference_rpm =
+            std::min(config_.speed_pi_left_reference_rpm, config_.speed_pi_right_reference_rpm);
+        if (reference_rpm <= 0)
+            return 0;
+        const double percent =
+            std::abs(heading_correction_rpm_) * config_.speed_pi_reference_pwm_percent / reference_rpm;
+        return std::clamp(static_cast<int>(std::lround(percent)), 0, 100);
+    }
     return command_interface_.Active() ? command_interface_.speed_percent() : web_speed_percent_;
 }
 

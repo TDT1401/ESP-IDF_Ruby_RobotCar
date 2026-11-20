@@ -33,7 +33,6 @@ class MotorController {
 public:
     static void Initialize(const MotorControllerConfig& config);
     static MotorController& Instance();
-    int DefaultDistanceSpeed() const { return config_.distance_drive_max_speed_percent; }
 
     void Stop();
     esp_err_t StartCommand(const CommandRequest& request);
@@ -69,6 +68,8 @@ private:
     double heading_turn_start_degrees_ = 0;
     double turn_progress_degrees_ = 0;
     int64_t turn_settled_since_us_ = 0;
+    int64_t turn_reverse_until_us_ = 0;
+    int64_t turn_reverse_settled_since_us_ = 0;
     double heading_target_degrees_ = 0;
     double heading_error_degrees_ = 0;
     double heading_correction_rpm_ = 0;
@@ -123,6 +124,8 @@ private:
     bool SetRequestedWheelsLocked(int left_percent, int right_percent);
     bool UpdateSpeedPiLocked(int64_t now_us);
     bool UpdateHeadingPdLocked(int64_t now_us);
+    bool UpdateTurnTargetsLocked(const Mpu6050Status& imu, int64_t now_us,
+                                 HeadingPdTargets& targets);
     bool SpeedPiConfiguredLocked() const;
     bool SpeedPiReadyLocked() const;
     bool ApplyWebDriveLocked(int left, int right);

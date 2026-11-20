@@ -31,11 +31,14 @@ struct MotorControllerConfig {
     double heading_pd_kp_rpm_per_deg;
     double heading_pd_kd_rpm_per_dps;
     double heading_pd_max_correction_rpm;
-    int heading_turn_auto_speed_percent;
-    double heading_turn_slowdown_degrees;
+    double heading_turn_max_rpm;
+    double heading_turn_kp_rpm_per_deg;
+    double heading_turn_acceleration_rpm_per_s;
+    double heading_turn_deceleration_rpm_per_s;
     double heading_turn_min_rpm;
     double heading_turn_tolerance_degrees;
     double heading_turn_settle_rate_dps;
+    double heading_turn_settle_rpm;
     double heading_turn_left_friction_pwm_percent;
     double heading_turn_right_friction_pwm_percent;
     double odometry_track_width_mm;
@@ -86,8 +89,8 @@ esp_err_t StartL298nCommand(const ruby_robot::CommandRequest& request);
 
 // Five movement operations. A goal request is asynchronous; observe its result
 // through GetL298nMotorStatus(). A web request keeps the manual session alive.
-// Positive magnitudes: distance 5-1000 cm, angle 5-180 degrees. Goal speed 0
-// selects the board default for distance or automatic speed for turns.
+// Positive magnitudes: distance 5-1000 cm, angle 5-180 degrees. Distance and
+// angle goals use automatic speed profiles; callers do not supply a speed.
 esp_err_t MoveL298nForward(const L298nLinearRequest& request);
 esp_err_t MoveL298nBackward(const L298nLinearRequest& request);
 esp_err_t TurnL298nLeft(const L298nTurnRequest& request);

@@ -24,6 +24,7 @@ DistanceDriveLimits MotorController::DistanceLimits() const {
             config_.distance_drive_deceleration_mps2,
             config_.distance_drive_tolerance_mm / 1000.0,
             config_.distance_drive_min_speed_percent,
+            config_.distance_drive_max_speed_percent,
             config_.distance_drive_settle_rpm,
             config_.distance_drive_settle_ms * 1000LL};
 }

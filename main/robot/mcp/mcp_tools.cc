@@ -115,25 +115,15 @@ void RegisterL298nMcpTools() {
     server.AddTool(
         "self.motor.move_distance",
         "Drive a signed distance in centimetres: positive forward, negative backward, magnitude "
-        "5-1000 cm. Holds heading and slows before stopping. Requires valid odometry and "
-        "stationary "
-        "wheels. speed_percent is a ceiling; timeout_seconds is a safety limit.",
+        "5-1000 cm. Automatically adjusts speed to the distance, holds heading and slows before "
+        "stopping. Requires valid odometry and stationary wheels. timeout_seconds is a safety "
+        "limit.",
         PropertyList({Property("distance_cm", kPropertyTypeInteger, -1000, 1000),
-                      Property("speed_percent", kPropertyTypeInteger, 40, 10, 100),
                       Property("timeout_seconds", kPropertyTypeInteger, 60, 1, 120)}),
         [](const PropertyList& properties) -> ToolResult {
-            const int distance_cm = properties["distance_cm"].value<int>();
-            const int speed_percent = properties["speed_percent"].value<int>();
-            const int timeout_seconds = properties["timeout_seconds"].value<int>();
-            esp_err_t error = ESP_ERR_INVALID_ARG;
-            if (distance_cm != 0 &&
-                distance_cm >= -ruby_robot::MotionGoalCommand::kMaxDistanceCm &&
-                distance_cm <= ruby_robot::MotionGoalCommand::kMaxDistanceCm) {
-                const L298nLinearRequest request{ruby_robot::DistanceDriveRequest{
-                    distance_cm < 0 ? -distance_cm : distance_cm, speed_percent, timeout_seconds,
-                    ruby_robot::DistanceDriveOwner::kVoice}};
-                error = distance_cm > 0 ? MoveL298nForward(request) : MoveL298nBackward(request);
-            }
+            const esp_err_t error = StartL298nCommand(ruby_robot::DistanceDriveRequest{
+                properties["distance_cm"].value<int>(),
+                properties["timeout_seconds"].value<int>(), ruby_robot::DistanceDriveOwner::kVoice});
             if (error != ESP_OK)
                 return std::unexpected(std::string("Distance move unavailable: ") +
                                        esp_err_to_name(error));
@@ -142,19 +132,12 @@ void RegisterL298nMcpTools() {
     server.AddTool(
         "self.motor.rotate_angle",
         "Turn by a signed relative angle: positive left, negative right, magnitude 5-180 degrees. "
-        "Uses gyro feedback and automatic speed, with a 5-second safety timeout.",
+        "Automatically adjusts speed to the remaining angle and corrects overshoot using gyro "
+        "feedback, with a 5-second safety timeout.",
         PropertyList({Property("angle_degrees", kPropertyTypeInteger, -180, 180)}),
         [](const PropertyList& properties) -> ToolResult {
-            const int angle_degrees = properties["angle_degrees"].value<int>();
-            esp_err_t error = ESP_ERR_INVALID_ARG;
-            if (angle_degrees != 0 &&
-                angle_degrees >= -ruby_robot::MotionGoalCommand::kMaxAngleDegrees &&
-                angle_degrees <= ruby_robot::MotionGoalCommand::kMaxAngleDegrees) {
-                const L298nTurnRequest request{ruby_robot::AngleTurnRequest{
-                    angle_degrees < 0 ? -angle_degrees : angle_degrees, 0,
-                    ruby_robot::AngleTurnOwner::kVoice}};
-                error = angle_degrees > 0 ? TurnL298nLeft(request) : TurnL298nRight(request);
-            }
+            const esp_err_t error = StartL298nCommand(ruby_robot::AngleTurnRequest{
+                properties["angle_degrees"].value<int>(), ruby_robot::AngleTurnOwner::kVoice});
             if (error != ESP_OK)
                 return std::unexpected(std::string("Angle turn unavailable: ") +
                                        esp_err_to_name(error));

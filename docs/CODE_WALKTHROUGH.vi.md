@@ -154,12 +154,16 @@ Trước khi bắt đầu, controller kiểm tra request, Wi-Fi, chính sách �
 | --- | --- |
 | Manual | Người dùng gửi lệnh mới, stop/release hoặc session hết hạn |
 | `distance_drive` | Dùng quãng đường odometry, tăng/giảm tốc, dừng và chờ bánh ổn định |
-| `angle_turn` | Dùng góc tương đối từ IMU, giảm tốc gần đích và chờ yaw rate nhỏ |
+| `angle_turn` | Dùng góc tương đối từ IMU, tự tính tốc độ, sửa quá góc và chờ bánh/gyro ổn định |
 | `navigate` | Quay về phía đích khi cần, tiến đến tọa độ, giảm tốc và chờ dừng |
 
 Các MCP tools hiện có: `self.motor.stop`, `self.motor.get_state`, `self.motor.reset_odometry`, `self.motor.move_distance`, `self.motor.rotate_angle`, `self.motor.navigate_to`.
 
 Ví dụ với yêu cầu giọng nói “tiến 50 cm”: audio được gửi tới server; **nếu server gọi** `self.motor.move_distance` với `distance_cm=50`, adapter MCP tạo goal rồi ESP32 thực thi. Firmware không tự ánh xạ trực tiếp câu tiếng Việt đó thành PWM. Kết quả tool ngay sau khi nhận lệnh là snapshot lúc đó; cần đọc trạng thái tiếp để biết goal đã hoàn thành hay lỗi.
+
+Web, MCP và lời gọi trực tiếp dùng chung `AngleTurnRequest`, chỉ gồm góc và nguồn yêu cầu, không truyền tốc độ. Với `StartL298nCommand()`, góc dương quay trái, âm quay phải; các wrapper `TurnL298nLeft()`/`TurnL298nRight()` nhận độ lớn góc dương rồi chọn chiều. Controller tính RPM từ sai số góc và gyro, giới hạn tốc độ tăng/giảm theo nhóm `HEADING_TURN_*` trong `config/motion_control_config.h`. Pha quay ban đầu của navigation cũng dùng profile này, không có mức tốc độ quay riêng.
+
+Nếu vượt đích ngoài tolerance, controller ngắt PWM, chờ hết khoảng coasting và bánh/gyro ổn định, rồi đổi chiều để sửa góc. Quá trình chờ dùng timestamp trong vòng timer, không chặn task. Hoàn thành khi góc nằm trong tolerance và cả hai bánh cùng gyro ổn định liên tục 150 ms. Lệnh quay góc vẫn có timeout tổng 5 giây, bao gồm thời gian sửa góc; navigation giữ timeout của request. `angle_turn_speed_percent` phản ánh mục tiêu hiện tại của profile và bằng 0 khi đang chờ đổi chiều hoặc đã dừng. Bù ma sát cũng tăng dần theo mục tiêu RPM lúc khởi động.
 
 Nguồn: [web_server.cc](../components/web_server/web_server.cc), [mcp_tools.cc](../main/robot/mcp/mcp_tools.cc), [motor_controller.cc](../components/motor_controller/motor_controller.cc), [web_control.cc](../components/motor_controller/web_control.cc).
 
@@ -200,7 +204,8 @@ Cấu hình đáng chú ý trong [motion_control_config.h](../config/motion_cont
 | --- | --- | --- |
 | Speed PI | `KP=0.25`, `KI=0.50` cho hai bên | Hệ số điều chỉnh PWM từ sai số RPM |
 | Heading PD | `KP=0.8`, `KD=0.15`, correction tối đa 35 RPM | Giữ hướng; giới hạn thực tế còn phụ thuộc tốc độ đang yêu cầu |
-| Quay góc | Mặc định 70%, tolerance 2°, settle rate 8°/s | Code còn chờ ổn định khoảng 150 ms |
+| Quay góc | Trần 200 RPM, KP 3 RPM/°, gia/giảm tốc 100/200 RPM/s | Tự tính tốc độ theo góc và gyro; trần không phải tốc độ cố định |
+| Dừng/đảo chiều quay | Tolerance 2°, tối đa 8°/s và 3 RPM trong 150 ms | Đảo chiều còn chờ hết khoảng coasting; các hệ số cần tuning trên xe |
 | Đi khoảng cách | Tối đa 100%, tối thiểu 15%, gia/giảm tốc 0.30 m/s² | Profile cho distance drive; `Navigator` có các hằng số profile riêng |
 | Dừng distance drive | Tolerance 20 mm, tối đa 3 RPM trong 300 ms | Điều kiện ổn định để kết thúc |
 | Track width | `ODOMETRY_TRACK_WIDTH_MM=0.0` | Chưa cấu hình wheel heading/EKF; odometry dùng heading IMU vẫn có thể hợp lệ |
