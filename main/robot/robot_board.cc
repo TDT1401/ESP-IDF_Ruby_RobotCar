@@ -31,7 +31,6 @@ using ruby_robot::Wheel;
 
 static_assert(MPU6050_SDA_PIN != MPU6050_SCL_PIN);
 static_assert(MPU6050_SDA_PIN != LAMP_GPIO && MPU6050_SCL_PIN != LAMP_GPIO);
-static_assert(HCSR04_SERVO_CENTER_PULSE_US > 0 && HCSR04_SERVO_CENTER_PULSE_US < 20000);
 static_assert(SPEED_PI_REFERENCE_PWM_PERCENT > 0 && SPEED_PI_REFERENCE_PWM_PERCENT <= 100);
 static_assert(SPEED_PI_LEFT_REFERENCE_RPM >= 0 && SPEED_PI_RIGHT_REFERENCE_RPM >= 0);
 static_assert(SPEED_PI_LEFT_KP >= 0 && SPEED_PI_LEFT_KI >= 0);
@@ -73,7 +72,6 @@ static_assert(FC03_LEFT_WHEEL_DIAMETER_MM >= 0 && FC03_LEFT_WHEEL_DIAMETER_MM <=
 
 MotorDriverConfig MakeMotorDriverConfig() {
     MotorDriverConfig config = {};
-    // Keep motor channels 1/2/4/5; channel 3 belongs to the servo.
     config.motors = {{
         {MOTOR_LEFT_EN_PIN, MOTOR_LEFT_IN1_PIN, MOTOR_LEFT_IN2_PIN, LEDC_CHANNEL_1, false},
         {MOTOR_RIGHT_EN_PIN, MOTOR_RIGHT_IN1_PIN, MOTOR_RIGHT_IN2_PIN, LEDC_CHANNEL_2, false},
@@ -106,9 +104,7 @@ ruby_robot::MotorControllerConfig MakeMotorControllerConfig() {
     config.encoder.coast_ms = FC03_COAST_MS;
     config.imu = {MPU6050_SDA_PIN, MPU6050_SCL_PIN, MPU6050_I2C_ADDRESS, MPU6050_GYRO_Z_SIGN,
                   MPU6050_DEBUG != 0};
-    config.ultrasonic = {HCSR04_TRIGGER_PIN, HCSR04_ECHO_PIN, HCSR04_SERVO_SIGNAL_PIN,
-                         HCSR04_SERVO_CENTER_PULSE_US, LEDC_LOW_SPEED_MODE, LEDC_TIMER_2,
-                         LEDC_CHANNEL_3};
+    config.ultrasonic = {HCSR04_TRIGGER_PIN, HCSR04_ECHO_PIN};
     config.speed_pi_reference_pwm_percent = SPEED_PI_REFERENCE_PWM_PERCENT;
     config.speed_pi_left_reference_rpm = SPEED_PI_LEFT_REFERENCE_RPM;
     config.speed_pi_right_reference_rpm = SPEED_PI_RIGHT_REFERENCE_RPM;

@@ -20,10 +20,9 @@ ESP32 giữ điều khiển chuyển động và safety; điện thoại sẽ g�
 3. **2 module L298N** — driver điều khiển motor.
 4. **2 encoder FC-03** — đo chuyển động hai bánh trước.
 5. **IMU MPU6050** — cung cấp dữ liệu chuyển động và hướng.
-6. **HC-SR04** — đo khoảng cách phía trước.
-7. **Servo** — giữ HC-SR04 hướng giữa.
-8. **Microphone I2S** — thu âm.
-9. **MAX98357A** — khuếch đại âm thanh cho loa.
+6. **HC-SR04** — gắn cố định hướng trước để đo khoảng cách.
+7. **Microphone I2S** — thu âm.
+8. **MAX98357A** — khuếch đại âm thanh cho loa.
 
 Không dùng màn hình vật lý.
 

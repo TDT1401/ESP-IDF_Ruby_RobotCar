@@ -22,7 +22,7 @@ Board khởi tạo robot tại `main/robot/robot_board.cc`, truyền struct/call
 ## Phần cứng và dịch vụ
 
 - Hai L298N, bốn kênh motor; điều khiển logic trái/phải. Bánh sau theo PWM bánh trước cùng bên, encoder chỉ ở hai bánh trước.
-- HC-SR04 đo phía trước, servo giữ giữa. LEDC: motor timer 1, channel 1/2/4/5; servo timer/channel 2/3.
+- HC-SR04 gắn cố định hướng trước để đo khoảng cách. LEDC: motor timer 1, channel 1/2/4/5.
 - Web tích hợp sẵn ở port `8080`: `/api/claim`, `/api/command`, `/api/action`, `/api/status`.
 - Telegram tích hợp sẵn, chỉ gửi; board cung cấp credentials và callback readiness.
 

@@ -189,8 +189,7 @@ Nguồn: [motion_executor.cc](../components/motor_controller/motion_executor.cc)
 | --- | --- |
 | FC-03 | Đếm xung, tính RPM và quãng đường mỗi bên theo pulses/revolution và đường kính bánh |
 | MPU6050 | Gyro Z và heading tương đối cho giữ hướng, quay góc và odometry |
-| HC-SR04 | Khoảng cách phía trước; callback cập nhật controller và yêu cầu âm báo khi phù hợp |
-| Servo | Hiện giữ HC-SR04 hướng trước; chưa có quét lập bản đồ |
+| HC-SR04 | Gắn cố định hướng trước; callback khoảng cách cập nhật controller và yêu cầu âm báo khi phù hợp |
 | `Odometry` | Tính pose `(x, y, theta)` từ quãng đường encoder và heading IMU |
 | `PoseEkf` | Bộ ước lượng pose có covariance; cần track width hợp lệ để khởi tạo |
 

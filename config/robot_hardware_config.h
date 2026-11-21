@@ -31,10 +31,6 @@
 #define HCSR04_TRIGGER_PIN GPIO_NUM_14
 #define HCSR04_ECHO_PIN GPIO_NUM_39
 
-// Keep the HC-SR04 aimed forward until servo scanning is added in Phase 7.
-#define HCSR04_SERVO_SIGNAL_PIN GPIO_NUM_6
-#define HCSR04_SERVO_CENTER_PULSE_US 1500
-
 // Phase 3: FC-03 encoder inputs and wheel-odometry calibration.
 // Keep GPIO19/20 available for native USB. board_config.h disables GPIO48's LED driver.
 #define FC03_LEFT_GPIO GPIO_NUM_38

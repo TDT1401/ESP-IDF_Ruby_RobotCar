@@ -38,7 +38,7 @@ are assigned to the right L298N. GPIO18 remains unused.
 
 ## Dual L298N conventional-wheel wiring
 
-The car uses four conventional wheels with differential left/right steering. Front wheels are at the vehicle's front, and rear wheels are at its rear. Each L298N bridge drives one motor independently. Retain the HC-SR04 servo on GPIO6, audio, IMU, both encoders, and the current USB/UART pins.
+The car uses four conventional wheels with differential left/right steering. Front wheels are at the vehicle's front, and rear wheels are at its rear. Each L298N bridge drives one motor independently. Retain audio, IMU, both encoders, and the current USB/UART pins.
 
 | Control pin | Left L298N | Right L298N |
 | ----------- | ---------- | ----------- |
@@ -64,13 +64,15 @@ The single project build keeps its existing firmware/OTA identity in `config/bui
 python scripts/build.py
 ```
 
-The HUD joystick controls forward/backward motion, curved turns, and rotation in place using `left = y + x` and `right = y - x`, normalized together to the selected speed. Both wheels on each side receive the same logical direction and PWM. Speed PI uses the front encoder on each side; rear wheels follow front PWM without separate feedback. Motor LEDC channels are 1/2/4/5; the servo retains channel 3. Stop, network loss, and session expiry disable all four bridges; direction changes include a stop interval.
+The HUD joystick controls forward/backward motion, curved turns, and rotation in place using `left = y + x` and `right = y - x`, normalized together to the selected speed. Both wheels on each side receive the same logical direction and PWM. Speed PI uses the front encoder on each side; rear wheels follow front PWM without separate feedback. Motor LEDC channels are 1/2/4/5. Stop, network loss, and session expiry disable all four bridges; direction changes include a stop interval.
 
 Distance and angle commands retain front-encoder and IMU feedback. Odometry uses the left/right model for conventional wheels; joystick steering no longer invalidates pose due to lateral motion. Sensor errors, unknown-direction pulses, and sampling gaps can still require a stationary pose reset.
 
 The existing `CONFIG_BREAD_COMPACT_WIFI_LCD_L298N_INVERT_LEFT/RIGHT` options control front wheel inversion. Rear wheels use the default wiring direction without new build options. Verify each wheel's direction and recalibrate wheel diameter, CPR, and gains for the actual conventional wheels. This update has not been built, tested, or validated on hardware.
 
 ## HC-SR04 ultrasonic sensor
+
+Mount the HC-SR04 in a fixed forward-facing position. GPIO6 is unused.
 
 | HC-SR04 pin | Connect to                                  |
 | ----------- | ------------------------------------------- |
@@ -80,14 +82,6 @@ The existing `CONFIG_BREAD_COMPACT_WIFI_LCD_L298N_INVERT_LEFT/RIGHT` options con
 | ECHO        | GPIO39 through a 5 V-to-3.3 V level divider |
 
 For the ECHO divider, connect 1 kΩ from ECHO to GPIO39 and 2 kΩ from GPIO39 to GND. Never connect the 5 V ECHO signal directly to GPIO39.
-
-## HC-SR04 servo — center hold
-
-| Servo wire                   | Connect to                                               |
-| ---------------------------- | -------------------------------------------------------- |
-| Signal (orange/yellow/white) | GPIO6                                                    |
-| V+ (red)                     | Regulated 5 V supply sized for the servo's stall current |
-| GND (brown/black)            | Supply GND and ESP32-S3 GND                              |
 
 ## FC-03 wheel sensors
 

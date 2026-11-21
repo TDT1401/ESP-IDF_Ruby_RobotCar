@@ -1,7 +1,6 @@
 #include "ultrasonic_sensor.h"
 
 #include <driver/gpio.h>
-#include <driver/ledc.h>
 #include <esp_err.h>
 #include <esp_log.h>
 #include <esp_pm.h>
@@ -24,29 +23,6 @@ constexpr int kSamplePeriodMs = 60;  // HC-SR04 needs the previous acoustic burs
 constexpr int kEchoTimeoutMs = 35;
 constexpr int kMinEchoUs = 116;    // Approximately 2 cm.
 constexpr int kMaxEchoUs = 23200;  // Approximately 400 cm.
-constexpr int kServoPeriodUs = 20000;
-constexpr int kServoSettleMs = 300;
-
-void StartServoCenterPwm(const UltrasonicSensorConfig& config) {
-    ledc_timer_config_t timer = {};
-    timer.speed_mode = config.servo_mode;
-    timer.timer_num = config.servo_timer;
-    timer.duty_resolution = LEDC_TIMER_14_BIT;
-    timer.freq_hz = 50;
-    timer.clk_cfg = LEDC_AUTO_CLK;
-    ESP_ERROR_CHECK(ledc_timer_config(&timer));
-
-    ledc_channel_config_t channel = {};
-    channel.gpio_num = config.servo_pin;
-    channel.speed_mode = config.servo_mode;
-    channel.channel = config.servo_channel;
-    channel.timer_sel = config.servo_timer;
-    channel.duty =
-        (config.servo_center_pulse_us * (1U << 14) + kServoPeriodUs / 2) / kServoPeriodUs;
-    ESP_ERROR_CHECK(ledc_channel_config(&channel));
-    ESP_LOGI(kTag, "Servo center PWM on GPIO%d: %d us at 50 Hz", config.servo_pin,
-             config.servo_center_pulse_us);
-}
 
 class Hcsr04Sensor {
 public:
@@ -60,7 +36,6 @@ public:
             return;
         config_ = config;
         callback_ = callback;
-        StartServoCenterPwm(config_);
 
         gpio_config_t trigger = {};
         trigger.pin_bit_mask = 1ULL << config_.trigger_pin;
@@ -173,7 +148,6 @@ private:
     }
 
     void Run() {
-        vTaskDelay(pdMS_TO_TICKS(kServoSettleMs));
         TickType_t next_sample = xTaskGetTickCount();
         while (true) {
 #ifdef CONFIG_PM_ENABLE

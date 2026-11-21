@@ -11,7 +11,7 @@
 - Hai L298N, bốn kênh; mỗi kênh điều khiển một motor.
 - Hai encoder FC-03 tại bánh trước trái/phải.
 - IMU MPU6050.
-- HC-SR04 gắn servo, hiện giữ hướng giữa.
+- HC-SR04 gắn cố định hướng trước.
 - Microphone I2S.
 - Mạch khuếch đại MAX98357A và loa.
 - Nguồn cấp cho board và nguồn motor riêng.
@@ -80,12 +80,14 @@ Checklist giữ theo ghi nhận cũ, không xác nhận thêm kết quả nghi�
 
 **Done khi:** EKF tốt hơn và ổn định trước khi dùng điều khiển; tới nhiều đích có cả `x/y ≠ 0` trong ngưỡng, báo lỗi khi không hoàn thành. Encoder + IMU không phát hiện mọi lần trượt bánh.
 
-### Phase 5 — Lắp phần cứng servo và HC-SR04 🔴
+### Phase 5 — Lắp phần cứng HC-SR04 🔴
 
-- [x] Lắp servo/HC-SR04, ghi vùng mù; nguồn đủ tải, GND chung và ECHO 3,3 V.
-- [x] Kiểm tra servo GPIO6, HC-SR04 GPIO14/39 và hướng giữa. Source đã giữ giữa bằng PWM; chưa quét.
+- [x] Lắp HC-SR04, ghi vùng mù; nguồn đủ tải, GND chung và ECHO 3,3 V.
+- [x] Kiểm tra HC-SR04 GPIO14/39 và hướng trước.
 
-**Done khi:** Servo/cảm biến hoạt động độc lập, đúng hướng và mức điện áp; thử không echo và ảnh hưởng lên nguồn, IMU, encoder, audio, motor.
+Cấu hình hiện tại dùng cảm biến gắn cố định hướng trước; cần kiểm chứng lại trên phần cứng sau thay đổi.
+
+**Done khi:** Cảm biến hoạt động độc lập, đúng hướng và mức điện áp; thử không echo và ảnh hưởng lên nguồn, IMU, encoder, audio, motor.
 
 ---
 

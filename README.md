@@ -20,10 +20,9 @@ The ESP32 keeps motion control and safety; the phone will send goals and receive
 3. **2 L298N modules** — motor drivers.
 4. **2 FC-03 encoders** — measure front-wheel motion.
 5. **MPU6050 IMU** — provides motion and heading data.
-6. **HC-SR04** — measures forward distance.
-7. **Servo** — holds the HC-SR04 facing forward.
-8. **I2S microphone** — captures audio.
-9. **MAX98357A** — amplifies audio for the speaker.
+6. **HC-SR04** — mounted facing forward to measure distance.
+7. **I2S microphone** — captures audio.
+8. **MAX98357A** — amplifies audio for the speaker.
 
 No physical display.
 

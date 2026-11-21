@@ -38,7 +38,7 @@ Không nối TFT vào GPIO21, GPIO40, GPIO41, GPIO42, GPIO45 hoặc GPIO47 vì c
 
 ## Hai L298N và bánh thường
 
-Xe dùng bốn bánh thường, điều khiển vi sai trái/phải. Bánh trước ở đầu xe, bánh sau ở đuôi xe. Mỗi kênh L298N điều khiển riêng một motor. Giữ servo HC-SR04 tại GPIO6, audio, IMU, hai encoder và các chân USB/UART hiện tại.
+Xe dùng bốn bánh thường, điều khiển vi sai trái/phải. Bánh trước ở đầu xe, bánh sau ở đuôi xe. Mỗi kênh L298N điều khiển riêng một motor. Giữ audio, IMU, hai encoder và các chân USB/UART hiện tại.
 
 | Chân điều khiển | L298N trái | L298N phải |
 | --------------- | ---------- | ---------- |
@@ -64,13 +64,15 @@ Bản build duy nhất giữ tên firmware/OTA hiện có trong `config/build_co
 python scripts/build.py
 ```
 
-Joystick trên HUD điều khiển tiến/lùi/rẽ và quay tại chỗ bằng cách phối hợp tốc độ trái/phải: `left = y + x`, `right = y - x`, chuẩn hóa chung theo tốc độ đã chọn. Hai bánh cùng bên nhận cùng chiều logic và PWM. Speed PI dùng encoder trước của mỗi bên; bánh sau nhận cùng PWM với bánh trước, chưa có feedback riêng. Bốn kênh PWM dùng LEDC 1/2/4/5; servo giữ kênh 3. Dừng, mất kết nối hoặc hết phiên điều khiển ngắt cả bốn kênh; đổi chiều có khoảng dừng.
+Joystick trên HUD điều khiển tiến/lùi/rẽ và quay tại chỗ bằng cách phối hợp tốc độ trái/phải: `left = y + x`, `right = y - x`, chuẩn hóa chung theo tốc độ đã chọn. Hai bánh cùng bên nhận cùng chiều logic và PWM. Speed PI dùng encoder trước của mỗi bên; bánh sau nhận cùng PWM với bánh trước, chưa có feedback riêng. Bốn kênh PWM dùng LEDC 1/2/4/5. Dừng, mất kết nối hoặc hết phiên điều khiển ngắt cả bốn kênh; đổi chiều có khoảng dừng.
 
 Lệnh tiến/lùi theo quãng đường và quay theo góc tiếp tục dùng hai encoder trước và IMU. Odometry sử dụng mô hình trái/phải cho bánh thường; rẽ bằng joystick không còn làm pose mất hiệu lực vì chuyển động ngang. Các điều kiện lỗi cảm biến, mất xung xác định chiều hoặc gián đoạn mẫu vẫn có thể yêu cầu đặt lại gốc khi xe đứng yên.
 
 Giữ các tùy chọn đảo chiều có sẵn `CONFIG_BREAD_COMPACT_WIFI_LCD_L298N_INVERT_LEFT/RIGHT` cho bánh trước. Hai bánh sau dùng chiều mặc định theo sơ đồ dây, không có tùy chọn build mới. Cần kiểm tra chiều từng bánh trên xe và hiệu chỉnh lại đường kính bánh, CPR và gains theo bánh thường thực tế. Code chưa được build/test hoặc kiểm chứng phần cứng trong lần cập nhật này.
 
 ## Cảm biến siêu âm HC-SR04
+
+Gắn HC-SR04 cố định hướng về phía trước. GPIO6 để trống.
 
 | Chân HC-SR04 | Nối với                                    |
 | ------------ | ------------------------------------------ |
@@ -80,14 +82,6 @@ Giữ các tùy chọn đảo chiều có sẵn `CONFIG_BREAD_COMPACT_WIFI_LCD_L
 | ECHO         | GPIO39 qua mạch chia áp từ 5 V xuống 3,3 V |
 
 Để chia áp cho ECHO, nối điện trở 1 kΩ từ ECHO đến GPIO39 và 2 kΩ từ GPIO39 xuống GND. Không nối trực tiếp tín hiệu ECHO 5 V vào GPIO39.
-
-## Servo HC-SR04 — giữ góc giữa
-
-| Dây servo                 | Nối với                                      |
-| ------------------------- | -------------------------------------------- |
-| Tín hiệu (cam/vàng/trắng) | GPIO6                                        |
-| V+ (đỏ)                   | Nguồn 5 V ổn áp đủ dòng khi servo bị giữ tải |
-| GND (nâu/đen)             | GND nguồn, nối chung GND ESP32-S3            |
 
 ## Cảm biến bánh xe FC-03
 

@@ -12,8 +12,11 @@
 #include <esp_err.h>
 #include <esp_pm.h>
 #include <esp_timer.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include <sdkconfig.h>
 
+#include <atomic>
 #include <cstdint>
 #include <mutex>
 
@@ -21,7 +24,7 @@ namespace ruby_robot {
 
 constexpr int kDefaultWebSpeedPercent = 75;
 constexpr int64_t kDirectionDelayUs = 50000;
-constexpr int64_t kTickUs = 10000;
+constexpr int kControlPeriodMs = 10;
 constexpr int64_t kSpeedPiPeriodUs = 100000;
 constexpr int64_t kHeadingPdPeriodUs = 50000;
 constexpr int64_t kTurnSettleUs = 150000;
@@ -47,7 +50,7 @@ public:
 
 private:
     MotorControllerConfig config_;
-    // Network callbacks and the timer share this controller. Keep the mutex scope short.
+    // Network callbacks and the control task share this controller. Keep the mutex scope short.
     std::mutex mutex_;
     MotorDriver driver_;
     CommandInterface command_interface_;
@@ -77,7 +80,8 @@ private:
     const char* heading_fault_ = "none";
     int applied_left_pwm_percent_ = 0;
     int applied_right_pwm_percent_ = 0;
-    esp_timer_handle_t timer_ = nullptr;
+    std::atomic<bool> stop_task_{false};
+    SemaphoreHandle_t task_stopped_ = nullptr;
 #ifdef CONFIG_PM_ENABLE
     esp_pm_lock_handle_t sleep_lock_ = nullptr;
     bool sleep_lock_held_ = false;
@@ -115,6 +119,7 @@ private:
     int ActiveSpeedLocked() const;
     bool PrepareMotionLocked(Motion motion);
     bool MotionAllowed() const;
+    void RunControlTask();
     void Tick();
     bool ApplySpeedLocked();
     bool ApplyCommandLocked();

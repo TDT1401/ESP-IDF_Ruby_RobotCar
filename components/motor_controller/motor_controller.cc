@@ -2,6 +2,7 @@
 
 #include <esp_log.h>
 #include <esp_system.h>
+#include <freertos/task.h>
 
 #include <cassert>
 #include <cmath>
@@ -181,24 +182,47 @@ MotorController::MotorController(const MotorControllerConfig& config)
 #endif
     encoder_.Initialize();
     InitializeMpu6050(config_.imu);
-    esp_timer_create_args_t timer = {};
-    timer.callback = [](void* arg) { static_cast<MotorController*>(arg)->Tick(); };
-    timer.arg = this;
-    timer.dispatch_method = ESP_TIMER_TASK;
-    timer.name = "l298n_deadline";
-    timer.skip_unhandled_events = true;
-    ESP_ERROR_CHECK(esp_timer_create(&timer, &timer_));
-    ESP_ERROR_CHECK(esp_timer_start_periodic(timer_, kTickUs));
+    task_stopped_ = xSemaphoreCreateBinary();
+    ESP_ERROR_CHECK(task_stopped_ != nullptr ? ESP_OK : ESP_ERR_NO_MEM);
+    const auto result = xTaskCreate(
+        [](void* arg) {
+            static_cast<MotorController*>(arg)->RunControlTask();
+            vTaskDelete(nullptr);
+        },
+        "motor_control", 4096, this, 5, nullptr);
+    if (result != pdPASS) {
+        vSemaphoreDelete(task_stopped_);
+        ESP_ERROR_CHECK(ESP_ERR_NO_MEM);
+    }
 }
 
 MotorController::~MotorController() {
-    esp_timer_stop(timer_);
-    esp_timer_delete(timer_);
+    // Let the task finish Tick() and release its mutex before destroying shared state.
+    stop_task_.store(true);
+    xSemaphoreTake(task_stopped_, portMAX_DELAY);
+    vSemaphoreDelete(task_stopped_);
     Stop();
 #ifdef CONFIG_PM_ENABLE
     esp_pm_lock_delete(sleep_lock_);
     esp_pm_lock_delete(web_sleep_lock_);
 #endif
+}
+
+void MotorController::RunControlTask() {
+    constexpr TickType_t period = pdMS_TO_TICKS(kControlPeriodMs);
+    static_assert(period > 0, "FreeRTOS tick rate must support the motor control period");
+    TickType_t last_wake = xTaskGetTickCount();
+    while (!stop_task_.load()) {
+        vTaskDelayUntil(&last_wake, period);
+        if (stop_task_.load())
+            break;
+        Tick();
+        const TickType_t now = xTaskGetTickCount();
+        // Skip missed periods instead of running a burst of overdue control updates.
+        if (static_cast<TickType_t>(now - last_wake) >= period)
+            last_wake = now;
+    }
+    xSemaphoreGive(task_stopped_);
 }
 
 bool MotorController::Check(esp_err_t error) {
