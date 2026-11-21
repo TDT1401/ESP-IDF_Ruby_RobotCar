@@ -68,6 +68,7 @@ private:
     bool heading_hold_active_ = false;
     bool heading_turn_active_ = false;
     bool heading_turn_complete_ = false;
+    bool navigation_turn_stopping_ = false;
     double heading_turn_start_degrees_ = 0;
     double turn_progress_degrees_ = 0;
     int64_t turn_settled_since_us_ = 0;

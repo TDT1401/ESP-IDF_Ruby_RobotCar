@@ -205,7 +205,7 @@ Cấu hình đáng chú ý trong [motion_control_config.h](../config/motion_cont
 | Heading PD | `KP=0.8`, `KD=0.15`, correction tối đa 35 RPM | Giữ hướng; giới hạn thực tế còn phụ thuộc tốc độ đang yêu cầu |
 | Quay góc | Trần 200 RPM, KP 3 RPM/°, gia/giảm tốc 100/200 RPM/s | Tự tính tốc độ theo góc và gyro; trần không phải tốc độ cố định |
 | Dừng/đảo chiều quay | Tolerance 2°, tối đa 8°/s và 3 RPM trong 150 ms | Đảo chiều còn chờ hết khoảng coasting; các hệ số cần tuning trên xe |
-| Đi khoảng cách | Tối đa 100%, tối thiểu 15%, gia/giảm tốc 0.30 m/s² | Profile cho distance drive; `Navigator` có các hằng số profile riêng |
+| Đi khoảng cách/navigation | Giới hạn tốc độ và gia/giảm tốc `DISTANCE_DRIVE_*` | Dùng chung cấu hình profile; tự giảm tốc khi gần đích |
 | Dừng distance drive | Tolerance 20 mm, tối đa 3 RPM trong 300 ms | Điều kiện ổn định để kết thúc |
 | Track width | `ODOMETRY_TRACK_WIDTH_MM=0.0` | Chưa cấu hình wheel heading/EKF; odometry dùng heading IMU vẫn có thể hợp lệ |
 | Pose navigation | `NAVIGATION_USE_EKF=0` | Navigation dùng odometry thường |

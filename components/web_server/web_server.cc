@@ -212,16 +212,12 @@ esp_err_t Action(httpd_req_t* req) {
 
     if (strcmp(action->valuestring, "navigate_to") == 0) {
         int x_cm = 0, y_cm = 0;
-        uint32_t speed = 0, timeout = 0;
-        if (cJSON_GetArraySize(json.get()) != 5 ||
+        if (cJSON_GetArraySize(json.get()) != 3 ||
             !ReadSignedInteger(json.get(), "x_cm", -1000, 1000, &x_cm) ||
-            !ReadSignedInteger(json.get(), "y_cm", -1000, 1000, &y_cm) ||
-            !ReadInteger(json.get(), "speed_percent", 18, 70, &speed) ||
-            !ReadInteger(json.get(), "timeout_seconds", 1, 120, &timeout))
+            !ReadSignedInteger(json.get(), "y_cm", -1000, 1000, &y_cm))
             return Reply(req, "400 Bad Request", "{\"error\":\"Invalid navigation goal\"}");
         const auto error = StartL298nCommand(ruby_robot::NavigateRequest{
-            x_cm / 100.0, y_cm / 100.0, static_cast<int>(speed), static_cast<int>(timeout),
-            ruby_robot::NavigateOwner::kWeb});
+            x_cm / 100.0, y_cm / 100.0, ruby_robot::NavigateOwner::kWeb});
         if (error != ESP_OK)
             return Reply(req, "409 Conflict", "{\"error\":\"Navigation unavailable\"}");
         return Reply(req, "200 OK", "{\"ok\":true}");

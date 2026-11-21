@@ -16,6 +16,7 @@
     let operationActive = false, operationKind = '', operationText = '', operationStale = false;
     let distanceDriveOwner = '';
     let turnOwner = '';
+    let navigationOwner = '';
     let activePanel = 'manual';
     const trajectory = [];
     const trajectoryLimit = 12000;
@@ -51,6 +52,13 @@
     }
 
     function operationFromStatus(data) {
+      if (data.command_mode === 'navigate' && data.navigation) {
+        const navigation = data.navigation;
+        const state = navigation.state === 'turning' ? 'Đang xoay' : 'Đang đi';
+        return ['navigate',state + ' tới (' + Math.round(navigation.goal_x_m * 100) + ', ' +
+          Math.round(navigation.goal_y_m * 100) + ') cm · còn ' +
+          (navigation.remaining_m * 100).toFixed(1) + ' cm'];
+      }
       if (data.command_mode === 'angle_turn' && data.angle_turn_degrees !== 0) {
         const direction = data.angle_turn_degrees > 0 ? 'Xoay trái' : 'Xoay phải';
         return ['turn',direction + ' ' + Math.round(Math.abs(data.turn_progress_degrees || 0)) +
@@ -76,6 +84,12 @@
     }
 
     function finishedOperation(data) {
+      if (operationKind === 'navigate') {
+        if (data.navigation?.state === 'completed') return ['Đã hoàn thành lệnh đi tới tọa độ.',true];
+        if (data.navigation?.state === 'fault')
+          return ['Lệnh đi tới tọa độ dừng do lỗi: ' + data.navigation.fault,false];
+        return ['Lệnh đi tới tọa độ đã bị ngắt.',false];
+      }
       if (operationKind === 'turn') {
         if (data.angle_turn_state === 'completed') return ['Đã xoay đến góc đặt.',true];
         if (data.angle_turn_state === 'fault')
@@ -380,6 +394,7 @@
         const data = await response.json();
         distanceDriveOwner = data.command_mode === 'distance_drive' ? data.distance_drive?.owner : '';
         turnOwner = data.command_mode === 'angle_turn' ? data.angle_turn_owner : '';
+        navigationOwner = data.command_mode === 'navigate' ? data.navigation?.owner : '';
         lastStatusTime = new Date().toLocaleTimeString('vi-VN');
         $('homeUpdated').textContent = 'Cập nhật lúc ' + lastStatusTime;
         const operation = operationFromStatus(data);
@@ -403,6 +418,14 @@
           $('encoderState').after(piLine);
         }
         const piNumber = value => Number.isFinite(value) ? value.toFixed(1) : '--';
+        if (data.navigation?.state && data.navigation.state !== 'idle') {
+          const navigation = data.navigation;
+          const state = ({turning:'Đang xoay',driving:'Đang đi',completed:'Đã hoàn thành',
+            interrupted:'Đã ngắt',fault:'Lỗi: ' + navigation.fault})[navigation.state] || navigation.state;
+          $('navigateProgress').textContent = state + ' · đích (' +
+            piNumber(navigation.goal_x_m * 100) + ', ' + piNumber(navigation.goal_y_m * 100) +
+            ') cm · khoảng cách ước lượng còn ' + piNumber(navigation.remaining_m * 100) + ' cm';
+        }
         if (piLine) piLine.textContent = data.speed_pi_fault && data.speed_pi_fault !== 'none'
           ? 'PI tốc độ đã dừng: ' + data.speed_pi_fault
           : data.speed_pi_active
@@ -551,7 +574,7 @@
       $('hudStop').disabled = !session || releasing;
       const actionBusy = homeBusy || busy || releasing;
       $('wakeRobot').disabled = actionBusy;
-      for (const id of ['moveForward','moveBackward','moveLeft','moveRight','resetPose'])
+      for (const id of ['moveForward','moveBackward','moveLeft','moveRight','resetPose','navigateStart'])
         if ($(id)) $(id).disabled = actionBusy || operationActive || Boolean(session);
       const showBar = operationActive && !hudMode;
       $('operationBar').hidden = !showBar;
@@ -761,6 +784,9 @@
             turnOwner = 'web';
             showOperation('Đã nhận lệnh xoay ' + (action === 'turn_left' ? 'trái ' : 'phải ') +
               fields.angle_degrees + '°','turn');
+          } else if (action === 'navigate_to') {
+            navigationOwner = 'web';
+            showOperation('Đang đi tới (' + fields.x_cm + ', ' + fields.y_cm + ') cm','navigate');
           }
           notifyAction($('status').textContent,true);
         }
@@ -806,6 +832,23 @@
       void homeAction(action,{distance_cm:distance},
         'Đã nhận lệnh đi ' + distance + ' cm.',
         'Chưa thể di chuyển. Kiểm tra FC-03, MPU6050, pose và chờ xe đứng yên.');
+    }
+
+    function navigateTo() {
+      if (homeBusy || busy || releasing) return;
+      if (operationActive || session) {
+        notifyAction('Dừng xe và rời phiên HUD trước khi gửi tọa độ.',false);
+        return;
+      }
+      const inputs = ['navigateX','navigateY'].map($);
+      if (inputs.some(input => input.value.trim() === '' || !input.checkValidity())) {
+        notifyAction('Nhập X/Y nguyên từ -1000 đến 1000 cm.',false);
+        return;
+      }
+      const [x,y] = inputs.map(input => Number(input.value));
+      void homeAction('navigate_to',{x_cm:x,y_cm:y},
+        'Đã nhận đích (' + x + ', ' + y + ') cm.',
+        'Chưa thể đi tới tọa độ. Kiểm tra pose, cảm biến, đích phải cách vị trí hiện tại ít nhất 3 cm và chờ xe đứng yên.');
     }
 
     function turnAngle(action) {
@@ -870,6 +913,8 @@
     };
     $('emergencyStop').addEventListener('click',stopRobot);
     $('driveStop').addEventListener('click',stopRobot);
+    $('navigateStop').addEventListener('click',stopRobot);
+    $('navigateStart').addEventListener('click',navigateTo);
     $('operationStop').addEventListener('click',stopRobot);
     $('hudRotateStop').addEventListener('click',stopRobot);
     $('actionToastClose').addEventListener('click',() => {
@@ -958,7 +1003,8 @@
     });
     const pageLost = () => {
       if ((operationKind === 'distance' && distanceDriveOwner === 'web') ||
-          (operationKind === 'turn' && turnOwner === 'web'))
+          (operationKind === 'turn' && turnOwner === 'web') ||
+          (operationKind === 'navigate' && navigationOwner === 'web'))
         fetch('/api/action',{method:'POST',headers:{'X-Robot-Control':'1',
           'Content-Type':'application/json'},body:JSON.stringify({action:'stop'}),
           keepalive:true}).catch(() => {});

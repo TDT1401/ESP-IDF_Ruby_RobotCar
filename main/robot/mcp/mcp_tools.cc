@@ -147,17 +147,14 @@ void RegisterL298nMcpTools() {
         "self.motor.navigate_to",
         "Drive to a relative x/y goal in centimetres from the last odometry reset. No obstacle "
         "avoidance: stops for a detected front obstacle, invalid pose, or timeout. Uses "
-        "the configured pose source for control.",
+        "the configured pose source for control. Speed and timeout are calculated automatically.",
         PropertyList({Property("x_cm", kPropertyTypeInteger, -1000, 1000),
-                      Property("y_cm", kPropertyTypeInteger, -1000, 1000),
-                      Property("speed_percent", kPropertyTypeInteger, 40, 18, 70),
-                      Property("timeout_seconds", kPropertyTypeInteger, 60, 1, 120)}),
+                      Property("y_cm", kPropertyTypeInteger, -1000, 1000)}),
         [](const PropertyList& properties) -> ToolResult {
             const esp_err_t error = StartL298nCommand(ruby_robot::NavigateRequest{
                 properties["x_cm"].value<int>() / 100.0,
                 properties["y_cm"].value<int>() / 100.0,
-                properties["speed_percent"].value<int>(),
-                properties["timeout_seconds"].value<int>(), ruby_robot::NavigateOwner::kVoice});
+                ruby_robot::NavigateOwner::kVoice});
             if (error != ESP_OK)
                 return std::unexpected(std::string("Navigation unavailable: ") +
                                        esp_err_to_name(error));

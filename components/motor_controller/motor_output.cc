@@ -21,6 +21,7 @@ void MotorController::StopOutputsLocked() {
     heading_hold_active_ = false;
     heading_turn_active_ = false;
     heading_turn_complete_ = false;
+    navigation_turn_stopping_ = false;
     turn_settled_since_us_ = 0;
     turn_reverse_until_us_ = 0;
     turn_reverse_settled_since_us_ = 0;

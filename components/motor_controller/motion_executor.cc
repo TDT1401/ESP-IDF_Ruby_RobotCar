@@ -104,12 +104,6 @@ void MotorController::Tick() {
         return;
     }
     if (moving_) {
-        if (command_interface_.IsNavigation() && !command_interface_.IsNavigationTurn()) {
-            const auto imu = GetMpu6050Status();
-            heading_target_degrees_ = imu.heading_degrees +
-                                      command_interface_.NavigationHeadingErrorRad() * 180.0 /
-                                          std::numbers::pi;
-        }
         if (!UpdateHeadingPdLocked(now)) {
             StopFailedMotionLocked(now, heading_fault_);
             return;

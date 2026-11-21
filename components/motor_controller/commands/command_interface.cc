@@ -59,7 +59,7 @@ bool CommandInterface::Start(const CommandRequest& request, int64_t now_us,
         return true;
     }
     if (const auto* navigation = std::get_if<NavigateRequest>(&request)) {
-        if (!navigator_.Start(*navigation, pose, limits.metres_per_second_per_percent, now_us))
+        if (!navigator_.Start(*navigation, pose, limits, now_us))
             return false;
         last_mode_ = mode_ = CommandMode::kNavigate;
         return true;

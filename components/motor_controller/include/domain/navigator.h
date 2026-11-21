@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <numbers>
 
+#include "../commands/motion_goal_command.h"
 #include "motion_policy.h"
 #include "odometry.h"
 
@@ -16,8 +17,6 @@ enum class NavigateState { kIdle, kTurning, kDriving, kCompleted, kInterrupted, 
 struct NavigateRequest {
     double x_m = 0;
     double y_m = 0;
-    int speed_percent = 40;
-    int timeout_seconds = 60;
     NavigateOwner owner = NavigateOwner::kVoice;
 };
 
@@ -37,31 +36,47 @@ struct NavigateSnapshot {
 // and the already calibrated distance/speed limits; it owns motor transitions.
 class Navigator {
 public:
+    static constexpr double kHeadingToleranceRad = 3.0 * std::numbers::pi / 180.0;
+
     static bool Valid(const NavigateRequest& request) {
         return std::isfinite(request.x_m) && std::isfinite(request.y_m) &&
                std::abs(request.x_m) <= 10 && std::abs(request.y_m) <= 10 &&
-               request.speed_percent >= 18 && request.speed_percent <= 70 &&
-               request.timeout_seconds >= 1 && request.timeout_seconds <= 120 &&
                (request.owner == NavigateOwner::kWeb || request.owner == NavigateOwner::kVoice);
     }
 
-    bool Start(const NavigateRequest& request, const OdometrySnapshot& pose, double speed_scale,
-               int64_t now_us) {
-        if (!Valid(request) || !ValidPose(pose) || !std::isfinite(speed_scale) || speed_scale <= 0)
+    bool Start(const NavigateRequest& request, const OdometrySnapshot& pose,
+               const DistanceDriveLimits& limits, int64_t now_us) {
+        if (!Valid(request) || !ValidPose(pose) ||
+            !std::isfinite(limits.metres_per_second_per_percent) ||
+            limits.metres_per_second_per_percent <= 0 || !std::isfinite(limits.acceleration_mps2) ||
+            limits.acceleration_mps2 <= 0 ||
+            !std::isfinite(limits.deceleration_mps2) || limits.deceleration_mps2 <= 0 ||
+            limits.min_speed_percent < 1 || limits.max_speed_percent < limits.min_speed_percent ||
+            limits.max_speed_percent > 100)
             return false;
         const double distance = std::hypot(request.x_m - pose.x_m, request.y_m - pose.y_m);
         if (!std::isfinite(distance) || distance < kToleranceM)
             return false;
+        const double cruise_mps = limits.max_speed_percent * limits.metres_per_second_per_percent;
+        if (!std::isfinite(cruise_mps) || cruise_mps <= 0)
+            return false;
         request_ = request;
-        speed_scale_ = speed_scale;
+        limits_ = limits;
         started_us_ = last_update_us_ = now_us;
+        // Allow time for acceleration, braking and the initial turn, with a bounded margin.
+        const double drive_time_s = distance / cruise_mps + cruise_mps / limits.acceleration_mps2 +
+                                    cruise_mps / limits.deceleration_mps2;
+        const double timeout_s =
+            std::clamp(2.0 * drive_time_s + kTurnTimeoutUs / 1000000.0 + 5.0, 15.0, 120.0);
+        deadline_us_ = now_us + static_cast<int64_t>(timeout_s * 1000000.0);
         settled_since_us_ = 0;
         braking_ = false;
         remaining_m_ = distance;
         heading_error_rad_ = BearingError(pose);
         state_ = std::abs(heading_error_rad_) > kHeadingToleranceRad ? NavigateState::kTurning
                                                                      : NavigateState::kDriving;
-        speed_percent_ = state_ == NavigateState::kTurning ? 0 : kMinSpeedPercent;
+        speed_percent_ = state_ == NavigateState::kTurning ? 0 : limits_.min_speed_percent;
+        speed_mps_ = speed_percent_ * limits_.metres_per_second_per_percent;
         fault_ = "none";
         return true;
     }
@@ -79,11 +94,17 @@ public:
         }
         remaining_m_ = std::hypot(request_.x_m - pose.x_m, request_.y_m - pose.y_m);
         heading_error_rad_ = BearingError(pose);
-        if (state_ == NavigateState::kTurning)
+        if (state_ == NavigateState::kTurning) {
+            if (now_us - started_us_ >= kTurnTimeoutUs) {
+                fault_ = "turn_timeout";
+                return false;
+            }
             return true;
+        }
         braking_ = braking_ || remaining_m_ <= kToleranceM;
         if (braking_) {
             speed_percent_ = 0;
+            speed_mps_ = 0;
             if (left_rpm <= kSettleRpm && right_rpm <= kSettleRpm) {
                 if (settled_since_us_ == 0)
                     settled_since_us_ = now_us;
@@ -105,29 +126,30 @@ public:
         }
         const double dt = std::clamp((now_us - last_update_us_) / 1000000.0, 0.0, 0.1);
         last_update_us_ = now_us;
+        const double minimum_mps = limits_.min_speed_percent * limits_.metres_per_second_per_percent;
+        const double cruise_mps = limits_.max_speed_percent * limits_.metres_per_second_per_percent;
         const double desired_speed = std::clamp(
-            std::sqrt(2.0 * kDecelerationMps2 * std::max(0.0, remaining_m_ - kToleranceM)),
-            kMinSpeedPercent * speed_scale_, request_.speed_percent * speed_scale_);
-        const double current_speed = speed_percent_ * speed_scale_;
+            std::sqrt(2.0 * limits_.deceleration_mps2 * std::max(0.0, remaining_m_ - kToleranceM)),
+            minimum_mps, cruise_mps);
+        speed_mps_ += std::clamp(desired_speed - speed_mps_, -limits_.deceleration_mps2 * dt,
+                                limits_.acceleration_mps2 * dt);
         speed_percent_ = std::clamp(
-            static_cast<int>(std::lround((current_speed +
-                                          std::clamp(desired_speed - current_speed,
-                                                     -kDecelerationMps2 * dt,
-                                                     kAccelerationMps2 * dt)) /
-                                         speed_scale_)),
-            kMinSpeedPercent, request_.speed_percent);
+            static_cast<int>(std::lround(speed_mps_ / limits_.metres_per_second_per_percent)),
+            limits_.min_speed_percent, limits_.max_speed_percent);
         return true;
     }
 
     void BeginDrive(int64_t now_us) {
         state_ = NavigateState::kDriving;
-        speed_percent_ = kMinSpeedPercent;
+        speed_percent_ = limits_.min_speed_percent;
+        speed_mps_ = speed_percent_ * limits_.metres_per_second_per_percent;
         last_update_us_ = now_us;
     }
     void Finish(NavigateState state, const char* fault = "none") {
         state_ = state;
         fault_ = fault;
         speed_percent_ = 0;
+        speed_mps_ = 0;
     }
     bool Active() const {
         return state_ == NavigateState::kTurning || state_ == NavigateState::kDriving;
@@ -135,7 +157,7 @@ public:
     bool Turning() const { return state_ == NavigateState::kTurning; }
     bool Completed() const { return state_ == NavigateState::kCompleted; }
     bool Expired(int64_t now_us) const {
-        return Active() && now_us - started_us_ >= request_.timeout_seconds * 1000000LL;
+        return Active() && now_us >= deadline_us_;
     }
     Motion direction() const {
         return Turning() ? (heading_error_rad_ >= 0 ? Motion::kLeft : Motion::kRight)
@@ -157,24 +179,18 @@ public:
         const char* owner = "none";
         if (state_ != NavigateState::kIdle)
             owner = request_.owner == NavigateOwner::kWeb ? "web" : "voice";
-        const int remaining_ms = Active()
-                                     ? static_cast<int>(std::max<int64_t>(
-                                           0, request_.timeout_seconds * 1000LL -
-                                                  (now_us - started_us_) / 1000))
-                                     : 0;
+        const int remaining_ms =
+            Active() ? static_cast<int>(std::max<int64_t>(0, deadline_us_ - now_us) / 1000) : 0;
         return {state, owner, fault_, request_.x_m, request_.y_m, remaining_m_,
                 heading_error_rad_, speed_percent_, remaining_ms};
     }
 
 private:
     static constexpr double kToleranceM = 0.03;
-    static constexpr double kHeadingToleranceRad = 3.0 * std::numbers::pi / 180.0;
+    static constexpr int64_t kTurnTimeoutUs = 10000000;
     static constexpr double kMaxDrivingErrorRad = 45.0 * std::numbers::pi / 180.0;
-    static constexpr double kAccelerationMps2 = 0.3;
-    static constexpr double kDecelerationMps2 = 0.3;
     static constexpr double kSettleRpm = 3;
     static constexpr int64_t kSettleUs = 300000;
-    static constexpr int kMinSpeedPercent = 18;
     static bool ValidPose(const OdometrySnapshot& pose) {
         return pose.valid && std::isfinite(pose.x_m) && std::isfinite(pose.y_m) &&
                std::isfinite(pose.theta_rad);
@@ -187,12 +203,14 @@ private:
 
     NavigateRequest request_;
     NavigateState state_ = NavigateState::kIdle;
-    double speed_scale_ = 0;
+    DistanceDriveLimits limits_;
+    double speed_mps_ = 0;
     double remaining_m_ = 0;
     double heading_error_rad_ = 0;
     int speed_percent_ = 0;
     bool braking_ = false;
     int64_t started_us_ = 0;
+    int64_t deadline_us_ = 0;
     int64_t last_update_us_ = 0;
     int64_t settled_since_us_ = 0;
     const char* fault_ = "none";
