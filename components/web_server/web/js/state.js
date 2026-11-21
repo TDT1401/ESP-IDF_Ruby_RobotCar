@@ -34,7 +34,6 @@ export const state = {
   operationStale: false,
   distanceDriveOwner: '',
   turnOwner: '',
-  navigationOwner: '',
 
   // Trajectory and requested path.
   trajectory: [],

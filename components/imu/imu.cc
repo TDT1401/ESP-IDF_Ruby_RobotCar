@@ -117,7 +117,7 @@ void SampleTask(void*) {
                 IMU_LOGW("Gyro Z read failed at register 0x%02x: %s (%d consecutive)", kGyroZHigh,
                          esp_err_to_name(error), consecutive_errors);
             portENTER_CRITICAL(&status_lock);
-            status.ready = false;
+            // Keep the last sample; GetMpu6050Status() enforces its freshness limit.
             status.error = error;
             portEXIT_CRITICAL(&status_lock);
             report_read_health(now);

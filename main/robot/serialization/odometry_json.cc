@@ -11,8 +11,7 @@ bool AddMetric(cJSON* json, const char* name, double value, bool valid) {
 
 bool AddOdometryJson(cJSON* parent, const ruby_robot::OdometrySnapshot& pose,
                      const ruby_robot::EkfSnapshot& ekf,
-                     const ruby_robot::DistanceDriveSnapshot& command,
-                     const ruby_robot::NavigateSnapshot& navigation) {
+                     const ruby_robot::DistanceDriveSnapshot& command) {
     auto* odometry = cJSON_AddObjectToObject(parent, "odometry");
     if (!odometry || !cJSON_AddBoolToObject(odometry, "valid", pose.valid) ||
         !cJSON_AddBoolToObject(odometry, "initialized", pose.initialized) ||
@@ -41,17 +40,6 @@ bool AddOdometryJson(cJSON* parent, const ruby_robot::OdometrySnapshot& pose,
         !AddMetric(filter, "sigma_x_m", std::sqrt(ekf.variance_x_m2), ekf.valid) ||
         !AddMetric(filter, "sigma_y_m", std::sqrt(ekf.variance_y_m2), ekf.valid) ||
         !AddMetric(filter, "sigma_theta_rad", std::sqrt(ekf.variance_theta_rad2), ekf.valid))
-        return false;
-    auto* nav = cJSON_AddObjectToObject(parent, "navigation");
-    if (!nav || !cJSON_AddStringToObject(nav, "state", navigation.state) ||
-        !cJSON_AddStringToObject(nav, "owner", navigation.owner) ||
-        !cJSON_AddStringToObject(nav, "fault", navigation.fault) ||
-        !cJSON_AddNumberToObject(nav, "goal_x_m", navigation.goal_x_m) ||
-        !cJSON_AddNumberToObject(nav, "goal_y_m", navigation.goal_y_m) ||
-        !cJSON_AddNumberToObject(nav, "remaining_m", navigation.remaining_m) ||
-        !cJSON_AddNumberToObject(nav, "heading_error_rad", navigation.heading_error_rad) ||
-        !cJSON_AddNumberToObject(nav, "speed_percent", navigation.speed_percent) ||
-        !cJSON_AddNumberToObject(nav, "remaining_ms", navigation.remaining_ms))
         return false;
     auto* drive = cJSON_AddObjectToObject(parent, "distance_drive");
     return drive && cJSON_AddStringToObject(drive, "state", command.state) &&

@@ -22,7 +22,7 @@
 2. **Đi thẳng giữ hướng** bằng Encoder + IMU.
 3. **Di chuyển quãng đường chỉ định** khi không có vật cản.
 4. **Quay một góc chỉ định** (ví dụ: ±90°).
-5. Ước lượng `(x, y, θ)` từ Encoder + IMU và đi tới tọa độ tương đối `(x, y)` khi không có vật cản.
+5. Ước lượng `(x, y, θ)` từ Encoder + IMU để theo dõi quỹ đạo; điều hướng tới tọa độ dự kiến chuyển sang Raspberry Pi/ROS 2.
 6. Dừng an toàn khi lỗi cảm biến / mất lệnh / điều khiển bất thường.
 
 ### Giai đoạn B — High level 
@@ -73,12 +73,12 @@ Checklist giữ theo ghi nhận cũ, không xác nhận thêm kết quả nghi�
 
 **Done khi:** Thực hiện được distance/angle goals, cập nhật pose và báo cáo sai số qua nhiều lần chạy.
 
-### Phase 4 — EKF và điều hướng đến tọa độ (x, y) 🔴
+### Phase 4 — EKF và theo dõi pose 🔴
 
 - [x] Chạy EKF song song odometry, log pose/độ bất định/validity; so sánh bằng phép đo độc lập trên cùng bài tiến, lùi, quay.
-- [x] Thêm `Navigator` tới `(x_goal, y_goal)` qua controller hiện có; dừng khi pose lỗi, timeout hoặc gặp vật cản.
+- Chức năng đi tới tọa độ đã được gỡ khỏi firmware; odometry/EKF và telemetry tiếp tục được giữ để theo dõi quỹ đạo.
 
-**Done khi:** EKF tốt hơn và ổn định trước khi dùng điều khiển; tới nhiều đích có cả `x/y ≠ 0` trong ngưỡng, báo lỗi khi không hoàn thành. Encoder + IMU không phát hiện mọi lần trượt bánh.
+**Done khi:** So sánh pose EKF với odometry bằng phép đo độc lập, đánh giá độ bất định và độ ổn định. Encoder + IMU không phát hiện mọi lần trượt bánh.
 
 ### Phase 5 — Lắp phần cứng HC-SR04 🔴
 

@@ -128,15 +128,6 @@ bool ReadInteger(const cJSON* json, const char* key, uint32_t minimum, uint32_t 
     return true;
 }
 
-bool ReadSignedInteger(const cJSON* json, const char* key, int minimum, int maximum, int* result) {
-    const auto* item = cJSON_GetObjectItemCaseSensitive(json, key);
-    if (!cJSON_IsNumber(item) || !std::isfinite(item->valuedouble) || item->valuedouble < minimum ||
-        item->valuedouble > maximum || std::floor(item->valuedouble) != item->valuedouble)
-        return false;
-    *result = static_cast<int>(item->valuedouble);
-    return true;
-}
-
 esp_err_t Command(httpd_req_t* req) {
     char body[192];
     if (!IsControlRequest(req) || req->content_len == 0 || req->content_len >= sizeof(body)) {
@@ -222,19 +213,6 @@ esp_err_t Action(httpd_req_t* req) {
         if (ResetL298nOdometry() != ESP_OK)
             return Reply(req, "409 Conflict",
                          "{\"error\":\"Stop, release HUD and wait for sensors\"}");
-        return Reply(req, "200 OK", "{\"ok\":true}");
-    }
-
-    if (strcmp(action->valuestring, "navigate_to") == 0) {
-        int x_cm = 0, y_cm = 0;
-        if (cJSON_GetArraySize(json.get()) != 3 ||
-            !ReadSignedInteger(json.get(), "x_cm", -1000, 1000, &x_cm) ||
-            !ReadSignedInteger(json.get(), "y_cm", -1000, 1000, &y_cm))
-            return Reply(req, "400 Bad Request", "{\"error\":\"Invalid navigation goal\"}");
-        const auto error = StartL298nCommand(ruby_robot::NavigateRequest{
-            x_cm / 100.0, y_cm / 100.0, ruby_robot::NavigateOwner::kWeb});
-        if (error != ESP_OK)
-            return Reply(req, "409 Conflict", "{\"error\":\"Navigation unavailable\"}");
         return Reply(req, "200 OK", "{\"ok\":true}");
     }
 

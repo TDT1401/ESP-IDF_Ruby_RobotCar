@@ -2,7 +2,7 @@ import {state} from './state.js';
 import {postKeepalive} from './api.js';
 import {$, driveButtons, speedValues, configureUi, showPanel, dismissNotice,
   notifyAction, driveIsFullscreen, syncWakeLock, render} from './ui.js';
-import {homeAction, moveDistance, navigateTo, turnAngle} from './actions.js';
+import {homeAction, moveDistance, turnAngle} from './actions.js';
 import {claimControl, enterHud, exitHud, setSpeed, requestDirection,
   stop, park, pump} from './hud.js';
 import {refreshTelemetry} from './telemetry.js';
@@ -34,8 +34,6 @@ const stopRobot = () => {
 };
 $('emergencyStop').addEventListener('click',stopRobot);
 $('driveStop').addEventListener('click',stopRobot);
-$('navigateStop').addEventListener('click',stopRobot);
-$('navigateStart').addEventListener('click',navigateTo);
 $('operationStop').addEventListener('click',stopRobot);
 $('hudRotateStop').addEventListener('click',stopRobot);
 $('actionToastClose').addEventListener('click',() => {
@@ -104,8 +102,7 @@ window.addEventListener('keydown', event => {
 });
 const pageLost = () => {
   if ((state.operationKind === 'distance' && state.distanceDriveOwner === 'web') ||
-      (state.operationKind === 'turn' && state.turnOwner === 'web') ||
-      (state.operationKind === 'navigate' && state.navigationOwner === 'web'))
+      (state.operationKind === 'turn' && state.turnOwner === 'web'))
     void postKeepalive('/api/action',JSON.stringify({action:'stop'}));
   park('Đã dừng xe và trả quyền điều khiển về giọng nói.');
 };

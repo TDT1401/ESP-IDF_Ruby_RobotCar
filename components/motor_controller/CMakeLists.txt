@@ -1,7 +1,6 @@
 idf_component_register(SRCS "motor_controller.cc"
                             "manual/manual_control.cc"
                             "distance/distance_drive.cc"
-                            "navigation/navigator.cc"
                             "control/motion_executor.cc"
                             "control/motor_output.cc"
                             "control/speed_control.cc"

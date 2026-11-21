@@ -9,7 +9,6 @@
 #include "distance/distance_drive.h"
 #include "imu.h"
 #include "motor_driver.h"
-#include "navigation/navigator.h"
 #include "odometry/pose_ekf.h"
 #include "ultrasonic_sensor.h"
 #include "wheel_encoder.h"
@@ -32,14 +31,13 @@ struct AngleTurnSnapshot {
     int speed_percent;  // Filled from the controller's automatic turn profile.
 };
 
-using CommandRequest = std::variant<AngleTurnRequest, DistanceDriveRequest, NavigateRequest>;
+using CommandRequest = std::variant<AngleTurnRequest, DistanceDriveRequest>;
 
 struct CommandSnapshot {
     const char* mode;
     const char* owner;
     AngleTurnSnapshot angle_turn;
     DistanceDriveSnapshot distance_drive;
-    NavigateSnapshot navigate;
 };
 
 struct MotorControllerConfig {
@@ -69,7 +67,6 @@ struct MotorControllerConfig {
     double heading_turn_left_friction_pwm_percent;
     double heading_turn_right_friction_pwm_percent;
     double odometry_track_width_mm;
-    bool navigation_use_ekf;
     int distance_drive_max_speed_percent;
     double distance_drive_acceleration_mps2;
     double distance_drive_deceleration_mps2;

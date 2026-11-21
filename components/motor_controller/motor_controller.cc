@@ -7,7 +7,6 @@
 #include <cassert>
 #include <cmath>
 #include <cstdlib>
-#include <numbers>
 
 #include "imu.h"
 #include "ultrasonic_sensor.h"
@@ -37,10 +36,8 @@ void MotorController::Stop() {
 esp_err_t MotorController::StartCommand(const CommandRequest& request) {
     const auto* turn = std::get_if<AngleTurnRequest>(&request);
     const auto* drive = std::get_if<DistanceDriveRequest>(&request);
-    const auto* navigation = std::get_if<NavigateRequest>(&request);
-    if ((!turn && !drive && !navigation) || (turn && !ValidAngleTurn(*turn)) ||
-        (drive && !DistanceDrive::Valid(*drive)) ||
-        (navigation && !Navigator::Valid(*navigation)))
+    if ((!turn && !drive) || (turn && !ValidAngleTurn(*turn)) ||
+        (drive && !DistanceDrive::Valid(*drive)))
         return ESP_ERR_INVALID_ARG;
     const bool needs_odometry = turn == nullptr;
     std::lock_guard lock(mutex_);
@@ -66,25 +63,19 @@ esp_err_t MotorController::StartCommand(const CommandRequest& request) {
     speed_pi_fault_ = "none";
     heading_fault_ = "none";
     const int64_t now = esp_timer_get_time();
-    const auto goal_pose = std::holds_alternative<NavigateRequest>(request)
-                               ? NavigationPoseLocked()
-                               : odometry_.Snapshot();
-    if (!StartGoalLocked(request, now, goal_pose, DistanceLimits()))
+    if (!StartGoalLocked(request, now, odometry_.Snapshot(), DistanceLimits()))
         return ESP_ERR_INVALID_STATE;
     if (!PrepareMotionLocked(GoalDirectionLocked())) {
         FinishCommandLocked(esp_timer_get_time(), false, "motor_error");
         return fault_ != ESP_OK ? fault_ : ESP_FAIL;
     }
     heading_hold_active_ = true;
-    heading_turn_active_ = IsAngleTurnLocked() || IsNavigationTurnLocked();
+    heading_turn_active_ = IsAngleTurnLocked();
     heading_turn_start_degrees_ = imu.heading_degrees;
     turn_progress_degrees_ = 0;
     const int angle = GoalAngleDegreesLocked();
     const int sign = GoalDirectionLocked() == Motion::kLeft ? 1 : -1;
-    heading_target_degrees_ =
-        imu.heading_degrees + (IsNavigationLocked()
-                                  ? navigator_.heading_error_rad() * 180.0 / std::numbers::pi
-                                  : sign * angle);
+    heading_target_degrees_ = imu.heading_degrees + sign * angle;
     return ESP_OK;
 }
 
@@ -106,8 +97,6 @@ L298nMotorStatus MotorController::Snapshot() {
     status.active_speed_percent = moving_ ? ActiveSpeedLocked() : 0;
     if (IsAngleTurnLocked())
         status.command.angle_turn.speed_percent = status.active_speed_percent;
-    if (IsNavigationTurnLocked())
-        status.command.navigate.speed_percent = status.active_speed_percent;
     status.moving = moving_;
     status.pending = motion_ != Motion::kStop && !moving_;
     status.web_manual = web_control_.active();
@@ -246,18 +235,10 @@ bool MotorController::StartGoalLocked(const CommandRequest& request, int64_t now
         last_mode_ = mode_ = CommandMode::kDistanceDrive;
         return true;
     }
-    if (const auto* navigation = std::get_if<NavigateRequest>(&request)) {
-        if (!navigator_.Start(*navigation, pose, limits, now_us))
-            return false;
-        last_mode_ = mode_ = CommandMode::kNavigate;
-        return true;
-    }
     return false;
 }
 
 Motion MotorController::GoalDirectionLocked() const {
-    if (mode_ == CommandMode::kNavigate)
-        return navigator_.direction();
     if (mode_ == CommandMode::kDistanceDrive)
         return distance_drive_.direction();
     if (mode_ == CommandMode::kAngleTurn)
@@ -268,8 +249,6 @@ Motion MotorController::GoalDirectionLocked() const {
 }
 
 int MotorController::GoalSpeedLocked() const {
-    if (mode_ == CommandMode::kNavigate)
-        return navigator_.speed_percent();
     if (mode_ == CommandMode::kDistanceDrive)
         return distance_drive_.speed_percent();
     return 0;  // The controller computes angle-turn speed from IMU feedback.
@@ -280,16 +259,12 @@ int MotorController::GoalAngleDegreesLocked() const {
 }
 
 bool MotorController::GoalExpiredLocked(int64_t now_us) const {
-    if (mode_ == CommandMode::kNavigate)
-        return navigator_.Expired(now_us);
     if (mode_ == CommandMode::kDistanceDrive)
         return distance_drive_.Expired(now_us);
     return mode_ == CommandMode::kAngleTurn && now_us >= turn_deadline_us_;
 }
 
 bool MotorController::GoalCompletionReadyLocked() const {
-    if (mode_ == CommandMode::kNavigate)
-        return navigator_.Completed();
     if (mode_ == CommandMode::kDistanceDrive)
         return distance_drive_.CompletionReady();
     return false;
@@ -300,8 +275,6 @@ void MotorController::CompleteGoalLocked(int64_t now_us) {
         turn_state_ = AngleTurnState::kCompleted;
     else if (mode_ == CommandMode::kDistanceDrive)
         distance_drive_.Finish(DistanceDriveState::kCompleted, now_us);
-    else if (mode_ == CommandMode::kNavigate)
-        navigator_.Finish(NavigateState::kCompleted);
     mode_ = CommandMode::kIdle;
 }
 
@@ -310,22 +283,16 @@ void MotorController::FailGoalLocked(int64_t now_us, const char* fault) {
         turn_state_ = AngleTurnState::kFault;
     else if (mode_ == CommandMode::kDistanceDrive)
         distance_drive_.Finish(DistanceDriveState::kFault, now_us, fault);
-    else if (mode_ == CommandMode::kNavigate)
-        navigator_.Finish(NavigateState::kFault, fault);
     mode_ = CommandMode::kIdle;
 }
 
 bool MotorController::UpdateGoalLocked(const OdometrySnapshot& pose, double left_rpm,
                                       double right_rpm, int64_t now_us) {
-    if (mode_ == CommandMode::kNavigate)
-        return navigator_.Update(pose, left_rpm, right_rpm, now_us);
     return mode_ != CommandMode::kDistanceDrive ||
            distance_drive_.Update(pose, left_rpm, right_rpm, now_us);
 }
 
 const char* MotorController::GoalFaultLocked() const {
-    if (mode_ == CommandMode::kNavigate)
-        return navigator_.fault();
     return mode_ == CommandMode::kDistanceDrive ? distance_drive_.fault() : "none";
 }
 
@@ -336,22 +303,17 @@ void MotorController::StopGoalLocked(int64_t now_us) {
     } else if (mode_ == CommandMode::kDistanceDrive) {
         distance_drive_.Finish(DistanceDriveState::kInterrupted, now_us);
         mode_ = CommandMode::kIdle;
-    } else if (mode_ == CommandMode::kNavigate) {
-        navigator_.Finish(NavigateState::kInterrupted);
-        mode_ = CommandMode::kIdle;
     }
 }
 
 CommandSnapshot MotorController::CommandSnapshotLocked(int64_t now_us) const {
     const auto distance = distance_drive_.Snapshot(now_us);
     const auto turn = TurnSnapshotLocked();
-    const auto navigate = navigator_.Snapshot(now_us);
     const char* owner = mode_ == CommandMode::kDistanceDrive ? distance.owner
                         : mode_ == CommandMode::kAngleTurn   ? turn.owner
-                        : mode_ == CommandMode::kNavigate    ? navigate.owner
                         : mode_ == CommandMode::kManual      ? "web"
                                                              : "none";
-    return {ModeName(mode_), owner, turn, distance, navigate};
+    return {ModeName(mode_), owner, turn, distance};
 }
 
 const char* MotorController::ModeName(CommandMode mode) {
@@ -362,8 +324,6 @@ const char* MotorController::ModeName(CommandMode mode) {
             return "angle_turn";
         case CommandMode::kDistanceDrive:
             return "distance_drive";
-        case CommandMode::kNavigate:
-            return "navigate";
         default:
             return "idle";
     }

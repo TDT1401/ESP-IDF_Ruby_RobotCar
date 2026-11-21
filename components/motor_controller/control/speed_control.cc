@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
-#include <numbers>
 
 #include "imu.h"
 
@@ -41,7 +40,7 @@ double FrictionPwmPercent(CommandMode mode, bool heading_turn, bool left,
         // Ramp friction compensation with the RPM target during startup.
         return friction * std::min(1.0, target_rpm / config.heading_turn_min_rpm);
     }
-    if (mode == CommandMode::kDistanceDrive || mode == CommandMode::kNavigate)
+    if (mode == CommandMode::kDistanceDrive)
         return left ? config.distance_drive_left_friction_pwm_percent
                     : config.distance_drive_right_friction_pwm_percent;
     return 0;
@@ -107,32 +106,8 @@ bool MotorController::UpdateTurnTargetsLocked(const Mpu6050Status& imu, int64_t 
     const bool stationary = encoder.left.rpm <= config_.heading_turn_settle_rpm &&
                             encoder.right.rpm <= config_.heading_turn_settle_rpm &&
                             std::abs(imu.gyro_z_dps) <= config_.heading_turn_settle_rate_dps;
-    const bool navigation_turn = IsNavigationTurnLocked();
-    const double tolerance_degrees = navigation_turn
-                                         ? Navigator::kHeadingToleranceRad * 180.0 / std::numbers::pi
-                                         : config_.heading_turn_tolerance_degrees;
-    const bool at_target = std::abs(error) <= tolerance_degrees;
+    const bool at_target = std::abs(error) <= config_.heading_turn_tolerance_degrees;
     heading_turn_complete_ = false;
-    if (navigation_turn && at_target)
-        navigation_turn_stopping_ = true;
-    if (navigation_turn && navigation_turn_stopping_) {
-        // Keep zero targets while coasting; allow small heading drift before driving.
-        if (stationary) {
-            if (turn_settled_since_us_ == 0)
-                turn_settled_since_us_ = now_us;
-            if (now_us - turn_settled_since_us_ >= kTurnSettleUs) {
-                if (std::abs(error) <= 2.0 * tolerance_degrees) {
-                    heading_turn_complete_ = true;
-                } else {
-                    navigation_turn_stopping_ = false;
-                    turn_settled_since_us_ = 0;
-                }
-            }
-        } else {
-            turn_settled_since_us_ = 0;
-        }
-        return true;
-    }
     if (at_target && stationary) {
         if (turn_settled_since_us_ == 0)
             turn_settled_since_us_ = now_us;
@@ -209,10 +184,6 @@ bool MotorController::UpdateHeadingPdLocked(int64_t now_us) {
     if (!imu.ready || !imu.heading_valid) {
         heading_fault_ = !imu.ready ? "imu_unavailable" : "heading_invalid";
         return false;
-    }
-    if (IsNavigationLocked()) {
-        heading_target_degrees_ =
-            imu.heading_degrees + navigator_.heading_error_rad() * 180.0 / std::numbers::pi;
     }
     const int speed = ActiveSpeedLocked();
     // A distance goal reaching its braking point must zero the targets immediately.

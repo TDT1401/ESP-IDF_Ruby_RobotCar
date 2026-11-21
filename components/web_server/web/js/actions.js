@@ -41,9 +41,6 @@ export async function homeAction(action, fields, success, failure) {
         state.turnOwner = 'web';
         showOperation('Đã nhận lệnh xoay ' + (action === 'turn_left' ? 'trái ' : 'phải ') +
           fields.angle_degrees + '°','turn');
-      } else if (action === 'navigate_to') {
-        state.navigationOwner = 'web';
-        showOperation('Đang đi tới (' + fields.x_cm + ', ' + fields.y_cm + ') cm','navigate');
       }
       notifyAction($('status').textContent,true);
     }
@@ -89,23 +86,6 @@ export function moveDistance(action) {
   void homeAction(action,{distance_cm:distance},
     'Đã nhận lệnh đi ' + distance + ' cm.',
     'Chưa thể di chuyển. Kiểm tra FC-03, MPU6050, pose và chờ xe đứng yên.');
-}
-
-export function navigateTo() {
-  if (state.homeBusy || state.busy || state.releasing) return;
-  if (state.operationActive || state.session) {
-    notifyAction('Dừng xe và rời phiên HUD trước khi gửi tọa độ.',false);
-    return;
-  }
-  const inputs = ['navigateX','navigateY'].map($);
-  if (inputs.some(input => input.value.trim() === '' || !input.checkValidity())) {
-    notifyAction('Nhập X/Y nguyên từ -1000 đến 1000 cm.',false);
-    return;
-  }
-  const [x,y] = inputs.map(input => Number(input.value));
-  void homeAction('navigate_to',{x_cm:x,y_cm:y},
-    'Đã nhận đích (' + x + ', ' + y + ') cm.',
-    'Chưa thể đi tới tọa độ. Kiểm tra pose, cảm biến, đích phải cách vị trí hiện tại ít nhất 3 cm và chờ xe đứng yên.');
 }
 
 export function turnAngle(action) {

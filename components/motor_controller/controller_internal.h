@@ -21,7 +21,7 @@
 
 namespace ruby_robot {
 
-enum class CommandMode { kIdle, kManual, kAngleTurn, kDistanceDrive, kNavigate };
+enum class CommandMode { kIdle, kManual, kAngleTurn, kDistanceDrive };
 
 constexpr int kMinAngleDegrees = 5;
 constexpr int kMaxAngleDegrees = 180;
@@ -60,7 +60,6 @@ private:
     CommandMode mode_ = CommandMode::kIdle;
     CommandMode last_mode_ = CommandMode::kIdle;
     DistanceDrive distance_drive_;
-    Navigator navigator_;
     AngleTurnRequest turn_request_;
     AngleTurnState turn_state_ = AngleTurnState::kIdle;
     int64_t turn_deadline_us_ = 0;
@@ -78,7 +77,6 @@ private:
     bool heading_hold_active_ = false;
     bool heading_turn_active_ = false;
     bool heading_turn_complete_ = false;
-    bool navigation_turn_stopping_ = false;
     double heading_turn_start_degrees_ = 0;
     double turn_progress_degrees_ = 0;
     int64_t turn_settled_since_us_ = 0;
@@ -117,8 +115,6 @@ private:
         return mode_ != CommandMode::kIdle && mode_ != CommandMode::kManual;
     }
     bool IsAngleTurnLocked() const { return mode_ == CommandMode::kAngleTurn; }
-    bool IsNavigationLocked() const { return mode_ == CommandMode::kNavigate; }
-    bool IsNavigationTurnLocked() const { return IsNavigationLocked() && navigator_.Turning(); }
     bool StartGoalLocked(const CommandRequest& request, int64_t now_us,
                          const OdometrySnapshot& pose, const DistanceDriveLimits& limits);
     Motion GoalDirectionLocked() const;
@@ -143,7 +139,6 @@ private:
     void FinishCommandLocked(int64_t now_us, bool completed, const char* fault = "control_error");
     OdometrySample ReadOdometrySampleLocked(int64_t now_us);
     void UpdateOdometryLocked(int64_t now_us);
-    OdometrySnapshot NavigationPoseLocked() const;
     bool OdometryStationaryLocked(int64_t now_us) const;
     DistanceDriveLimits DistanceLimits() const;
     int ActiveSpeedLocked() const;

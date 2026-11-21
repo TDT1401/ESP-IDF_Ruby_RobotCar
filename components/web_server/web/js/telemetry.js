@@ -12,7 +12,6 @@ export async function refreshTelemetry() {
     const data = await getStatus();
     state.distanceDriveOwner = data.command_mode === 'distance_drive' ? data.distance_drive?.owner : '';
     state.turnOwner = data.command_mode === 'angle_turn' ? data.angle_turn_owner : '';
-    state.navigationOwner = data.command_mode === 'navigate' ? data.navigation?.owner : '';
     state.lastStatusTime = new Date().toLocaleTimeString('vi-VN');
     $('homeUpdated').textContent = 'Cập nhật lúc ' + state.lastStatusTime;
     const operation = operationFromStatus(data);
@@ -36,14 +35,6 @@ export async function refreshTelemetry() {
       $('encoderState').after(piLine);
     }
     const piNumber = value => Number.isFinite(value) ? value.toFixed(1) : '--';
-    if (data.navigation?.state && data.navigation.state !== 'idle') {
-      const navigation = data.navigation;
-      const navigationState = ({turning:'Đang xoay',driving:'Đang đi',completed:'Đã hoàn thành',
-        interrupted:'Đã ngắt',fault:'Lỗi: ' + navigation.fault})[navigation.state] || navigation.state;
-      $('navigateProgress').textContent = navigationState + ' · đích (' +
-        piNumber(navigation.goal_x_m * 100) + ', ' + piNumber(navigation.goal_y_m * 100) +
-        ') cm · khoảng cách ước lượng còn ' + piNumber(navigation.remaining_m * 100) + ' cm';
-    }
     if (piLine) piLine.textContent = data.speed_pi_fault && data.speed_pi_fault !== 'none'
       ? 'PI tốc độ đã dừng: ' + data.speed_pi_fault
       : data.speed_pi_active

@@ -36,13 +36,6 @@ export function showOperation(text, kind) {
 }
 
 export function operationFromStatus(data) {
-  if (data.command_mode === 'navigate' && data.navigation) {
-    const navigation = data.navigation;
-    const navigationState = navigation.state === 'turning' ? 'Đang xoay' : 'Đang đi';
-    return ['navigate',navigationState + ' tới (' + Math.round(navigation.goal_x_m * 100) + ', ' +
-      Math.round(navigation.goal_y_m * 100) + ') cm · còn ' +
-      (navigation.remaining_m * 100).toFixed(1) + ' cm'];
-  }
   if (data.command_mode === 'angle_turn' && data.angle_turn_degrees !== 0) {
     const direction = data.angle_turn_degrees > 0 ? 'Xoay trái' : 'Xoay phải';
     return ['turn',direction + ' ' + Math.round(Math.abs(data.turn_progress_degrees || 0)) +
@@ -68,12 +61,6 @@ export function operationFromStatus(data) {
 }
 
 export function finishedOperation(data) {
-  if (state.operationKind === 'navigate') {
-    if (data.navigation?.state === 'completed') return ['Đã hoàn thành lệnh đi tới tọa độ.',true];
-    if (data.navigation?.state === 'fault')
-      return ['Lệnh đi tới tọa độ dừng do lỗi: ' + data.navigation.fault,false];
-    return ['Lệnh đi tới tọa độ đã bị ngắt.',false];
-  }
   if (state.operationKind === 'turn') {
     if (data.angle_turn_state === 'completed') return ['Đã xoay đến góc đặt.',true];
     if (data.angle_turn_state === 'fault')
@@ -219,7 +206,7 @@ export function render() {
   $('hudStop').disabled = !state.session || state.releasing;
   const actionBusy = state.homeBusy || state.busy || state.releasing;
   $('wakeRobot').disabled = actionBusy;
-  for (const id of ['moveForward','moveBackward','moveLeft','moveRight','resetPose','navigateStart'])
+  for (const id of ['moveForward','moveBackward','moveLeft','moveRight','resetPose'])
     if ($(id)) $(id).disabled = actionBusy || state.operationActive || Boolean(state.session);
   const showBar = state.operationActive && !state.hudMode;
   $('operationBar').hidden = !showBar;

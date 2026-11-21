@@ -66,23 +66,6 @@ void MotorController::UpdateOdometryLocked(int64_t now_us) {
     }
 }
 
-OdometrySnapshot MotorController::NavigationPoseLocked() const {
-    auto pose = odometry_.Snapshot();
-    if (config_.navigation_use_ekf) {
-        const auto& ekf = ekf_.Snapshot();
-        if (!ekf.valid || ekf.variance_x_m2 + ekf.variance_y_m2 > 0.09 ||
-            ekf.variance_theta_rad2 > 0.12) {
-            pose.valid = false;
-            pose.fault = ekf.valid ? "ekf_uncertain" : ekf.fault;
-        } else {
-            pose.x_m = ekf.x_m;
-            pose.y_m = ekf.y_m;
-            pose.theta_rad = ekf.theta_rad;
-        }
-    }
-    return pose;
-}
-
 esp_err_t MotorController::ResetOdometry() {
     std::lock_guard lock(mutex_);
     const int64_t now_us = esp_timer_get_time();

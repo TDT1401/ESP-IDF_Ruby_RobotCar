@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="930" viewBox="0 0 1200 930" role="img" aria-labelledby="title desc">
   <title id="title">Vòng điều khiển chuyển động Ruby RobotCar</title>
-  <desc id="desc">Web manual và goals được kiểm tra trước khi controller thực thi. Goal tạo mục tiêu hướng và tốc độ; Heading PD điều chỉnh RPM, Speed PI điều chỉnh PWM. Encoder và IMU trả feedback. HC-SR04 chỉ tự dừng navigation, manual dùng âm cảnh báo.</desc>
+  <desc id="desc">Web manual và goals được kiểm tra trước khi controller thực thi. Goal tạo mục tiêu hướng và tốc độ; Heading PD điều chỉnh RPM, Speed PI điều chỉnh PWM. Encoder và IMU trả feedback. HC-SR04 cung cấp telemetry và âm cảnh báo cho Web manual.</desc>
   <defs>
     <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#475569"/></marker>
     <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#15803d"/></marker>
@@ -15,7 +15,7 @@
   <text x="70" y="180" class="t">Claim → session + sequence → heartbeat</text>
   <rect x="670" y="115" width="480" height="86" class="b" fill="#f5f3ff" stroke="#a78bfa"/>
   <text x="690" y="150" class="h">Web action / MCP tool</text>
-  <text x="690" y="180" class="t">DistanceDrive / AngleTurn / Navigate request</text>
+  <text x="690" y="180" class="t">DistanceDrive / AngleTurn request</text>
   <rect x="285" y="244" width="630" height="90" class="b" fill="#fff7ed" stroke="#fb923c"/>
   <text x="305" y="279" class="h">MotorController · kiểm tra và thực thi</text>
   <text x="305" y="310" class="t">Quyền lái · state · Wi-Fi · feedback · timeout · lỗi</text>
@@ -23,7 +23,7 @@
 
   <rect x="50" y="380" width="300" height="112" class="b" fill="#fff7ed" stroke="#fb923c"/>
   <text x="70" y="415" class="h">Goal / profile</text>
-  <text x="70" y="445" class="t">Khoảng cách / góc / tọa độ</text>
+  <text x="70" y="445" class="t">Khoảng cách / góc</text>
   <text x="70" y="474" class="s">Tick: 10 ms · cập nhật pose</text>
   <rect x="450" y="380" width="300" height="112" class="b" fill="#eff6ff" stroke="#60a5fa"/>
   <text x="470" y="415" class="h">Heading PD</text>
@@ -57,7 +57,7 @@
   <rect x="50" y="558" width="300" height="102" class="b" fill="#f0fdf4" stroke="#4ade80"/>
   <text x="70" y="594" class="h">Odometry / Pose EKF</text>
   <text x="70" y="624" class="t">Pose tương đối: x, y, theta</text>
-  <text x="70" y="648" class="s">Hiện navigation dùng odometry</text>
+  <text x="70" y="648" class="s">Odometry đo tiến độ quãng đường</text>
   <path d="M450 609H350" class="feedback"/>
   <path d="M200 558V492" class="feedback"/><text x="210" y="532" class="s">Pose / tiến độ</text>
 
@@ -67,6 +67,6 @@
   <path d="M200 660V712" class="f"/><path d="M600 660V712" class="f"/><path d="M1000 660V712" class="f"/>
 
   <rect x="50" y="838" width="1100" height="59" rx="12" fill="#ffedd5"/>
-  <text x="70" y="863" class="t">HC-SR04: navigation dừng khi thấy vật cản với mẫu hợp lệ, mới; Web manual dùng âm cảnh báo.</text>
-  <text x="70" y="885" class="s">Distance drive / quay góc không dùng nhánh tự dừng siêu âm dành cho navigation.</text>
+  <text x="70" y="863" class="t">HC-SR04: Web manual phát âm cảnh báo khi tiến gần vật cản với mẫu hợp lệ và mới.</text>
+  <text x="70" y="885" class="s">Distance drive / quay góc không tự dừng theo siêu âm.</text>
 </svg>

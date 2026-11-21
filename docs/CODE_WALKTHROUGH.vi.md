@@ -22,7 +22,7 @@ ESP32-S3 đảm nhận hai nhóm công việc song song:
 | [main/device_state_machine.cc](../main/device_state_machine.cc) | Kiểm tra chuyển trạng thái hợp lệ | `IsValidTransition()`, `TransitionTo()` |
 | [main/robot_car_board.cc](../main/robot_car_board.cc) | Board cụ thể, nút BOOT, audio I2S, sự kiện Wi-Fi | `RobotCarBoard`, `DECLARE_BOARD(...)` |
 | [main/robot/robot_board.cc](../main/robot/robot_board.cc) | Lắp ghép motor, Web, Telegram và robot MCP | `MakeMotorControllerConfig()`, `InitializeRobotBoard()` |
-| [components/motor_controller](../components/motor_controller/) | Lệnh, feedback, safety, odometry và navigation | `StartCommand()`, `Tick()`, `Snapshot()` |
+| [components/motor_controller](../components/motor_controller/) | Lệnh, feedback, safety và odometry/EKF | `StartCommand()`, `Tick()`, `Snapshot()` |
 | [components/audio](../components/audio/) | Pipeline âm thanh và wake word | `AudioService`, `AfeAudioEngine` |
 | [components/web_server](../components/web_server/) | Trang điều khiển và HTTP API nội bộ | `Claim()`, `Command()`, `Action()`, `Status()` |
 | [main/robot/mcp/mcp_tools.cc](../main/robot/mcp/mcp_tools.cc) | Chuyển lời gọi tool thành lệnh robot | `RegisterL298nMcpTools()` |
@@ -144,26 +144,25 @@ Chi tiết: [audio README](../components/audio/README.md), [WebSocket](xiaozhi/w
 
 Session bảo vệ quyền điều khiển và chống lệnh cũ đến muộn. Lệnh `stop` trong manual dừng motor nhưng vẫn có thể giữ session; `release` thu hồi session. Global stop từ `/api/action` hoặc MCP dừng và giải phóng quyền Web.
 
-### Đường goal: đi khoảng cách, quay góc hoặc đến tọa độ
+### Đường goal: đi khoảng cách hoặc quay góc
 
-Web `POST /api/action` và MCP tools tạo request như `DistanceDriveRequest`, `AngleTurnRequest`, `NavigateRequest`. Chúng đi vào `StartCommand()` qua các API `MoveL298nForward()`, `TurnL298nLeft()` hoặc `StartL298nCommand()`.
+Web `POST /api/action` và MCP tools tạo request như `DistanceDriveRequest`, `AngleTurnRequest`. Chúng đi vào `StartCommand()` qua các API `MoveL298nForward()`, `TurnL298nLeft()` hoặc `StartL298nCommand()`.
 
-Trước khi bắt đầu, controller kiểm tra request, Wi-Fi, chính sách ứng dụng, quyền Web, command đang chạy, lỗi phần cứng và feedback cần thiết. Lệnh khoảng cách/navigation còn yêu cầu odometry hợp lệ và xe đứng yên. Không có hàng đợi goal để tự chạy nối tiếp: controller bận sẽ từ chối lệnh mới.
+Trước khi bắt đầu, controller kiểm tra request, Wi-Fi, chính sách ứng dụng, quyền Web, command đang chạy, lỗi phần cứng và feedback cần thiết. Lệnh khoảng cách còn yêu cầu odometry hợp lệ và xe đứng yên. Không có hàng đợi goal để tự chạy nối tiếp: controller bận sẽ từ chối lệnh mới.
 
 | Loại lệnh | Cách hoàn thành |
 | --- | --- |
 | Manual | Người dùng gửi lệnh mới, stop/release hoặc session hết hạn |
 | `distance_drive` | Dùng quãng đường odometry, tăng/giảm tốc, dừng và chờ bánh ổn định |
 | `angle_turn` | Dùng góc tương đối từ IMU, tự tính tốc độ, sửa quá góc và chờ bánh/gyro ổn định |
-| `navigate` | Quay về phía đích khi cần, tiến đến tọa độ, giảm tốc và chờ dừng |
 
-Các MCP tools hiện có: `self.motor.stop`, `self.motor.get_state`, `self.motor.reset_odometry`, `self.motor.move_distance`, `self.motor.rotate_angle`, `self.motor.navigate_to`.
+MCP hiện đăng ký `self.motor.get_state` và `self.motor.reset_odometry`. Hai tool `self.motor.move_distance` và `self.motor.rotate_angle` đang tạm vô hiệu hóa trong source.
 
-Ví dụ với yêu cầu giọng nói “tiến 50 cm”: audio được gửi tới server; **nếu server gọi** `self.motor.move_distance` với `distance_cm=50`, adapter MCP tạo goal rồi ESP32 thực thi. Firmware không tự ánh xạ trực tiếp câu tiếng Việt đó thành PWM. Kết quả tool ngay sau khi nhận lệnh là snapshot lúc đó; cần đọc trạng thái tiếp để biết goal đã hoàn thành hay lỗi.
+Khi tool quãng đường được bật lại, ví dụ với yêu cầu giọng nói “tiến 50 cm”: audio được gửi tới server; **nếu server gọi** `self.motor.move_distance` với `distance_cm=50`, adapter MCP tạo goal rồi ESP32 thực thi. Firmware không tự ánh xạ trực tiếp câu tiếng Việt đó thành PWM. Kết quả tool ngay sau khi nhận lệnh là snapshot lúc đó; cần đọc trạng thái tiếp để biết goal đã hoàn thành hay lỗi.
 
-Web, MCP và lời gọi trực tiếp dùng chung `AngleTurnRequest`, chỉ gồm góc và nguồn yêu cầu, không truyền tốc độ. Với `StartL298nCommand()`, góc dương quay trái, âm quay phải; các wrapper `TurnL298nLeft()`/`TurnL298nRight()` nhận độ lớn góc dương rồi chọn chiều. Controller tính RPM từ sai số góc và gyro, giới hạn tốc độ tăng/giảm theo nhóm `HEADING_TURN_*` trong `config/motion_control_config.h`. Pha quay ban đầu của navigation cũng dùng profile này, không có mức tốc độ quay riêng.
+Web, MCP và lời gọi trực tiếp dùng chung `AngleTurnRequest`, chỉ gồm góc và nguồn yêu cầu, không truyền tốc độ. Với `StartL298nCommand()`, góc dương quay trái, âm quay phải; các wrapper `TurnL298nLeft()`/`TurnL298nRight()` nhận độ lớn góc dương rồi chọn chiều. Controller tính RPM từ sai số góc và gyro, giới hạn tốc độ tăng/giảm theo nhóm `HEADING_TURN_*` trong `config/motion_control_config.h`.
 
-Nếu vượt đích ngoài tolerance, controller ngắt PWM, chờ hết khoảng coasting và bánh/gyro ổn định, rồi đổi chiều để sửa góc. Quá trình chờ dùng timestamp trong vòng điều khiển, không chặn task. Hoàn thành khi góc nằm trong tolerance và cả hai bánh cùng gyro ổn định liên tục 150 ms. Lệnh quay góc vẫn có timeout tổng 5 giây, bao gồm thời gian sửa góc; navigation giữ timeout của request. `angle_turn_speed_percent` phản ánh mục tiêu hiện tại của profile và bằng 0 khi đang chờ đổi chiều hoặc đã dừng. Bù ma sát cũng tăng dần theo mục tiêu RPM lúc khởi động.
+Nếu vượt đích ngoài tolerance, controller ngắt PWM, chờ hết khoảng coasting và bánh/gyro ổn định, rồi đổi chiều để sửa góc. Quá trình chờ dùng timestamp trong vòng điều khiển, không chặn task. Hoàn thành khi góc nằm trong tolerance và cả hai bánh cùng gyro ổn định liên tục 150 ms. Lệnh quay góc vẫn có timeout tổng 5 giây, bao gồm thời gian sửa góc. `angle_turn_speed_percent` phản ánh mục tiêu hiện tại của profile và bằng 0 khi đang chờ đổi chiều hoặc đã dừng. Bù ma sát cũng tăng dần theo mục tiêu RPM lúc khởi động.
 
 Nguồn: [web_server.cc](../components/web_server/web_server.cc), [mcp_tools.cc](../main/robot/mcp/mcp_tools.cc), [motor_controller.cc](../components/motor_controller/motor_controller.cc), [manual_control.cc](../components/motor_controller/manual/manual_control.cc).
 
@@ -173,7 +172,7 @@ Nguồn: [web_server.cc](../components/web_server/web_server.cc), [mcp_tools.cc]
 
 Ba tầng điều khiển cần phân biệt:
 
-1. **Goal/profile:** xác định hướng và tốc độ cần thiết để đạt khoảng cách, góc hoặc tọa độ.
+1. **Goal/profile:** xác định hướng và tốc độ cần thiết để đạt khoảng cách hoặc góc.
 2. **Heading PD:** khi goal dùng heading, so sánh góc đích với góc IMU và dùng gyro Z để giảm dao động; điều chỉnh mục tiêu RPM trái/phải. Chu kỳ cập nhật thông thường là **50 ms**.
 3. **Speed PI:** so RPM mục tiêu với RPM encoder, điều chỉnh PWM từng bên. Chu kỳ cập nhật thông thường là **100 ms**.
 
@@ -193,7 +192,7 @@ Nguồn: [motion_executor.cc](../components/motor_controller/control/motion_exec
 | `Odometry` | Tính pose `(x, y, theta)` từ quãng đường encoder và heading IMU |
 | `PoseEkf` | Bộ ước lượng pose có covariance; cần track width hợp lệ để khởi tạo |
 
-Hệ tọa độ odometry lấy gốc lúc khởi tạo/reset khi xe đứng yên: `+X` theo hướng ban đầu, góc dương quay trái. `navigate_to(x_cm, y_cm)` dùng tọa độ trong hệ gốc này, không phải một độ dời mới tính từ vị trí hiện tại cho mỗi lệnh.
+Hệ tọa độ odometry lấy gốc lúc khởi tạo/reset khi xe đứng yên: `+X` theo hướng ban đầu, góc dương quay trái. Quỹ đạo XY trên web hiển thị vị trí ước lượng trong hệ gốc này.
 
 Encoder FC-03 một kênh không tự đo được chiều quay; code suy chiều từ lệnh motor và khoảng coasting. Xung không biết chiều hoặc khoảng cách giữa hai mẫu vượt 100 ms có thể làm odometry mất hợp lệ. Sau khi pose đã mất hợp lệ, cần reset khi xe đứng yên và cảm biến sẵn sàng.
 
@@ -205,20 +204,19 @@ Cấu hình đáng chú ý trong [motion_control_config.h](../config/motion_cont
 | Heading PD | `KP=0.8`, `KD=0.15`, correction tối đa 35 RPM | Giữ hướng; giới hạn thực tế còn phụ thuộc tốc độ đang yêu cầu |
 | Quay góc | Trần 200 RPM, KP 3 RPM/°, gia/giảm tốc 100/200 RPM/s | Tự tính tốc độ theo góc và gyro; trần không phải tốc độ cố định |
 | Dừng/đảo chiều quay | Tolerance 2°, tối đa 8°/s và 3 RPM trong 150 ms | Đảo chiều còn chờ hết khoảng coasting; các hệ số cần tuning trên xe |
-| Đi khoảng cách/navigation | Giới hạn tốc độ và gia/giảm tốc `DISTANCE_DRIVE_*` | Dùng chung cấu hình profile; tự giảm tốc khi gần đích |
+| Đi khoảng cách | Giới hạn tốc độ và gia/giảm tốc `DISTANCE_DRIVE_*` | Dùng chung cấu hình profile; tự giảm tốc khi gần đích |
 | Dừng distance drive | Tolerance 20 mm, tối đa 3 RPM trong 300 ms | Điều kiện ổn định để kết thúc |
 | Track width | `ODOMETRY_TRACK_WIDTH_MM=0.0` | Chưa cấu hình wheel heading/EKF; odometry dùng heading IMU vẫn có thể hợp lệ |
-| Pose navigation | `NAVIGATION_USE_EKF=0` | Navigation dùng odometry thường |
 
-Các thông số này cần đối chiếu và hiệu chỉnh trên xe thật. EKF không tạo vị trí tuyệt đối, không loại bỏ hoàn toàn trượt bánh hoặc gyro drift. Navigation hiện là đi tới điểm tương đối; chưa có SLAM, lập bản đồ hay lập đường tránh vật cản.
+Các thông số này cần đối chiếu và hiệu chỉnh trên xe thật. EKF không tạo vị trí tuyệt đối, không loại bỏ hoàn toàn trượt bánh hoặc gyro drift. Firmware hiện giữ manual, quãng đường và quay góc; điều hướng đến tọa độ dự kiến chuyển sang Raspberry Pi/ROS 2.
 
-Nguồn: [odometry_control.cc](../components/motor_controller/odometry/odometry_control.cc), [odometry.h](../components/motor_controller/include/odometry/odometry.h), [pose_ekf.h](../components/motor_controller/include/odometry/pose_ekf.h), [navigator.h](../components/motor_controller/include/navigation/navigator.h), [robot_hardware_config.h](../config/robot_hardware_config.h).
+Nguồn: [odometry_control.cc](../components/motor_controller/odometry/odometry_control.cc), [odometry.h](../components/motor_controller/include/odometry/odometry.h), [pose_ekf.h](../components/motor_controller/include/odometry/pose_ekf.h), [robot_hardware_config.h](../config/robot_hardware_config.h).
 
 ## 8. Phải phân biệt trạng thái ứng dụng với trạng thái chuyển động
 
 `DeviceState` mô tả vòng đời ứng dụng/hội thoại: `starting`, `wifi_configuring`, `activating`, `idle`, `connecting`, `listening`, `speaking`, cùng các nhánh `notifying`, `upgrading`, `audio_testing`, `fatal_error`.
 
-Controller có mode riêng: `idle`, `manual`, `angle_turn`, `distance_drive`, `navigate`. Vì vậy **ứng dụng `idle` không có nghĩa motor đang đứng yên**; xe có thể được lái bằng Web khi trợ lý đang chờ. Ngược lại, `speaking` cũng không tự động làm xe dừng.
+Controller có mode riêng: `idle`, `manual`, `angle_turn`, `distance_drive`. Vì vậy **ứng dụng `idle` không có nghĩa motor đang đứng yên**; xe có thể được lái bằng Web khi trợ lý đang chờ. Ngược lại, `speaking` cũng không tự động làm xe dừng.
 
 Callback `motion_allowed` do board cung cấp chặn chuyển động khi ứng dụng ở `upgrading`, `fatal_error` hoặc `wifi_configuring`. Mọi yêu cầu đổi `DeviceState` đi qua `Application::SetDeviceState()` và bộ kiểm tra chuyển trạng thái.
 
@@ -231,11 +229,10 @@ Các điều kiện dừng cần hiểu đúng theo từng đường lệnh:
 | Goal hết timeout | Dừng và ghi kết quả lỗi |
 | Feedback bắt buộc mất hợp lệ | Từ chối bắt đầu hoặc dừng goal/đường điều khiển liên quan |
 | Lỗi driver được `Check()` ghi nhận | Latch lỗi phần cứng đến reboot; không tự tiếp tục |
-| Có vật cản khi navigation | Dừng với lỗi `obstacle` nếu mẫu siêu âm còn hợp lệ và mới trong 250 ms |
 | Có vật cản khi Web manual tiến | Có thể phát âm cảnh báo nếu bật; không có nhánh tự dừng theo siêu âm ở đường này |
-| Có vật cản khi distance drive/quay góc | Không áp dụng nhánh dừng siêu âm dành riêng cho navigation |
+| Có vật cản khi distance drive/quay góc | Không có nhánh tự dừng theo siêu âm |
 
-Ngưỡng vật cản dùng mốc 20 cm tại 50% tốc độ và tăng theo tốc độ, tối thiểu 20 cm. Mẫu siêu âm lỗi/cũ không được nhánh navigation coi là vật cản; không nên hiểu rằng mọi lỗi cảm biến đều làm mọi chế độ tự dừng.
+Ngưỡng cảnh báo vật cản dùng mốc 20 cm tại 50% tốc độ và tăng theo tốc độ, tối thiểu 20 cm. Âm cảnh báo manual chỉ dùng mẫu siêu âm hợp lệ và mới trong 250 ms; không tự dừng motor.
 
 Nguồn: [sensor_behavior.cc](../components/motor_controller/safety/sensor_behavior.cc), [motion_executor.cc](../components/motor_controller/control/motion_executor.cc), [motion_policy.h](../components/motor_controller/include/control/motion_policy.h), [web_control_session.h](../components/motor_controller/include/manual/web_control_session.h).
 

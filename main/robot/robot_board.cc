@@ -53,7 +53,6 @@ static_assert(DISTANCE_DRIVE_LEFT_FRICTION_PWM_PERCENT >= 0 &&
 static_assert(DISTANCE_DRIVE_RIGHT_FRICTION_PWM_PERCENT >= 0 &&
               DISTANCE_DRIVE_RIGHT_FRICTION_PWM_PERCENT < 100);
 static_assert(ODOMETRY_TRACK_WIDTH_MM >= 0);
-static_assert(NAVIGATION_USE_EKF == 0 || NAVIGATION_USE_EKF == 1);
 static_assert(DISTANCE_DRIVE_ACCELERATION_MPS2 > 0 && DISTANCE_DRIVE_DECELERATION_MPS2 > 0);
 static_assert(DISTANCE_DRIVE_MAX_SPEED_PERCENT >= DISTANCE_DRIVE_MIN_SPEED_PERCENT &&
               DISTANCE_DRIVE_MAX_SPEED_PERCENT <= 100);
@@ -126,7 +125,6 @@ ruby_robot::MotorControllerConfig MakeMotorControllerConfig() {
     config.heading_turn_left_friction_pwm_percent = HEADING_TURN_LEFT_FRICTION_PWM_PERCENT;
     config.heading_turn_right_friction_pwm_percent = HEADING_TURN_RIGHT_FRICTION_PWM_PERCENT;
     config.odometry_track_width_mm = ODOMETRY_TRACK_WIDTH_MM;
-    config.navigation_use_ekf = NAVIGATION_USE_EKF;
     config.distance_drive_max_speed_percent = DISTANCE_DRIVE_MAX_SPEED_PERCENT;
     config.distance_drive_acceleration_mps2 = DISTANCE_DRIVE_ACCELERATION_MPS2;
     config.distance_drive_deceleration_mps2 = DISTANCE_DRIVE_DECELERATION_MPS2;
@@ -296,8 +294,7 @@ void InitializeRobotBoard() {
     };
     web_config.append_telemetry = [](cJSON* parent, const L298nMotorStatus& motor) {
         return AddFc03EncoderJson(parent, motor.encoder) &&
-               AddOdometryJson(parent, motor.odometry, motor.ekf,
-                               motor.command.distance_drive, motor.command.navigate);
+               AddOdometryJson(parent, motor.odometry, motor.ekf, motor.command.distance_drive);
     };
     InitializeWebServer(web_config);
 #if HEADING_PD_DEBUG || ODOMETRY_DEBUG

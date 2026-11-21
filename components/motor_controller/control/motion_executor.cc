@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <numbers>
 
 namespace ruby_robot {
 
@@ -84,7 +83,7 @@ void MotorController::Tick() {
     if (motion_ == Motion::kStop)
         return;
     const auto encoder = encoder_.Snapshot();
-    const auto goal_pose = IsNavigationLocked() ? NavigationPoseLocked() : odometry_.Snapshot();
+    const auto goal_pose = odometry_.Snapshot();
     if (!UpdateGoalLocked(goal_pose, encoder.left.rpm, encoder.right.rpm, now)) {
         StopFailedMotionLocked(now, GoalFaultLocked());
         return;
@@ -93,39 +92,13 @@ void MotorController::Tick() {
         FinishCommandLocked(now, true);
         return;
     }
-    if (IsNavigationLocked() && sensor_valid_ &&
-        now - last_sensor_update_us_ <= kSensorStaleMs * 1000LL &&
-        measured_distance_cm_ <=
-            ScaleDistanceForSpeed(kDefaultObstacleDistanceCm, ActiveSpeedLocked())) {
-        FinishCommandLocked(now, false, "obstacle");
-        return;
-    }
     if (moving_) {
         if (!UpdateHeadingPdLocked(now)) {
             StopFailedMotionLocked(now, heading_fault_);
             return;
         }
         if (heading_turn_complete_) {
-            if (IsNavigationTurnLocked()) {
-                StopOutputsLocked();
-                if (fault_ != ESP_OK) {
-                    FinishCommandLocked(now, false, "motor_error");
-                    return;
-                }
-                navigator_.BeginDrive(now);
-                if (!PrepareMotionLocked(Motion::kForward)) {
-                    FinishCommandLocked(now, false, "motor_error");
-                    return;
-                }
-                if (config_.encoder.enabled)
-                    start_at_us_ = now + config_.encoder.coast_ms * 1000LL;
-                heading_hold_active_ = true;
-                const auto imu = GetMpu6050Status();
-                heading_target_degrees_ =
-                    imu.heading_degrees + navigator_.heading_error_rad() * 180.0 / std::numbers::pi;
-            } else {
-                FinishCommandLocked(now, true);
-            }
+            FinishCommandLocked(now, true);
             return;
         }
         if (!UpdateSpeedPiLocked(now)) {
