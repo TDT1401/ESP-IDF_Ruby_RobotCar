@@ -25,6 +25,37 @@ extern const uint8_t style_css_start[] asm("_binary_style_css_start");
 extern const uint8_t style_css_end[] asm("_binary_style_css_end");
 extern const uint8_t app_js_start[] asm("_binary_app_js_start");
 extern const uint8_t app_js_end[] asm("_binary_app_js_end");
+extern const uint8_t state_js_start[] asm("_binary_state_js_start");
+extern const uint8_t state_js_end[] asm("_binary_state_js_end");
+extern const uint8_t api_js_start[] asm("_binary_api_js_start");
+extern const uint8_t api_js_end[] asm("_binary_api_js_end");
+extern const uint8_t actions_js_start[] asm("_binary_actions_js_start");
+extern const uint8_t actions_js_end[] asm("_binary_actions_js_end");
+extern const uint8_t hud_js_start[] asm("_binary_hud_js_start");
+extern const uint8_t hud_js_end[] asm("_binary_hud_js_end");
+extern const uint8_t telemetry_js_start[] asm("_binary_telemetry_js_start");
+extern const uint8_t telemetry_js_end[] asm("_binary_telemetry_js_end");
+extern const uint8_t trajectory_js_start[] asm("_binary_trajectory_js_start");
+extern const uint8_t trajectory_js_end[] asm("_binary_trajectory_js_end");
+extern const uint8_t ui_js_start[] asm("_binary_ui_js_start");
+extern const uint8_t ui_js_end[] asm("_binary_ui_js_end");
+
+struct ScriptAsset {
+    const char* uri;
+    const uint8_t* start;
+    const uint8_t* end;
+};
+
+ScriptAsset script_assets[] = {
+    {"/js/app.js", app_js_start, app_js_end},
+    {"/js/state.js", state_js_start, state_js_end},
+    {"/js/api.js", api_js_start, api_js_end},
+    {"/js/actions.js", actions_js_start, actions_js_end},
+    {"/js/hud.js", hud_js_start, hud_js_end},
+    {"/js/telemetry.js", telemetry_js_start, telemetry_js_end},
+    {"/js/trajectory.js", trajectory_js_start, trajectory_js_end},
+    {"/js/ui.js", ui_js_start, ui_js_end},
+};
 
 esp_err_t Reply(httpd_req_t* req, const char* status, const char* body) {
     httpd_resp_set_status(req, status);
@@ -70,7 +101,8 @@ esp_err_t Style(httpd_req_t* req) {
 }
 
 esp_err_t Script(httpd_req_t* req) {
-    return SendAsset(req, "application/javascript; charset=utf-8", app_js_start, app_js_end);
+    const auto* asset = static_cast<const ScriptAsset*>(req->user_ctx);
+    return SendAsset(req, "application/javascript; charset=utf-8", asset->start, asset->end);
 }
 
 esp_err_t Claim(httpd_req_t* req) {
@@ -320,7 +352,7 @@ esp_err_t StartServer() {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.server_port = 8080;  // Wi-Fi provisioning keeps port 80.
     config.ctrl_port = 32769;
-    config.max_uri_handlers = 7;
+    config.max_uri_handlers = 6 + sizeof(script_assets) / sizeof(script_assets[0]);
     config.max_open_sockets = 2;
     config.lru_purge_enable = true;
     config.stack_size = 6144;
@@ -334,13 +366,22 @@ esp_err_t StartServer() {
     const httpd_uri_t routes[] = {
         {.uri = "/", .method = HTTP_GET, .handler = Root, .user_ctx = nullptr},
         {.uri = "/css/style.css", .method = HTTP_GET, .handler = Style, .user_ctx = nullptr},
-        {.uri = "/js/app.js", .method = HTTP_GET, .handler = Script, .user_ctx = nullptr},
         {.uri = "/api/claim", .method = HTTP_POST, .handler = Claim, .user_ctx = nullptr},
         {.uri = "/api/command", .method = HTTP_POST, .handler = Command, .user_ctx = nullptr},
         {.uri = "/api/action", .method = HTTP_POST, .handler = Action, .user_ctx = nullptr},
         {.uri = "/api/status", .method = HTTP_GET, .handler = Status, .user_ctx = nullptr},
     };
     for (const auto& route : routes) {
+        error = httpd_register_uri_handler(server, &route);
+        if (error != ESP_OK) {
+            httpd_stop(server);
+            server = nullptr;
+            return error;
+        }
+    }
+    for (auto& asset : script_assets) {
+        const httpd_uri_t route = {
+            .uri = asset.uri, .method = HTTP_GET, .handler = Script, .user_ctx = &asset};
         error = httpd_register_uri_handler(server, &route);
         if (error != ESP_OK) {
             httpd_stop(server);
