@@ -6,14 +6,41 @@
 #include <functional>
 #include <variant>
 
-#include "commands/command_interface.h"
-#include "domain/pose_ekf.h"
+#include "distance/distance_drive.h"
 #include "imu.h"
 #include "motor_driver.h"
+#include "navigation/navigator.h"
+#include "odometry/pose_ekf.h"
 #include "ultrasonic_sensor.h"
 #include "wheel_encoder.h"
 
 namespace ruby_robot {
+
+enum class AngleTurnOwner { kWeb, kVoice };
+enum class AngleTurnState { kIdle, kRunning, kCompleted, kInterrupted, kFault };
+
+struct AngleTurnRequest {
+    int angle_degrees = 0;  // Positive left, negative right.
+    AngleTurnOwner owner = AngleTurnOwner::kWeb;
+};
+
+struct AngleTurnSnapshot {
+    const char* state;
+    const char* owner;
+    const char* direction;
+    int angle_degrees;
+    int speed_percent;  // Filled from the controller's automatic turn profile.
+};
+
+using CommandRequest = std::variant<AngleTurnRequest, DistanceDriveRequest, NavigateRequest>;
+
+struct CommandSnapshot {
+    const char* mode;
+    const char* owner;
+    AngleTurnSnapshot angle_turn;
+    DistanceDriveSnapshot distance_drive;
+    NavigateSnapshot navigate;
+};
 
 struct MotorControllerConfig {
     MotorDriverConfig motor;

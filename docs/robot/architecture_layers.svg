@@ -43,7 +43,7 @@
   <circle cx="84" cy="421" r="19" fill="#426bb6"/>
   <text x="84" y="422" class="badge">2</text>
   <text x="118" y="414" class="name">Application Layer</text>
-  <text x="118" y="442" class="path">motor_controller · MotorController · CommandInterface</text>
+  <text x="118" y="442" class="path">motor_controller · manual · distance · navigation</text>
   <text x="118" y="468" class="detail">Commands own modes and targets; controller owns mutex, safety and motor output.</text>
 
   <path d="M 310 492 L 310 535" stroke="#37516f" stroke-width="3" fill="none" marker-end="url(#arrow)"/>
@@ -55,7 +55,7 @@
   <circle cx="84" cy="579" r="19" fill="#8264b0"/>
   <text x="84" y="580" class="badge">3a</text>
   <text x="118" y="572" class="name">Domain Layer</text>
-  <text x="118" y="601" class="path">motor_controller/include/domain</text>
+  <text x="118" y="601" class="path">motor_controller/include/odometry</text>
   <text x="118" y="628" class="detail">Hardware-independent calculations and lease rules.</text>
 
   <rect x="582" y="538" width="490" height="114" rx="18" fill="#fff4e5" stroke="#e5bf80" stroke-width="2"/>

@@ -86,7 +86,7 @@ Ví dụ, một callback mạng nhận JSON `tts/start` không trực tiếp x�
 | `ActivationTask` | Chuẩn bị assets, OTA/activation và protocol |
 | Audio input / output / Opus tasks | Đọc microphone, encode/decode và phát PCM |
 | AFE fetch task | Lấy kết quả pipeline xử lý tiếng nói và wake word |
-| ESP timer task | Gọi `MotorController::Tick()` định kỳ |
+| FreeRTOS `motor_control` task | Gọi `MotorController::Tick()` định kỳ |
 | HTTP server task | Nhận và kiểm tra request Web, gọi API controller |
 | Driver cảm biến và Telegram task | Thu thập feedback hoặc gửi HTTPS độc lập |
 
@@ -163,13 +163,13 @@ Ví dụ với yêu cầu giọng nói “tiến 50 cm”: audio được gửi 
 
 Web, MCP và lời gọi trực tiếp dùng chung `AngleTurnRequest`, chỉ gồm góc và nguồn yêu cầu, không truyền tốc độ. Với `StartL298nCommand()`, góc dương quay trái, âm quay phải; các wrapper `TurnL298nLeft()`/`TurnL298nRight()` nhận độ lớn góc dương rồi chọn chiều. Controller tính RPM từ sai số góc và gyro, giới hạn tốc độ tăng/giảm theo nhóm `HEADING_TURN_*` trong `config/motion_control_config.h`. Pha quay ban đầu của navigation cũng dùng profile này, không có mức tốc độ quay riêng.
 
-Nếu vượt đích ngoài tolerance, controller ngắt PWM, chờ hết khoảng coasting và bánh/gyro ổn định, rồi đổi chiều để sửa góc. Quá trình chờ dùng timestamp trong vòng timer, không chặn task. Hoàn thành khi góc nằm trong tolerance và cả hai bánh cùng gyro ổn định liên tục 150 ms. Lệnh quay góc vẫn có timeout tổng 5 giây, bao gồm thời gian sửa góc; navigation giữ timeout của request. `angle_turn_speed_percent` phản ánh mục tiêu hiện tại của profile và bằng 0 khi đang chờ đổi chiều hoặc đã dừng. Bù ma sát cũng tăng dần theo mục tiêu RPM lúc khởi động.
+Nếu vượt đích ngoài tolerance, controller ngắt PWM, chờ hết khoảng coasting và bánh/gyro ổn định, rồi đổi chiều để sửa góc. Quá trình chờ dùng timestamp trong vòng điều khiển, không chặn task. Hoàn thành khi góc nằm trong tolerance và cả hai bánh cùng gyro ổn định liên tục 150 ms. Lệnh quay góc vẫn có timeout tổng 5 giây, bao gồm thời gian sửa góc; navigation giữ timeout của request. `angle_turn_speed_percent` phản ánh mục tiêu hiện tại của profile và bằng 0 khi đang chờ đổi chiều hoặc đã dừng. Bù ma sát cũng tăng dần theo mục tiêu RPM lúc khởi động.
 
-Nguồn: [web_server.cc](../components/web_server/web_server.cc), [mcp_tools.cc](../main/robot/mcp/mcp_tools.cc), [motor_controller.cc](../components/motor_controller/motor_controller.cc), [web_control.cc](../components/motor_controller/web_control.cc).
+Nguồn: [web_server.cc](../components/web_server/web_server.cc), [mcp_tools.cc](../main/robot/mcp/mcp_tools.cc), [motor_controller.cc](../components/motor_controller/motor_controller.cc), [manual_control.cc](../components/motor_controller/manual/manual_control.cc).
 
 ## 6. Vòng feedback: từ mục tiêu đến PWM
 
-`MotorController::Tick()` được ESP timer gọi với chu kỳ yêu cầu **10 ms**. Mỗi lượt cập nhật odometry, kiểm tra điều kiện dừng, cập nhật goal rồi điều chỉnh đầu ra. Đây là chu kỳ đặt trong code; độ trễ thực tế phụ thuộc runtime.
+`MotorController::Tick()` được task `motor_control` gọi với chu kỳ yêu cầu **10 ms**. Mỗi lượt cập nhật odometry, kiểm tra điều kiện dừng, cập nhật goal rồi điều chỉnh đầu ra. Đây là chu kỳ đặt trong code; độ trễ thực tế phụ thuộc runtime.
 
 Ba tầng điều khiển cần phân biệt:
 
@@ -181,7 +181,7 @@ Ba tầng điều khiển cần phân biệt:
 
 `speed_percent` là yêu cầu/quy đổi tốc độ; trong đường PI nó không nhất thiết bằng PWM thực tế. Ví dụ cấu hình reference hiện tại là 200 RPM tại mức 100; yêu cầu 40 tương ứng khoảng 80 RPM trước các hiệu chỉnh heading/profile. PI có thể tăng hoặc giảm PWM để bám mục tiêu đó.
 
-Nguồn: [motion_executor.cc](../components/motor_controller/motion_executor.cc), [speed_control.cc](../components/motor_controller/speed_control.cc), [motor_output.cc](../components/motor_controller/motor_output.cc), [controller_internal.h](../components/motor_controller/controller_internal.h).
+Nguồn: [motion_executor.cc](../components/motor_controller/control/motion_executor.cc), [speed_control.cc](../components/motor_controller/control/speed_control.cc), [motor_output.cc](../components/motor_controller/control/motor_output.cc), [controller_internal.h](../components/motor_controller/controller_internal.h).
 
 ## 7. Cảm biến, odometry và các giới hạn hiện tại
 
@@ -212,7 +212,7 @@ Cấu hình đáng chú ý trong [motion_control_config.h](../config/motion_cont
 
 Các thông số này cần đối chiếu và hiệu chỉnh trên xe thật. EKF không tạo vị trí tuyệt đối, không loại bỏ hoàn toàn trượt bánh hoặc gyro drift. Navigation hiện là đi tới điểm tương đối; chưa có SLAM, lập bản đồ hay lập đường tránh vật cản.
 
-Nguồn: [odometry_control.cc](../components/motor_controller/odometry_control.cc), [odometry.h](../components/motor_controller/include/domain/odometry.h), [pose_ekf.h](../components/motor_controller/include/domain/pose_ekf.h), [navigator.h](../components/motor_controller/include/domain/navigator.h), [robot_hardware_config.h](../config/robot_hardware_config.h).
+Nguồn: [odometry_control.cc](../components/motor_controller/odometry/odometry_control.cc), [odometry.h](../components/motor_controller/include/odometry/odometry.h), [pose_ekf.h](../components/motor_controller/include/odometry/pose_ekf.h), [navigator.h](../components/motor_controller/include/navigation/navigator.h), [robot_hardware_config.h](../config/robot_hardware_config.h).
 
 ## 8. Phải phân biệt trạng thái ứng dụng với trạng thái chuyển động
 
@@ -237,7 +237,7 @@ Các điều kiện dừng cần hiểu đúng theo từng đường lệnh:
 
 Ngưỡng vật cản dùng mốc 20 cm tại 50% tốc độ và tăng theo tốc độ, tối thiểu 20 cm. Mẫu siêu âm lỗi/cũ không được nhánh navigation coi là vật cản; không nên hiểu rằng mọi lỗi cảm biến đều làm mọi chế độ tự dừng.
 
-Nguồn: [sensor_behavior.cc](../components/motor_controller/sensor_behavior.cc), [motion_executor.cc](../components/motor_controller/motion_executor.cc), [motion_policy.h](../components/motor_controller/include/domain/motion_policy.h), [web_control_session.h](../components/motor_controller/include/domain/web_control_session.h).
+Nguồn: [sensor_behavior.cc](../components/motor_controller/safety/sensor_behavior.cc), [motion_executor.cc](../components/motor_controller/control/motion_executor.cc), [motion_policy.h](../components/motor_controller/include/control/motion_policy.h), [web_control_session.h](../components/motor_controller/include/manual/web_control_session.h).
 
 ## 9. Các khối hỗ trợ và cấu hình build
 
@@ -256,7 +256,7 @@ Project có một target ESP32-S3, một board factory và một build entry. `b
 2. [application.cc](../main/application.cc): đọc `Initialize()`, `Run()`, `InitializeProtocol()` để hiểu điều phối.
 3. [robot_car_board.cc](../main/robot_car_board.cc) và [robot_board.cc](../main/robot/robot_board.cc): xem cách nối cấu hình và callback.
 4. [mcp_tools.cc](../main/robot/mcp/mcp_tools.cc) hoặc [web_server.cc](../components/web_server/web_server.cc): chọn một nguồn lệnh và lần theo request.
-5. [motor_controller.cc](../components/motor_controller/motor_controller.cc) → [motion_executor.cc](../components/motor_controller/motion_executor.cc) → [speed_control.cc](../components/motor_controller/speed_control.cc) → [motor_output.cc](../components/motor_controller/motor_output.cc): đi từ nhận lệnh đến đầu ra.
+5. [motor_controller.cc](../components/motor_controller/motor_controller.cc) → [motion_executor.cc](../components/motor_controller/control/motion_executor.cc) → [speed_control.cc](../components/motor_controller/control/speed_control.cc) → [motor_output.cc](../components/motor_controller/control/motor_output.cc): đi từ nhận lệnh đến đầu ra.
 6. [motion_control_config.h](../config/motion_control_config.h): quay lại tham số sau khi hiểu vòng điều khiển.
 7. [audio README](../components/audio/README.md): đọc sâu pipeline âm thanh nếu cần thay đổi hội thoại.
 

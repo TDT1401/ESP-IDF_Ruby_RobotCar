@@ -74,10 +74,10 @@ bool MotorController::SetRequestedWheelsLocked(int left_percent, int right_perce
         (right_percent < 0) != (requested_right_percent_ < 0))
         right_speed_pi_.Reset();
     const double left_friction =
-        FrictionPwmPercent(command_interface_.mode(), heading_turn_active_, true, left_percent,
+        FrictionPwmPercent(mode_, heading_turn_active_, true, left_percent,
                            config_);
     const double right_friction =
-        FrictionPwmPercent(command_interface_.mode(), heading_turn_active_, false, right_percent,
+        FrictionPwmPercent(mode_, heading_turn_active_, false, right_percent,
                            config_);
     int left_output =
         static_cast<int>(std::lround(FeedforwardPercent(left_percent, left_friction)));
@@ -107,7 +107,7 @@ bool MotorController::UpdateTurnTargetsLocked(const Mpu6050Status& imu, int64_t 
     const bool stationary = encoder.left.rpm <= config_.heading_turn_settle_rpm &&
                             encoder.right.rpm <= config_.heading_turn_settle_rpm &&
                             std::abs(imu.gyro_z_dps) <= config_.heading_turn_settle_rate_dps;
-    const bool navigation_turn = command_interface_.IsNavigationTurn();
+    const bool navigation_turn = IsNavigationTurnLocked();
     const double tolerance_degrees = navigation_turn
                                          ? Navigator::kHeadingToleranceRad * 180.0 / std::numbers::pi
                                          : config_.heading_turn_tolerance_degrees;
@@ -210,10 +210,9 @@ bool MotorController::UpdateHeadingPdLocked(int64_t now_us) {
         heading_fault_ = !imu.ready ? "imu_unavailable" : "heading_invalid";
         return false;
     }
-    if (command_interface_.IsNavigation()) {
-        heading_target_degrees_ = imu.heading_degrees +
-                                  command_interface_.NavigationHeadingErrorRad() * 180.0 /
-                                      std::numbers::pi;
+    if (IsNavigationLocked()) {
+        heading_target_degrees_ =
+            imu.heading_degrees + navigator_.heading_error_rad() * 180.0 / std::numbers::pi;
     }
     const int speed = ActiveSpeedLocked();
     // A distance goal reaching its braking point must zero the targets immediately.
@@ -287,11 +286,11 @@ bool MotorController::UpdateSpeedPiLocked(int64_t now_us) {
                   config_.speed_pi_reference_pwm_percent);
     const double left_feedforward = FeedforwardPercent(
         requested_left_percent_,
-        FrictionPwmPercent(command_interface_.mode(), heading_turn_active_, true,
+        FrictionPwmPercent(mode_, heading_turn_active_, true,
                            requested_left_percent_, config_));
     const double right_feedforward = FeedforwardPercent(
         requested_right_percent_,
-        FrictionPwmPercent(command_interface_.mode(), heading_turn_active_, false,
+        FrictionPwmPercent(mode_, heading_turn_active_, false,
                            requested_right_percent_, config_));
     const int left =
         requested_left_percent_ == 0

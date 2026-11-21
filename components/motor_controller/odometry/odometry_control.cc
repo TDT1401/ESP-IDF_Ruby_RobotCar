@@ -87,7 +87,7 @@ esp_err_t MotorController::ResetOdometry() {
     std::lock_guard lock(mutex_);
     const int64_t now_us = esp_timer_get_time();
     const auto sample = ReadOdometrySampleLocked(now_us);
-    if (command_interface_.mode() != CommandMode::kIdle || web_control_.active() ||
+    if (mode_ != CommandMode::kIdle || web_control_.active() ||
         !OdometryStationaryLocked(now_us))
         return ESP_ERR_INVALID_STATE;
     if (!odometry_.Reset(sample, config_.odometry_track_width_mm / 1000.0))
@@ -97,3 +97,5 @@ esp_err_t MotorController::ResetOdometry() {
 }
 
 }  // namespace ruby_robot
+
+esp_err_t ResetL298nOdometry() { return ruby_robot::MotorController::Instance().ResetOdometry(); }

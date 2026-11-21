@@ -17,7 +17,7 @@ void MotorController::SetWebConnected(bool connected) {
     web_control_.SetConnected(connected);
     if (!connected && web_control_.active()) {
         EndWebControlLocked();
-    } else if (!connected && command_interface_.Active()) {
+    } else if (!connected && GoalActiveLocked()) {
         StopLocked();
     }
 }
@@ -27,7 +27,7 @@ esp_err_t MotorController::BeginWebControl(uint32_t* session) {
         return ESP_ERR_INVALID_ARG;
     std::lock_guard lock(mutex_);
     const int64_t now = esp_timer_get_time();
-    if (!web_control_.connected() || !MotionAllowed() || command_interface_.Active())
+    if (!web_control_.connected() || !MotionAllowed() || GoalActiveLocked())
         return ESP_ERR_INVALID_STATE;
     if (!web_control_.CanBegin(now))
         return ESP_ERR_INVALID_STATE;
@@ -39,11 +39,12 @@ esp_err_t MotorController::BeginWebControl(uint32_t* session) {
     speed_pi_fault_ = "none";
     if (fault_ != ESP_OK)
         return fault_;
-    if (!command_interface_.BeginManual())
+    if (mode_ != CommandMode::kIdle)
         return ESP_ERR_INVALID_STATE;
+    mode_ = CommandMode::kManual;
 #ifdef CONFIG_PM_ENABLE
     if (!Check(esp_pm_lock_acquire(web_sleep_lock_))) {
-        command_interface_.ReleaseManual();
+        mode_ = CommandMode::kIdle;
         return ESP_FAIL;
     }
     web_sleep_lock_held_ = true;
@@ -111,7 +112,28 @@ void MotorController::EndWebControlLocked() {
     }
 #endif
     StopLocked();
-    command_interface_.ReleaseManual();
+    mode_ = CommandMode::kIdle;
 }
 
 }  // namespace ruby_robot
+
+using ruby_robot::MotorController;
+
+esp_err_t BeginL298nWebControl(uint32_t* session) {
+    return MotorController::Instance().BeginWebControl(session);
+}
+
+esp_err_t ReleaseL298nWebControl(const L298nWebDriveRequest& request) {
+    return MotorController::Instance().ReleaseWebControl(request);
+}
+
+void SetL298nWebConnected(bool connected) {
+    MotorController::Instance().SetWebConnected(connected);
+}
+
+esp_err_t StopL298nMotor(const L298nWebDriveRequest* request) {
+    if (request != nullptr)
+        return MotorController::Instance().WebCommand(*request, ruby_robot::Motion::kStop);
+    MotorController::Instance().Stop();
+    return ESP_OK;
+}

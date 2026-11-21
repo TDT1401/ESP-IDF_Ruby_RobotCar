@@ -1,13 +1,12 @@
 #pragma once
 
-#include "commands/command_interface.h"
-#include "domain/motion_policy.h"
-#include "domain/pose_ekf.h"
-#include "domain/web_control_session.h"
-#include "heading_pd.h"
+#include "control/heading_pd.h"
+#include "control/motion_policy.h"
+#include "control/speed_pi.h"
+#include "manual/web_control_session.h"
 #include "motor_controller.h"
 #include "motor_driver.h"
-#include "speed_pi.h"
+#include "odometry/pose_ekf.h"
 
 #include <esp_err.h>
 #include <esp_pm.h>
@@ -22,6 +21,11 @@
 
 namespace ruby_robot {
 
+enum class CommandMode { kIdle, kManual, kAngleTurn, kDistanceDrive, kNavigate };
+
+constexpr int kMinAngleDegrees = 5;
+constexpr int kMaxAngleDegrees = 180;
+constexpr int64_t kTurnTimeoutUs = 5000000;
 constexpr int kDefaultWebSpeedPercent = 75;
 constexpr int64_t kDirectionDelayUs = 50000;
 constexpr int kControlPeriodMs = 10;
@@ -53,7 +57,13 @@ private:
     // Network callbacks and the control task share this controller. Keep the mutex scope short.
     std::mutex mutex_;
     MotorDriver driver_;
-    CommandInterface command_interface_;
+    CommandMode mode_ = CommandMode::kIdle;
+    CommandMode last_mode_ = CommandMode::kIdle;
+    DistanceDrive distance_drive_;
+    Navigator navigator_;
+    AngleTurnRequest turn_request_;
+    AngleTurnState turn_state_ = AngleTurnState::kIdle;
+    int64_t turn_deadline_us_ = 0;
     WebControlSession web_control_;
     Fc03Encoder encoder_;
     Odometry odometry_;
@@ -103,6 +113,29 @@ private:
 
     explicit MotorController(const MotorControllerConfig& config);
     ~MotorController();
+    bool GoalActiveLocked() const {
+        return mode_ != CommandMode::kIdle && mode_ != CommandMode::kManual;
+    }
+    bool IsAngleTurnLocked() const { return mode_ == CommandMode::kAngleTurn; }
+    bool IsNavigationLocked() const { return mode_ == CommandMode::kNavigate; }
+    bool IsNavigationTurnLocked() const { return IsNavigationLocked() && navigator_.Turning(); }
+    bool StartGoalLocked(const CommandRequest& request, int64_t now_us,
+                         const OdometrySnapshot& pose, const DistanceDriveLimits& limits);
+    Motion GoalDirectionLocked() const;
+    int GoalSpeedLocked() const;
+    int GoalAngleDegreesLocked() const;
+    bool GoalExpiredLocked(int64_t now_us) const;
+    bool GoalCompletionReadyLocked() const;
+    void CompleteGoalLocked(int64_t now_us);
+    void FailGoalLocked(int64_t now_us, const char* fault);
+    bool UpdateGoalLocked(const OdometrySnapshot& pose, double left_rpm, double right_rpm,
+                          int64_t now_us);
+    const char* GoalFaultLocked() const;
+    void StopGoalLocked(int64_t now_us);
+    CommandSnapshot CommandSnapshotLocked(int64_t now_us) const;
+    AngleTurnSnapshot TurnSnapshotLocked() const;
+    static bool ValidAngleTurn(const AngleTurnRequest& request);
+    static const char* ModeName(CommandMode mode);
     bool Check(esp_err_t error);
     void EndWebControlLocked();
     void StopLocked();
@@ -119,7 +152,6 @@ private:
     void RunControlTask();
     void Tick();
     bool ApplySpeedLocked();
-    bool ApplyCommandLocked();
     void StopOutputsLocked();
     bool ApplyMotorPwmLocked(int left_percent, int right_percent);
     bool ApplyWheelDirectionsLocked(int left, int right);
