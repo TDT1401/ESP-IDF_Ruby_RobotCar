@@ -7,10 +7,7 @@ namespace ruby_robot {
 namespace {
 
 bool ValidWebDriveRequest(const L298nWebDriveRequest& request) {
-    return request.speed_percent >= 0 && request.speed_percent <= 100 &&
-           request.joystick_x >= -1000 && request.joystick_x <= 1000 &&
-           request.joystick_y >= -1000 && request.joystick_y <= 1000 &&
-           (request.joystick || (request.joystick_x == 0 && request.joystick_y == 0));
+    return request.speed_percent >= 0 && request.speed_percent <= 100;
 }
 
 }  // namespace
@@ -73,8 +70,7 @@ esp_err_t MotorController::ReleaseWebControl(const L298nWebDriveRequest& request
 }
 
 esp_err_t MotorController::WebCommand(const L298nWebDriveRequest& request, Motion motion) {
-    if (!ValidWebDriveRequest(request) ||
-        (request.joystick && JoystickMotion(request.joystick_x, request.joystick_y) != motion))
+    if (!ValidWebDriveRequest(request))
         return ESP_ERR_INVALID_ARG;
     std::lock_guard lock(mutex_);
     const int64_t now = esp_timer_get_time();
@@ -89,30 +85,7 @@ esp_err_t MotorController::WebCommand(const L298nWebDriveRequest& request, Motio
     web_speed_percent_ = request.speed_percent;
     if (motion == Motion::kStop || request.speed_percent == 0) {
         StopLocked();
-    } else if (request.joystick) {
-        const auto wheels =
-            MixJoystick(request.joystick_x, request.joystick_y, request.speed_percent);
-        if (wheels.left == 0 && wheels.right == 0) {
-            StopLocked();
-        } else {
-            if (!web_joystick_active_ && moving_) {
-                StopOutputsLocked();
-                web_joystick_pending_ = true;
-                start_at_us_ = now + kDirectionDelayUs;
-            }
-            web_joystick_active_ = true;
-            if (!ApplyWebDriveLocked(wheels.left, wheels.right)) {
-                StopLocked();
-                EndWebControlLocked();
-                return ESP_FAIL;
-            }
-            motion_ = motion;
-            moving_ = !web_joystick_pending_;
-        }
     } else {
-        if (web_joystick_active_) {
-            StopLocked();
-        }
         // Heartbeats refresh the deadline without interrupting PWM or the direction delay.
         if (motion_ != motion) {
             StopLocked();

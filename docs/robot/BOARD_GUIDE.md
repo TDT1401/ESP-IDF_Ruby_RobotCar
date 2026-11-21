@@ -64,10 +64,6 @@ The single project build keeps its existing firmware/OTA identity in `config/bui
 python scripts/build.py
 ```
 
-The HUD joystick controls forward/backward motion, curved turns, and rotation in place using `left = y + x` and `right = y - x`, normalized together to the selected speed. Both wheels on each side receive the same logical direction and PWM. Speed PI uses the front encoder on each side; rear wheels follow front PWM without separate feedback. Motor LEDC channels are 1/2/4/5. Stop, network loss, and session expiry disable all four bridges; direction changes include a stop interval.
-
-Distance and angle commands retain front-encoder and IMU feedback. Odometry uses the left/right model for conventional wheels; joystick steering no longer invalidates pose due to lateral motion. Sensor errors, unknown-direction pulses, and sampling gaps can still require a stationary pose reset.
-
 The existing `CONFIG_BREAD_COMPACT_WIFI_LCD_L298N_INVERT_LEFT/RIGHT` options control front wheel inversion. Rear wheels use the default wiring direction without new build options. Verify each wheel's direction and recalibrate wheel diameter, CPR, and gains for the actual conventional wheels. This update has not been built, tested, or validated on hardware.
 
 ## HC-SR04 ultrasonic sensor

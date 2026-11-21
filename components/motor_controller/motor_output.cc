@@ -40,9 +40,6 @@ void MotorController::StopOutputsLocked() {
     Check(driver_.Stop());
     motion_ = Motion::kStop;
     moving_ = false;
-    web_left_output_percent_ = 0;
-    web_right_output_percent_ = 0;
-    web_joystick_pending_ = false;
     start_at_us_ = 0;
 #ifdef CONFIG_PM_ENABLE
     if (sleep_lock_held_) {
@@ -74,39 +71,6 @@ bool MotorController::ApplyWheelDirectionsLocked(int left, int right) {
             return false;
     }
     return true;
-}
-
-bool MotorController::ApplyWebDriveLocked(int left, int right) {
-    encoder_.Update(esp_timer_get_time());
-    if (web_joystick_pending_) {
-        web_left_output_percent_ = left;
-        web_right_output_percent_ = right;
-        return true;
-    }
-    const bool direction_changed = (left != 0 && web_left_output_percent_ != 0 &&
-                                    (left < 0) != (web_left_output_percent_ < 0)) ||
-                                   (right != 0 && web_right_output_percent_ != 0 &&
-                                    (right < 0) != (web_right_output_percent_ < 0));
-    if (direction_changed) {
-        StopOutputsLocked();
-        web_joystick_pending_ = true;
-        web_left_output_percent_ = left;
-        web_right_output_percent_ = right;
-        start_at_us_ = esp_timer_get_time() + kDirectionDelayUs;
-        return true;
-    }
-
-    // Each front encoder provides speed feedback for its side.
-    const bool ok = ApplyWheelDirectionsLocked(left, right) &&
-                    command_interface_.SubmitManual({left, right}) &&
-                    ApplyCommandLocked();
-    if (ok) {
-        web_left_output_percent_ = left;
-        web_right_output_percent_ = right;
-        encoder_.SetDrive(left, right, esp_timer_get_time());
-        SetMpu6050MotorActive(left != 0 || right != 0);
-    }
-    return ok;
 }
 
 bool MotorController::ApplyDirectionLocked() {

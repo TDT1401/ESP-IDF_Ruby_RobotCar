@@ -93,10 +93,6 @@ private:
     int64_t start_at_us_ = 0;
     bool moving_ = false;
     esp_err_t fault_ = ESP_OK;
-    bool web_joystick_active_ = false;
-    bool web_joystick_pending_ = false;
-    int web_left_output_percent_ = 0;
-    int web_right_output_percent_ = 0;
     int web_speed_percent_ = kDefaultWebSpeedPercent;
     int measured_distance_cm_ = -1;
     int64_t last_sensor_update_us_ = 0;
@@ -134,7 +130,6 @@ private:
                                  HeadingPdTargets& targets);
     bool SpeedPiConfiguredLocked() const;
     bool SpeedPiReadyLocked() const;
-    bool ApplyWebDriveLocked(int left, int right);
     bool ApplyDirectionLocked();
     bool ProximityWarningAllowedLocked(int64_t now_us) const;
 };

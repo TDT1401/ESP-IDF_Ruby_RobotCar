@@ -30,9 +30,8 @@ void Fc03Encoder::Initialize() {
     if (!config_.enabled || status_.enabled)
         return;
     status_.enabled = true;
-    status_.calibrated =
-        config_.pulses_per_rev[0] > 0 && config_.pulses_per_rev[1] > 0 &&
-        config_.wheel_diameter_mm[0] > 0 && config_.wheel_diameter_mm[1] > 0;
+    status_.calibrated = config_.pulses_per_rev[0] > 0 && config_.pulses_per_rev[1] > 0 &&
+                         config_.wheel_diameter_mm[0] > 0 && config_.wheel_diameter_mm[1] > 0;
     ESP_LOGI(kTag, "D0 left=GPIO%d right=GPIO%d; rising edges; filter=%d ns; coast=%d ms",
              config_.gpio[0], config_.gpio[1], config_.glitch_filter_ns, config_.coast_ms);
     ESP_LOGI(kTag,
@@ -43,8 +42,7 @@ void Fc03Encoder::Initialize() {
         status_.error = InitializeCounter(counters_[i], config_.gpio[i]);
         if (status_.error != ESP_OK) {
             ESP_LOGE(kTag, "GPIO%d PCNT setup failed: %s; encoder telemetry unavailable",
-                     config_.gpio[i],
-                     esp_err_to_name(status_.error));
+                     config_.gpio[i], esp_err_to_name(status_.error));
             ReleaseCounters();
             return;
         }
@@ -166,8 +164,7 @@ void Fc03Encoder::Update(int64_t now_us) {
         wheel.level = gpio_get_level(static_cast<gpio_num_t>(config_.gpio[i]));
         if (delta != 0) {
             if (counter.last_pulse_us > 0 && now_us > counter.last_pulse_us) {
-                const double sample_hz =
-                    delta * 1000000.0 / (now_us - counter.last_pulse_us);
+                const double sample_hz = delta * 1000000.0 / (now_us - counter.last_pulse_us);
                 wheel.hz = wheel.hz > 0 ? wheel.hz * 0.5 + sample_hz * 0.5 : sample_hz;
             }
             counter.last_pulse_us = now_us;
@@ -175,8 +172,8 @@ void Fc03Encoder::Update(int64_t now_us) {
                 counter.rate_decay_at_us =
                     now_us + std::max<int64_t>(100000, static_cast<int64_t>(2000000.0 / wheel.hz));
                 counter.rate_stale_at_us =
-                    now_us + std::max(kRateStaleMinimumUs,
-                                      static_cast<int64_t>(3000000.0 / wheel.hz));
+                    now_us +
+                    std::max(kRateStaleMinimumUs, static_cast<int64_t>(3000000.0 / wheel.hz));
             }
         } else if (counter.last_pulse_us > 0 && wheel.hz > 0) {
             const int64_t elapsed_us = now_us - counter.last_pulse_us;
@@ -218,7 +215,6 @@ void Fc03Encoder::SetDrive(int left, int right, int64_t now_us) {
     Update(now_us);  // Attribute already counted pulses to the OLD direction.
     const int commands[] = {(left > 0) - (left < 0), (right > 0) - (right < 0)};
     const int centre_command = (left + right > 0) - (left + right < 0);
-    // A joystick can reverse centre motion while the two wheels still counter-rotate.
     if ((left != 0 || right != 0) && centre_command != centre_command_) {
         FinishSegment();
         centre_command_ = centre_command;

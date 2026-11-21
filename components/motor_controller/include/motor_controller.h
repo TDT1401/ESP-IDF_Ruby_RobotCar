@@ -69,9 +69,6 @@ struct L298nWebDriveRequest {
     uint32_t sequence;
     int speed_percent;
     bool proximity_warning_enabled;
-    bool joystick = false;
-    int joystick_x = 0;
-    int joystick_y = 0;
 };
 
 using L298nLinearRequest =

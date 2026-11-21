@@ -1,42 +1,12 @@
 #pragma once
 
 #include <algorithm>
-#include <cstdint>
-#include <cstdlib>
 
 namespace ruby_robot {
 
 constexpr int kReferenceSpeedPercent = 50;
 
 enum class Motion { kStop, kForward, kBackward, kLeft, kRight };
-
-inline Motion JoystickMotion(int x, int y) {
-    if (y > 0)
-        return Motion::kForward;
-    if (y < 0)
-        return Motion::kBackward;
-    if (x < 0)
-        return Motion::kLeft;
-    if (x > 0)
-        return Motion::kRight;
-    return Motion::kStop;
-}
-
-struct WheelSpeeds {
-    int left;
-    int right;
-};
-
-inline WheelSpeeds MixJoystick(int x, int y, int speed_percent) {
-    int left = y + x;
-    int right = y - x;
-    const int peak = std::max(std::abs(left), std::abs(right));
-    if (peak > 1000) {
-        left = left * 1000 / peak;
-        right = right * 1000 / peak;
-    }
-    return {left * speed_percent / 1000, right * speed_percent / 1000};
-}
 
 inline int ScaleDistanceForSpeed(int distance_cm, int speed_percent) {
     const int scaled_speed = std::max(speed_percent, kReferenceSpeedPercent);

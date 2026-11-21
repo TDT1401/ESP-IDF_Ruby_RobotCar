@@ -48,7 +48,7 @@ bool MotorController::OdometryStationaryLocked(int64_t now_us) const {
     // Wait for commanded coasting before changing the pose origin.
     const int64_t stationary_reset_us = std::max<int64_t>(
         500000, config_.encoder.enabled ? config_.encoder.coast_ms * 1000LL : 0);
-    return motion_ == Motion::kStop && !moving_ && !web_joystick_pending_ &&
+    return motion_ == Motion::kStop && !moving_ &&
            now_us - last_motor_stop_us_ >= stationary_reset_us && encoder.ready &&
            encoder.calibrated && encoder.left.rpm <= config_.distance_drive_settle_rpm &&
            encoder.right.rpm <= config_.distance_drive_settle_rpm && imu.ready && imu.heading_valid &&

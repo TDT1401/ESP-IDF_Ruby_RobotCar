@@ -6,8 +6,6 @@
     const names = {s:'Đã dừng',f:'Tiến',b:'Lùi',l:'Xoay trái',r:'Xoay phải'};
     let session = 0, sequence = 0, epoch = 0, busy = false, pending = false;
     let direction = 's', releasing = false, heldPointer = null;
-    let joystickX = 0, joystickY = 0;
-    let joystickPointer = null;
     let telemetryBusy = false, homeBusy = false, stopVersion = 0;
     let recovering = false, wakeLock = null, wakePending = false, wakeUnavailable = false;
     let hudMode = false, warningEnabled = true, speed = 75;
@@ -584,10 +582,6 @@
         button.disabled = !hudMode || !session || releasing || recovering;
         button.classList.toggle('held', Boolean(session) && button.dataset.dir === direction);
       });
-      if ($('hudJoystick')) {
-        $('hudJoystick').setAttribute('aria-disabled',String(!hudMode || !session || releasing || recovering));
-        $('hudJoystick').classList.toggle('disabled',!hudMode || !session || releasing || recovering);
-      }
       renderHud();
       void syncWakeLock();
     }
@@ -622,10 +616,8 @@
     }
 
     function commandBody(token, dir) {
-      const command = {session:token,sequence:++sequence,direction:dir,
-        speed,warning_enabled:warningEnabled};
-      if (dir === 'j') { command.x = joystickX; command.y = joystickY; }
-      return JSON.stringify(command);
+      return JSON.stringify({session:token,sequence:++sequence,direction:dir,
+        speed,warning_enabled:warningEnabled});
     }
 
     async function post(path, body) {
@@ -658,12 +650,6 @@
       session = 0; direction = 's'; pending = false; releasing = false;
       recovering = false;
       heldPointer = null;
-      joystickPointer = null; joystickX = 0; joystickY = 0;
-      if ($('hudJoystick')) $('hudJoystick').classList.toggle('active',false);
-      if ($('hudJoystickHandle')) {
-        $('hudJoystickHandle').style.left = '50%';
-        $('hudJoystickHandle').style.top = '50%';
-      }
       $('status').textContent = message;
       render();
     }
@@ -682,15 +668,15 @@
           session = 0; direction = 's'; releasing = false; pending = false;
           $('status').textContent = 'Đã trả quyền điều khiển motor về giọng nói.';
         } else if (sentDirection === direction) {
-          $('status').textContent = (sentSpeed === 0 ? names.s : sentDirection === 'j'
-            ? 'Joystick' : names[sentDirection]) + ' · Điều khiển thủ công';
+          $('status').textContent = (sentSpeed === 0 ? names.s : names[sentDirection]) +
+            ' · Điều khiển thủ công';
         }
       } catch (error) {
         if (currentEpoch === epoch) {
           // Retry once with a newer STOP, never replay a held movement or claim a new session.
           if (!recovering && !releasing && !error.status && !document.hidden) {
             recovering = true;
-            heldPointer = null; resetJoystick();
+            heldPointer = null;
             direction = 's'; pending = true;
           } else {
             park(error.status === 409
@@ -707,45 +693,14 @@
 
     function requestDirection(next) {
       if (!hudMode || !session || releasing || (recovering && next !== 's')) return;
-      if (next !== 'j') { joystickX = 0; joystickY = 0; }
       direction = next; pending = true;
       render();
       void pump();
     }
 
     function stop() {
-      heldPointer = null; joystickPointer = null;
-      resetJoystick();
+      heldPointer = null;
       requestDirection('s');
-    }
-
-    function resetJoystick() {
-      joystickX = 0; joystickY = 0; joystickPointer = null;
-      if ($('hudJoystick')) $('hudJoystick').classList.toggle('active',false);
-      if ($('hudJoystickHandle')) {
-        $('hudJoystickHandle').style.left = '50%';
-        $('hudJoystickHandle').style.top = '50%';
-      }
-    }
-
-    function updateJoystick(event) {
-      const surface = $('hudJoystick');
-      const bounds = surface.getBoundingClientRect();
-      const radius = Math.min(bounds.width,bounds.height) * 0.36;
-      const dx = event.clientX - (bounds.left + bounds.width / 2);
-      const dy = event.clientY - (bounds.top + bounds.height / 2);
-      const length = Math.hypot(dx,dy);
-      const scale = length > radius ? radius / length : 1;
-      const nx = dx * scale / radius;
-      const ny = dy * scale / radius;
-      const deadzone = 0.12;
-      joystickX = Math.abs(nx) < deadzone ? 0 : Math.round(nx * 1000);
-      joystickY = Math.abs(ny) < deadzone ? 0 : Math.round(-ny * 1000);
-      $('hudJoystickHandle').style.left = (50 + nx * 36) + '%';
-      $('hudJoystickHandle').style.top = (50 + ny * 36) + '%';
-      $('hudJoystick').classList.toggle('active',joystickX !== 0 || joystickY !== 0);
-      if (joystickX === 0 && joystickY === 0) requestDirection('s');
-      else requestDirection('j');
     }
 
     async function reassertStop(version) {
@@ -879,11 +834,10 @@
           return;
         }
         session = result.session; sequence = 0; direction = 's'; pending = true;
-        joystickX = 0; joystickY = 0; joystickPointer = null;
         warningEnabled = true;
         recovering = false;
         wakeUnavailable = false;
-        $('status').textContent = 'Đã kết nối HUD. Kéo joystick hoặc giữ nút hướng để lái.';
+        $('status').textContent = 'Đã kết nối HUD. Giữ nút hướng để lái.';
         notifyAction($('status').textContent,true);
       } catch (_) {
         if (currentEpoch === epoch) {
@@ -970,7 +924,7 @@
       button.addEventListener('pointerdown', event => {
         event.preventDefault();
         if (!hudMode || !session || releasing || recovering || heldPointer !== null ||
-            joystickPointer !== null || event.button !== 0) return;
+            event.button !== 0) return;
         heldPointer = event.pointerId;
         button.setPointerCapture(event.pointerId);
         requestDirection(button.dataset.dir);
@@ -978,26 +932,6 @@
       for (const type of ['pointerup','pointercancel','lostpointercapture'])
         button.addEventListener(type, event => { if (event.pointerId === heldPointer) stop(); });
     });
-    const joystick = $('hudJoystick');
-    if (joystick) {
-      joystick.addEventListener('contextmenu', event => event.preventDefault());
-      joystick.addEventListener('pointerdown', event => {
-        event.preventDefault();
-        if (!hudMode || !session || releasing || recovering || heldPointer !== null ||
-            joystickPointer !== null || event.button !== 0) return;
-        joystickPointer = event.pointerId;
-        joystick.setPointerCapture(event.pointerId);
-        joystick.classList.add('active');
-        updateJoystick(event);
-      });
-      joystick.addEventListener('pointermove', event => {
-        if (event.pointerId === joystickPointer) updateJoystick(event);
-      });
-      for (const type of ['pointerup','pointercancel','lostpointercapture'])
-        joystick.addEventListener(type, event => {
-          if (event.pointerId === joystickPointer) stop();
-        });
-    }
     window.addEventListener('keydown', event => {
       if (event.code === 'Space' && hudMode && session) { event.preventDefault(); stop(); }
     });

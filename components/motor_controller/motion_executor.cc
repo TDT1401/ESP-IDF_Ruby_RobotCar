@@ -9,13 +9,11 @@
 namespace ruby_robot {
 
 void MotorController::StopLocked() {
-    web_joystick_active_ = false;
     command_interface_.StopMotion(esp_timer_get_time());
     StopOutputsLocked();
 }
 
 void MotorController::FinishCommandLocked(int64_t now_us, bool completed, const char* fault) {
-    web_joystick_active_ = false;
     StopOutputsLocked();
     // Keep the mode until its result is recorded; StopMotion would turn it idle.
     if (completed && fault_ == ESP_OK)
@@ -136,19 +134,6 @@ void MotorController::Tick() {
             StopFailedMotionLocked(now, speed_pi_fault_);
             return;
         }
-    }
-    if (web_joystick_active_) {
-        if (web_joystick_pending_ && now >= start_at_us_) {
-            const int left = web_left_output_percent_;
-            const int right = web_right_output_percent_;
-            web_joystick_pending_ = false;
-            if (!ApplyWebDriveLocked(left, right)) {
-                StopFailedMotionLocked(now);
-                return;
-            }
-            moving_ = true;
-        }
-        return;
     }
     if (!moving_ && now >= start_at_us_) {
         if (!ApplyDirectionLocked()) {

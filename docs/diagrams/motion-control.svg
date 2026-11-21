@@ -11,7 +11,7 @@
   <text x="40" y="80" class="s">Mũi tên liền: lệnh / đầu ra. Nét đứt xanh: feedback. Chu kỳ ghi dưới đây là cấu hình trong code.</text>
 
   <rect x="50" y="115" width="480" height="86" class="b" fill="#f0fdf4" stroke="#4ade80"/>
-  <text x="70" y="150" class="h">Web manual / joystick</text>
+  <text x="70" y="150" class="h">Web manual / nút hướng HUD</text>
   <text x="70" y="180" class="t">Claim → session + sequence → heartbeat</text>
   <rect x="670" y="115" width="480" height="86" class="b" fill="#f5f3ff" stroke="#a78bfa"/>
   <text x="690" y="150" class="h">Web action / MCP tool</text>

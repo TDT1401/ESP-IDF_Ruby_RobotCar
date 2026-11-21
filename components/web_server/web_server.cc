@@ -119,42 +119,25 @@ esp_err_t Command(httpd_req_t* req) {
     using Json = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
     Json json(cJSON_ParseWithLengthOpts(body, received + 1, nullptr, true), cJSON_Delete);
     uint32_t session, sequence, speed;
-    int joystick_x = 0, joystick_y = 0;
     const auto* direction = cJSON_GetObjectItemCaseSensitive(json.get(), "direction");
     const auto* warning_enabled = cJSON_GetObjectItemCaseSensitive(json.get(), "warning_enabled");
-    const auto* x = cJSON_GetObjectItemCaseSensitive(json.get(), "x");
-    const auto* y = cJSON_GetObjectItemCaseSensitive(json.get(), "y");
-    const bool has_joystick = x != nullptr || y != nullptr;
-    const bool is_joystick = cJSON_IsString(direction) && strcmp(direction->valuestring, "j") == 0;
-    if (!cJSON_IsObject(json.get()) || (has_joystick != is_joystick) ||
-        cJSON_GetArraySize(json.get()) !=
-            (4 + (warning_enabled == nullptr ? 0 : 1) + (has_joystick ? 2 : 0)) ||
+    if (!cJSON_IsObject(json.get()) ||
+        cJSON_GetArraySize(json.get()) != (4 + (warning_enabled == nullptr ? 0 : 1)) ||
         !ReadInteger(json.get(), "session", 1, UINT32_MAX, &session) ||
         !ReadInteger(json.get(), "sequence", 1, UINT32_MAX, &sequence) ||
         !ReadInteger(json.get(), "speed", 0, 100, &speed) || !cJSON_IsString(direction) ||
-        (warning_enabled != nullptr && !cJSON_IsBool(warning_enabled)) ||
-        (has_joystick && (!ReadSignedInteger(json.get(), "x", -1000, 1000, &joystick_x) ||
-                          !ReadSignedInteger(json.get(), "y", -1000, 1000, &joystick_y))))
+        (warning_enabled != nullptr && !cJSON_IsBool(warning_enabled)))
         return Reply(req, "400 Bad Request", "{\"error\":\"Invalid command\"}");
 
     const L298nWebDriveRequest drive{session,
                                     sequence,
                                     static_cast<int>(speed),
-                                    warning_enabled == nullptr || cJSON_IsTrue(warning_enabled),
-                                    is_joystick,
-                                    joystick_x,
-                                    joystick_y};
+                                    warning_enabled == nullptr || cJSON_IsTrue(warning_enabled)};
     esp_err_t error;
     if (strcmp(direction->valuestring, "release") == 0) {
         error = ReleaseL298nWebControl(drive);
     } else {
         const char* drive_direction = direction->valuestring;
-        if (is_joystick)
-            drive_direction = joystick_y > 0   ? "f"
-                              : joystick_y < 0 ? "b"
-                              : joystick_x < 0 ? "l"
-                              : joystick_x > 0 ? "r"
-                                               : "s";
         if (strcmp(drive_direction, "f") == 0)
             error = MoveL298nForward(L298nLinearRequest{drive});
         else if (strcmp(drive_direction, "b") == 0)

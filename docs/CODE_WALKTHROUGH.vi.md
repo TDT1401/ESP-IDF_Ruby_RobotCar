@@ -137,9 +137,9 @@ Chi tiết: [audio README](../components/audio/README.md), [WebSocket](xiaozhi/w
 
 1. Trình duyệt tải [index.html](../components/web_server/web/index.html), CSS và [app.js](../components/web_server/web/js/app.js) từ ESP32.
 2. `POST /api/claim` xin một session điều khiển.
-3. `POST /api/command` gửi session, sequence tăng dần, hướng/tốc độ hoặc joystick.
+3. `POST /api/command` gửi session, sequence tăng dần, hướng và tốc độ từ các nút HUD.
 4. Controller kiểm tra token và thứ tự lệnh. Với HUD, JavaScript gửi heartbeat mỗi **150 ms**; mỗi lệnh hợp lệ gia hạn session thêm **600 ms**.
-5. Joystick được trộn thành hai yêu cầu trái/phải. Controller đưa yêu cầu qua đường điều khiển motor chung.
+5. Controller chuyển hướng và tốc độ thành yêu cầu cho hai bên bánh qua đường điều khiển motor chung.
 6. Session hết hạn, release hoặc mất Wi-Fi sẽ làm controller dừng và thu hồi quyền lái.
 
 Session bảo vệ quyền điều khiển và chống lệnh cũ đến muộn. Lệnh `stop` trong manual dừng motor nhưng vẫn có thể giữ session; `release` thu hồi session. Global stop từ `/api/action` hoặc MCP dừng và giải phóng quyền Web.
