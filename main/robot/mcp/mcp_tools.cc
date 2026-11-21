@@ -3,10 +3,10 @@
 #include <expected>
 #include <string>
 
-#include "motor_controller.h"
 #include "../serialization/fc03_json.h"
 #include "../serialization/odometry_json.h"
 #include "mcp_server.h"
+#include "motor_controller.h"
 #include "telegram.h"
 
 namespace {
@@ -61,8 +61,8 @@ ToolResult GetState() {
                                  status.turn_progress_degrees) ||
         !cJSON_AddBoolToObject(json.get(), "turn_uses_imu", status.turn_uses_imu) ||
         !AddFc03EncoderJson(json.get(), status.encoder) ||
-        !AddOdometryJson(json.get(), status.odometry, status.ekf,
-                         status.command.distance_drive, status.command.navigate))
+        !AddOdometryJson(json.get(), status.odometry, status.ekf, status.command.distance_drive,
+                         status.command.navigate))
         return std::unexpected("Could not allocate motor status.");
     return json.release();
 }
@@ -79,7 +79,8 @@ void RegisterTelegramMcpTools() {
         "request. Maximum 4000 UTF-8 bytes. Delivery is asynchronous; the result confirms "
         "queueing, not final delivery.",
         PropertyList({
-            Property("text", kPropertyTypeString).SetMaxLength(ruby_robot::kTelegramMaxOutboundText),
+            Property("text", kPropertyTypeString)
+                .SetMaxLength(ruby_robot::kTelegramMaxOutboundText),
         }),
         [](const PropertyList& properties) -> ToolResult {
             auto result = QueueTelegramMessage(properties["text"].value<std::string>());
@@ -91,11 +92,6 @@ void RegisterTelegramMcpTools() {
 
 void RegisterL298nMcpTools() {
     auto& server = McpServer::GetInstance();
-    server.AddTool("self.motor.stop", "Stop the motors and release web control.", PropertyList(),
-                   [](const PropertyList&) -> ToolResult {
-                       StopL298nMotor();
-                       return GetState();
-                   });
     server.AddTool("self.motor.get_state",
                    "Read motor PWM, speed PI targets, FC-03 encoder and relative MPU6050 heading. "
                    "Includes odometry, EKF pose/uncertainty, navigation goal/state, and "
@@ -112,6 +108,7 @@ void RegisterL298nMcpTools() {
                                                   esp_err_to_name(error));
                        return GetState();
                    });
+    /* Temporarily disabled motion MCP tools.
     server.AddTool(
         "self.motor.move_distance",
         "Drive a signed distance in centimetres: positive forward, negative backward, magnitude "
@@ -122,8 +119,8 @@ void RegisterL298nMcpTools() {
                       Property("timeout_seconds", kPropertyTypeInteger, 60, 1, 120)}),
         [](const PropertyList& properties) -> ToolResult {
             const esp_err_t error = StartL298nCommand(ruby_robot::DistanceDriveRequest{
-                properties["distance_cm"].value<int>(),
-                properties["timeout_seconds"].value<int>(), ruby_robot::DistanceDriveOwner::kVoice});
+                properties["distance_cm"].value<int>(), properties["timeout_seconds"].value<int>(),
+                ruby_robot::DistanceDriveOwner::kVoice});
             if (error != ESP_OK)
                 return std::unexpected(std::string("Distance move unavailable: ") +
                                        esp_err_to_name(error));
@@ -152,12 +149,12 @@ void RegisterL298nMcpTools() {
                       Property("y_cm", kPropertyTypeInteger, -1000, 1000)}),
         [](const PropertyList& properties) -> ToolResult {
             const esp_err_t error = StartL298nCommand(ruby_robot::NavigateRequest{
-                properties["x_cm"].value<int>() / 100.0,
-                properties["y_cm"].value<int>() / 100.0,
+                properties["x_cm"].value<int>() / 100.0, properties["y_cm"].value<int>() / 100.0,
                 ruby_robot::NavigateOwner::kVoice});
             if (error != ESP_OK)
                 return std::unexpected(std::string("Navigation unavailable: ") +
                                        esp_err_to_name(error));
             return GetState();
         });
+    */
 }
